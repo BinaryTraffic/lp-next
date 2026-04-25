@@ -1,4 +1,3 @@
-# Browsable documentation directory — index.php works without AllowOverride Options
-DirectoryIndex index.html index.php
-# Fallback if both index files are missing (when AllowOverride permits)
+# 一覧は index.html のみ。/docs/ が rewrite で親の documents.php に届かない場合の保険。
+DirectoryIndex index.html
 Options +Indexes
