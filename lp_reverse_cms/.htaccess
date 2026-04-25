@@ -17,5 +17,11 @@
 # UTF-8 default charset
 AddDefaultCharset UTF-8
 
+# /docs/ だけ DirectoryIndex 無しで 403 になりやすいので PHP に寄せる
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule ^docs/?$ documents.php [L]
+</IfModule>
+
 # Enable URL rewriting (optional, for clean URLs)
 Options -Indexes
