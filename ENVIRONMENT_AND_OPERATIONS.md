@@ -2,6 +2,8 @@
 
 [LP-NEXT ルート README](README.md) の補足として、**本番・共同開発・障害切り分け**に使う要点を集約しています。Markdown は [GitHub 上](https://github.com/BinaryTraffic/lp-next) かエディタで読む習慣にするとよいです。
 
+**参照本番例（フィックス安定版 `1.1.11` ライン）:** 入口 <https://lp-next.jitan.app/> ／ 管理 <https://lp-next.jitan.app/lp_reverse_cms/> 。揃い確認は README の **「安定版（フィックス版）の指し示し」** と Git タグ **`v1.1.11-stable`**。
+
 ---
 
 ## 1. 環境・起動
