@@ -1,10 +1,4 @@
-# 作業データ・生成物（current 配下）
-current/lp_reverse_cms/data/*
-!current/lp_reverse_cms/data/.gitkeep
-current/lp_reverse_cms/output/*
-!current/lp_reverse_cms/output/.gitkeep
-
-# 旧パス（過去の clone 向けに残す場合）
+# 作業データ・生成物（環境・解析先ごとに異なる）
 lp_reverse_cms/data/*
 !lp_reverse_cms/data/.gitkeep
 lp_reverse_cms/output/*

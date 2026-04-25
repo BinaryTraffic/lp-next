@@ -1,0 +1,2 @@
+スナップショット: Git コミット 4895729（Initial commit: LP Reverse CMS）
+ディレクトリ名 v1.0.0 はリポジトリ構成上のラベルです（アプリの APP_VERSION は当時 1.1.8 相当の可能性あり）。
