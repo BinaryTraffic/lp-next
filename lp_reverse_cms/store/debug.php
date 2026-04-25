@@ -95,7 +95,7 @@ if (file_exists($outputDir . 'index.html')) {
 }
 
 echo json_encode([
-    'version' => '1.1.9',
+    'version' => '1.1.10',
     'files'   => [
         'source_html'       => file_exists($dataDir . 'source.html'),
         'fetched_html'      => file_exists($dataDir . 'fetched.html'),

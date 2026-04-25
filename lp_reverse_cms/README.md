@@ -2,7 +2,7 @@
 
 参照 LP の URL から HTML を取得し、DOM 解析で編集可能な構造を JSON 化。顧客向け文言を流し込み、同じ構成の LP を静的 HTML として再生成する PHP 製 MVP。
 
-**アプリバージョン:** `1.1.9`（`index.php` の `APP_VERSION` と同期）
+**アプリバージョン:** `1.1.10`（`index.php` の `APP_VERSION` と同期）
 
 **ドキュメント:** [開発経緯・成果とゼロからの構築手順（PROJECT_HISTORY_AND_SETUP.md）](docs/PROJECT_HISTORY_AND_SETUP.md)  
 　※ VirtualHost の **DocumentRoot をリポジトリルート**（`lp-next` 直下）にしている場合の URL 例: **`/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md`**（ホスト名は環境に合わせる）
@@ -154,6 +154,8 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 - 動的に挿入されるリソースのみのサイトは、静的取得では取りこぼしがある。  
 - 本番運用では Apache 等のドキュメントルートに配置し、`data/` の保護を維持すること。
 
+**運用の詳細**（`data/` 非公開、HTTPS、タイムアウト、`git pull` 後の `data`/`output` など）: リポジトリルートの [ENVIRONMENT_AND_OPERATIONS.md](../ENVIRONMENT_AND_OPERATIONS.md) を参照。
+
 ---
 
 ## バージョン履歴（概要）
@@ -171,6 +173,7 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 | 1.1.7 | `LpAnalyzer`: `<picture>` 内の `img` を走査して編集対象化（従来は `picture` がコンテナ外でヒーロー背景相当の画像がフォームに出ない問題）、`class` に `bg` を含む画像はラベルを「背景画像」に、`source` の `srcset` も absolutize |
 | 1.1.8 | `LpAnalyzer`: 誤った `</source>` 位置などで `img` が `source` の子になる DOM でも拾えるよう、`source` をコンテナとして再帰；`docs/PROJECT_HISTORY_AND_SETUP.md`（経緯・ゼロからの構築手順）追加 |
 | 1.1.9 | リポジトリルート用 `index.html`、DocumentRoot をルート／`lp_reverse_cms` の 2 通りで説明（URL から `/lp_reverse_cms/` へ辿る手順）、各 README・SETUP のパス追記 |
+| 1.1.10 | ルートに [ENVIRONMENT_AND_OPERATIONS.md](../ENVIRONMENT_AND_OPERATIONS.md) を追加（環境・セキュリティ・運用・トラブル）。ルート `README` / `index.html`、各手順書から辿る |
 
 ---
 

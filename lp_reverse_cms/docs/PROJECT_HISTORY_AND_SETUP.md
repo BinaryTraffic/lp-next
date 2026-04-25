@@ -5,6 +5,8 @@
 
 **バージョン管理:** 公式リポジトリは **<https://github.com/BinaryTraffic/lp-next>**（クローン: `https://github.com/BinaryTraffic/lp-next.git`）。プロジェクト表示名は LP-NEXT、製品名は「LP Reverse CMS」。
 
+**DocumentRoot = リポジトリのルート**のとき: 本ファイルの Web 上の例パスは `/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md`。**本番**の環境・セキュリティ・切り分けの一覧は [ENVIRONMENT_AND_OPERATIONS.md](../../ENVIRONMENT_AND_OPERATIONS.md) も併せて参照。
+
 ---
 
 ## 1. プロジェクトの目的
@@ -174,6 +176,9 @@ git ls-remote origin refs/heads/main
 | 解析は成功するがスタイルが無い | アセット取得の完了待ち、`output/assets/css` の有無、`debug.php` |
 | favicon や CSS が未置換のまま | **保存＆LP生成**を再実行（`LpGenerator` の置換は生成時） |
 | ヒーロー画像が編集に出ない | **v1.1.8 以降のコードで解析し直し**（`picture` / `source` 内の `img` 対応） |
+| 解析・プレビューが**古い見た目** | **「保存＆LP生成」**の再実行、**`asset_map` / `output/index.html` の反映**を確認 |
+
+**補足:** 本表の拡充（`data/` 非公開、HTTPS、タイムアウト、マルチマシン同期など）→ [ENVIRONMENT_AND_OPERATIONS.md](../../ENVIRONMENT_AND_OPERATIONS.md)
 
 ---
 

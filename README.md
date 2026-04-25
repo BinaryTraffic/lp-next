@@ -37,6 +37,7 @@ Web サーバーが **Markdown をそのまま `text/plain` で返す**ことが
 | `/lp_reverse_cms/` | **管理画面**（`index.php`）← ここがメインのツール |
 | `/lp_reverse_cms/README.md` | アプリ README |
 | `/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md` | 経緯・ゼロからの構築手順 |
+| [`/ENVIRONMENT_AND_OPERATIONS.md`](ENVIRONMENT_AND_OPERATIONS.md) | **環境・起動・セキュリティ・運用**（本番、共同、トラブル目安） |
 
 **PHP ビルトインサーバー例**（リポジトリルートで起動。`-t` はリポジトリルート＝`.`）:
 
@@ -85,4 +86,4 @@ git ls-remote origin refs/heads/main
 
 **リモート URL**の確認: `git remote -v`（`https://github.com/BinaryTraffic/lp-next.git` であること）。
 
-詳細な起動・開発手順は [lp_reverse_cms/README.md](lp_reverse_cms/README.md) を参照してください。
+詳細な起動・ディレクトリは [lp_reverse_cms/README.md](lp_reverse_cms/README.md) を。本番向け（`data/` 非公開、HTTPS 等）の一覧は [ENVIRONMENT_AND_OPERATIONS.md](ENVIRONMENT_AND_OPERATIONS.md) も参照してください。
