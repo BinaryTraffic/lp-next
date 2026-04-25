@@ -2,6 +2,24 @@
 
 declare(strict_types=1);
 
+/**
+ * $data/ や $output/ へ書き込めないと file_put_contents は false を返し例外が出ない。
+ * そのまま成功 JSON を返すと、続く analyze で「HTML が見つかりません」になる。
+ *
+ * @throws RuntimeException
+ */
+function lp_storage_put(string $path, string $contents): void
+{
+    if (file_put_contents($path, $contents) === false) {
+        $dir = dirname($path);
+        throw new RuntimeException(
+            "ファイルに書き込めません: {$path} 。 "
+            . "ディレクトリ「{$dir}」とその親の書き込み権限（Web サーバー／PHP の実行ユーザー）を付与してください。 "
+            . '（リポジトリルートの `ENVIRONMENT_AND_OPERATIONS.md`「運用」節）'
+        );
+    }
+}
+
 require_once __DIR__ . '/../lib/LpFetcher.php';
 require_once __DIR__ . '/../lib/LpAssetDownloader.php';
 
@@ -34,8 +52,8 @@ try {
     $outputDir = __DIR__ . '/../output/';
 
     foreach ([$dataDir, $outputDir] as $dir) {
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new RuntimeException("ディレクトリを作成できません: {$dir}（書き込み権限を確認）");
         }
     }
 
@@ -46,12 +64,12 @@ try {
     $finalUrl = $result['final_url'];
 
     // Save original fetched HTML (used by analyze_lp.php)
-    file_put_contents($dataDir . 'source.html',    $html);
-    file_put_contents($dataDir . 'fetched.html',   $html);
-    file_put_contents($dataDir . 'source_url.txt', $finalUrl);
+    lp_storage_put($dataDir . 'source.html', $html);
+    lp_storage_put($dataDir . 'fetched.html', $html);
+    lp_storage_put($dataDir . 'source_url.txt', $finalUrl);
 
     // Reset previous asset map
-    file_put_contents($dataDir . 'asset_map.json', '{}');
+    lp_storage_put($dataDir . 'asset_map.json', '{}');
 
     // ── Step 2: Download assets (CSS / images / JS) ───────────────────────
     $downloader = new LpAssetDownloader($outputDir);
@@ -59,12 +77,12 @@ try {
     $failedList = $downloader->getFailedFetches();
 
     // Persist map for LpGenerator
-    file_put_contents(
+    lp_storage_put(
         $dataDir . 'asset_map.json',
         json_encode($assetMap, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
     );
 
-    file_put_contents(
+    lp_storage_put(
         $dataDir . 'fetch_failures.json',
         json_encode($failedList, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
     );

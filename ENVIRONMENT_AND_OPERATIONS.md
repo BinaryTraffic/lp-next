@@ -45,6 +45,7 @@
 | 画面が**真っ白**・**500** | **PHP エラーログ**、`php -v`、**拡張モジュール**（上記 4 系） |
 | **スタイルが付かない** | **`output/assets/css`** の有無、`store/debug.php` の **map ／ 未置換** |
 | **解析後**も**古い見た目** | **「保存＆LP生成」**の再実行、**`asset_map`** の反映、生成物 **`output/index.html`** |
+| 取得ののち **「HTMLが見つかりません」**（解析段階） | 多くは **`lp_reverse_cms/data/` へ書けていない**（権限）。**v1.1.11** 以降は取得 API が**書き込み失敗を明示**。**`data/`・`output/`** の所有者・**書き込み**（Web/PHP ユーザー）を確認 |
 | 挙動が**コードの期待と違う** | デプロイ先の `HEAD` を **`git rev-parse HEAD`**・リモート **`main`** と揃えたか（上記 3・4 節） |
 
 より細かい初回手順は [lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md](lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md) の「4.5」「4.8」、ディレクトリの説明は [lp_reverse_cms/README.md](lp_reverse_cms/README.md) を参照。
