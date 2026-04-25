@@ -20,8 +20,6 @@ require_once __DIR__ . '/LpUrlContext.php';
 class LpAssetDownloader
 {
     private string $sourceUrl = '';
-    private string $baseUrl   = '';     // e.g. https://example.com
-    private string $sourceDir = '';     // e.g. https://example.com/lp
     private string $outputDir;
 
     /** absolute URL => local path relative to output/  e.g. "assets/css/style.css" */
@@ -48,7 +46,8 @@ class LpAssetDownloader
 
     /** data-* attribute names that carry an image URL (lazy loading patterns) */
     private const LAZY_IMAGE_ATTRS = [
-        'data-src', 'data-lazy-src', 'data-original', 'data-lazy',
+        'data-src',
+        'data-lazy-src', 'data-original', 'data-lazy',
         'data-bg', 'data-background', 'data-image', 'data-img',
     ];
 
@@ -75,8 +74,6 @@ class LpAssetDownloader
 
         $this->sourceUrl = $sourceUrl;
         $this->urlCtx    = LpUrlContext::fromPageAndHtml($sourceUrl, $html);
-        $this->baseUrl   = $this->urlCtx->schemeHost;
-        $this->sourceDir = $this->urlCtx->documentDirUrl;
 
         foreach (['css', 'img', 'js', 'fonts'] as $sub) {
             $d = $this->outputDir . '/assets/' . $sub;
@@ -239,13 +236,13 @@ class LpAssetDownloader
             return null;
         }
 
-        // CSS: absolutize/download url() references, update paths to local
+        $filename = $this->allocateFilename($absUrl, $type);
+        $savePath = $this->outputDir . '/assets/' . $type . '/' . $filename;
+
         if ($type === 'css') {
-            $content = $this->processCssContent($content, $absUrl);
+            $content = $this->processCssContentFull((string) $content, $absUrl, $savePath);
         }
 
-        $filename  = $this->allocateFilename($absUrl, $type);
-        $savePath  = $this->outputDir . '/assets/' . $type . '/' . $filename;
         file_put_contents($savePath, $content);
 
         $localPath = 'assets/' . $type . '/' . $filename;
@@ -268,17 +265,97 @@ class LpAssetDownloader
     }
 
     // -----------------------------------------------------------------------
-    // CSS processing
+    // CSS processing (v1.2: @import + url()、保存パス確定後に相対 import)
     // -----------------------------------------------------------------------
 
+    private function processCssContentFull(string $css, string $cssAbsUrl, string $thisCssSavePath): string
+    {
+        $css = $this->processCssImports($css, $cssAbsUrl, $thisCssSavePath);
+
+        return $this->processCssUrlReferences($css, $cssAbsUrl);
+    }
+
     /**
-     * Process a downloaded CSS file:
-     *  - Images referenced via url() are downloaded and the CSS is updated
-     *    to use a local relative path (../img/filename).
-     *  - Non-image url() references (fonts, etc.) are absolutized so they
-     *    continue to load from the original CDN.
+     * 外部 @import を取得し、ローカル CSS への相対パスに差し替える（再帰は downloadUrl 側）。
      */
-    private function processCssContent(string $css, string $cssAbsUrl): string
+    private function processCssImports(string $css, string $cssAbsUrl, string $thisCssSavePath): string
+    {
+        $patterns = [
+            '/@import\s+url\s*\(\s*([^)]+)\)\s*[^;]*;/i',
+            '/@import\s+["\']([^"\']+)["\']\s*[^;]*;/i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $css = (string) preg_replace_callback(
+                $pattern,
+                function (array $m) use ($cssAbsUrl, $thisCssSavePath): string {
+                    $raw = trim($m[1]);
+                    $raw = trim($raw, " \t\n\r\0\x0B\"'");
+                    if ($raw === ''
+                        || str_starts_with($raw, 'data:')
+                        || str_starts_with($raw, 'mailto:')
+                        || str_starts_with($raw, 'tel:')
+                    ) {
+                        return $m[0];
+                    }
+
+                    $abs = LpUrlContext::resolveAgainstCssFile($raw, $cssAbsUrl);
+                    $abs = $this->stripUrlFragment($abs);
+                    if ($abs === '' || !str_starts_with($abs, 'http')) {
+                        return $m[0];
+                    }
+
+                    $local = $this->downloadUrl($abs, 'css');
+                    if ($local === null) {
+                        return $m[0];
+                    }
+
+                    $rel = $this->relativePathBetweenOutputFiles($thisCssSavePath, $local);
+                    return '@import url("' . $rel . '");';
+                },
+                $css
+            );
+        }
+
+        return $css;
+    }
+
+    private function stripUrlFragment(string $url): string
+    {
+        $p = strpos($url, '#');
+
+        return $p === false ? $url : substr($url, 0, $p);
+    }
+
+    /**
+     * $fromFile = 保存予定のこの CSS の絶対パス、$toLocal = output からの相対（例 assets/css/x.css）。
+     */
+    private function relativePathBetweenOutputFiles(string $fromFileAbs, string $toLocal): string
+    {
+        $root   = str_replace('\\', '/', rtrim($this->outputDir, '/\\'));
+        $from   = str_replace('\\', '/', dirname($fromFileAbs));
+        $toFull = $root . '/' . $toLocal;
+        $toFull = str_replace('\\', '/', $toFull);
+        $toDir  = dirname($toFull);
+        $base   = basename($toFull);
+
+        $fromParts = explode('/', $from);
+        $toParts   = explode('/', $toDir);
+        $i         = 0;
+        $max       = min(count($fromParts), count($toParts));
+        while ($i < $max && $fromParts[$i] === $toParts[$i]) {
+            $i++;
+        }
+        $up   = count($fromParts) - $i;
+        $down = array_slice($toParts, $i);
+
+        return str_repeat('../', $up) . implode('/', array_merge($down, [$base]));
+    }
+
+    /**
+     * url(...) 内の画像・フォントを取得しローカル相対パスへ。
+     */
+    private function processCssUrlReferences(string $css, string $cssAbsUrl): string
     {
         $cssBase = $this->extractBase($cssAbsUrl);
         $cssPath = str_replace('\\', '/', parse_url($cssAbsUrl, PHP_URL_PATH) ?? '/');
@@ -295,11 +372,20 @@ class LpAssetDownloader
                 $quote = $m[1];
                 $url   = trim($m[2]);
 
-                if (!$url || str_starts_with($url, 'data:') || str_starts_with($url, '#')) {
+                if ($url === ''
+                    || str_starts_with($url, 'data:')
+                    || str_starts_with($url, '#')
+                    || str_starts_with($url, 'blob:')
+                    || str_starts_with($url, 'mailto:')
+                    || str_starts_with($url, 'tel:')
+                    || str_starts_with($url, 'javascript:')
+                    || str_starts_with($url, 'about:')
+                ) {
                     return $m[0];
                 }
 
                 $absUrl = LpUrlContext::resolveRelativeUrl($url, $cssBase, $cssDirUrl);
+                $absUrl = $this->stripUrlFragment($absUrl);
 
                 $ext = strtolower(
                     pathinfo(parse_url($absUrl, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION)
@@ -329,15 +415,28 @@ class LpAssetDownloader
     // srcset parser
     // -----------------------------------------------------------------------
 
+    /**
+     * srcset の各候補は「URL + 任意の記述子」。URL にカンマが含まれるケースは稀だが、
+     * 先頭のトークン（引用符で囲めば 1 トークン）を優先して取り出す。
+     */
     private function parseSrcset(string $srcset): void
     {
         if (!$srcset) {
             return;
         }
         foreach (explode(',', $srcset) as $part) {
-            $tokens = preg_split('/\s+/', trim($part)) ?: [];
-            $url    = $tokens[0] ?? '';
-            if ($url) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+            if (preg_match('/^["\']([^"\']+)["\']/', $part, $qm)) {
+                $url = $qm[1];
+            } else {
+                $tokens = preg_split('/\s+/', $part, 2) ?: [];
+                $url    = $tokens[0] ?? '';
+            }
+            $url = trim($url);
+            if ($url !== '') {
                 $this->downloadUrl($url, 'img');
             }
         }
@@ -400,70 +499,12 @@ class LpAssetDownloader
     /**
      * Resolve $url relative to the source page URL.
      */
+    /**
+     * HTML 由来の相対 URL → 絶対（&lt;base href&gt; 含む {@see LpUrlContext} に一本化）。
+     */
     private function absolutize(string $url): string
     {
-        return $this->absolutizeFrom($url, $this->baseUrl, $this->sourceDir);
-    }
-
-    /**
-     * General URL absolutizer.
-     *
-     * @param string $base scheme://host only (e.g. https://example.com)
-     * @param string $dir  full URL of the directory containing the HTML page (e.g. https://example.com/lp)
-     */
-    private function absolutizeFrom(string $url, string $base, string $dir): string
-    {
-        if (!$url) {
-            return '';
-        }
-        $url = str_replace('\\', '/', $url);
-
-        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
-            return $url;
-        }
-        if (str_starts_with($url, '//')) {
-            return 'https:' . $url;
-        }
-        if (str_starts_with($url, '/')) {
-            return rtrim($base, '/') . $url;
-        }
-        if (str_starts_with($url, 'data:') || str_starts_with($url, 'blob:')) {
-            return $url;
-        }
-
-        // Relative URL: merge with directory path of $dir (never explode the full URL by "/" — breaks "https:")
-        $pe = parse_url($dir);
-        if (empty($pe['host'])) {
-            return rtrim($base, '/') . '/' . ltrim($url, '/');
-        }
-
-        $scheme   = $pe['scheme'] ?? 'https';
-        $host     = $pe['host'];
-        $dirPath  = str_replace('\\', '/', $pe['path'] ?? '/');
-        $dirPath  = rtrim($dirPath, '/');
-
-        if ($dirPath === '' || $dirPath === '/') {
-            $merged = '/' . ltrim($url, '/');
-        } else {
-            $merged = $dirPath . '/' . ltrim($url, '/');
-        }
-
-        $segments = explode('/', $merged);
-        $stack    = [];
-        foreach ($segments as $seg) {
-            if ($seg === '' || $seg === '.') {
-                continue;
-            }
-            if ($seg === '..') {
-                if ($stack) {
-                    array_pop($stack);
-                }
-                continue;
-            }
-            $stack[] = $seg;
-        }
-
-        return $scheme . '://' . $host . '/' . implode('/', $stack);
+        return $this->urlCtx->resolve($url);
     }
 
     private function extractBase(string $url): string

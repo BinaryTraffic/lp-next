@@ -2,7 +2,7 @@
 
 参照 LP の URL から HTML を取得し、DOM 解析で編集可能な構造を JSON 化。顧客向け文言を流し込み、同じ構成の LP を静的 HTML として再生成する PHP 製 MVP。
 
-**アプリバージョン:** `1.1.11`（`index.php` の `APP_VERSION` と同期）
+**アプリバージョン:** `1.2.0`（`index.php` の `APP_VERSION` と同期）
 
 **ドキュメント:** [開発経緯・成果とゼロからの構築手順（PROJECT_HISTORY_AND_SETUP.html）](docs/PROJECT_HISTORY_AND_SETUP.html)（`/lp_reverse_cms/docs/` でも同じページが開きます）  
 　※ ソースの Markdown は [PROJECT_HISTORY_AND_SETUP.md](docs/PROJECT_HISTORY_AND_SETUP.md)
@@ -176,6 +176,7 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 | 1.1.9 | リポジトリルート用 `index.html`、DocumentRoot をルート／`lp_reverse_cms` の 2 通りで説明（URL から `/lp_reverse_cms/` へ辿る手順）、各 README・SETUP のパス追記 |
 | 1.1.10 | ルートに [ENVIRONMENT_AND_OPERATIONS.md](../ENVIRONMENT_AND_OPERATIONS.md) を追加（環境・セキュリティ・運用・トラブル）。ルート `README` / `index.html`、各手順書から辿る |
 | 1.1.11 | `store/fetch_lp.php`: `data/` への `file_put_contents` 失敗を検出し、書き込み不可時は明確にエラーを返す。Git タグ **`v1.1.11-stable`** ＆ [ルート README](../README.md) の**安定版（フィックス版）**で本番例（`lp-next.jitan.app`）のラインを指し示し |
+| 1.2.0 | アセット解像度: CSS 内 `@import` の再帰取得とローカル差し替え、CSS `url()` の除外強化・フラグメント除去、HTML 側相対 URL を `LpUrlContext` に一本化、`srcset` トークン解析の改善、`data-src` 明示、**`store/debug.php`** に `output_css_diagnostics`（保存済み CSS の外部 `url` / `@import` 残存） |
 
 ---
 

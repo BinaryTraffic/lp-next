@@ -94,8 +94,16 @@ if (file_exists($outputDir . 'index.html')) {
     $outputUnreplaced['live_items'] = $outputUnreplaced['items'];
 }
 
+$appVersion = '1.2.0';
+$idx = @file_get_contents(__DIR__ . '/../index.php');
+if ($idx !== false && preg_match("/define\\s*\\(\\s*'APP_VERSION'\\s*,\\s*'([^']+)'/", $idx, $vm)) {
+    $appVersion = $vm[1];
+}
+
+$cssDiagnostics = LpOutputAudit::scanOutputCssForDiagnostics($outputDir);
+
 echo json_encode([
-    'version' => '1.1.11',
+    'version' => $appVersion,
     'files'   => [
         'source_html'       => file_exists($dataDir . 'source.html'),
         'fetched_html'      => file_exists($dataDir . 'fetched.html'),
@@ -126,4 +134,7 @@ echo json_encode([
 
     /** 生成済み output/index.html に残る外部URL・不正スラッシュ等 */
     'output_unreplaced' => $outputUnreplaced,
+
+    /** v1.2+ output/assets/css 内の url() ・ @import 外部残存 */
+    'output_css_diagnostics' => $cssDiagnostics,
 ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);

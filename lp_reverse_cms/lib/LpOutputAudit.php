@@ -129,4 +129,82 @@ final class LpOutputAudit
 
         return $scan;
     }
+
+    /**
+     * 生成物 `output/assets/css/*.css` 内の外部 URL 残存（診断 v1.2+）。
+     *
+     * @return array{
+     *   files_scanned: int,
+     *   url_in_css: list<array{file:string, url:string, context:string}>,
+     *   import_external: list<array{file:string, url:string, snippet:string}>
+     * }
+     */
+    public static function scanOutputCssForDiagnostics(string $outputDir): array
+    {
+        $urlHits    = [];
+        $importHits = [];
+        $cssDir     = rtrim($outputDir, '/\\') . '/assets/css';
+        if (!is_dir($cssDir)) {
+            return [
+                'files_scanned'     => 0,
+                'url_in_css'        => [],
+                'import_external'   => [],
+            ];
+        }
+
+        $seenI = [];
+        $seenU = [];
+        $n     = 0;
+        foreach (scandir($cssDir) ?: [] as $f) {
+            if ($f === '.' || $f === '..' || !str_ends_with(strtolower($f), '.css')) {
+                continue;
+            }
+            $n++;
+            $rel  = 'assets/css/' . $f;
+            $path = $cssDir . '/' . $f;
+            $text = (string) file_get_contents($path);
+
+            if (preg_match_all('/url\(\s*["\']?(https?:\/\/[^)"\s]+|\/\/[^)"\s]+)["\']?\s*\)/i', $text, $m)) {
+                foreach ($m[1] as $u) {
+                    $u = trim($u);
+                    if ($u === '' || str_starts_with($u, 'data:') || str_starts_with($u, 'mailto:') || str_starts_with($u, 'tel:')) {
+                        continue;
+                    }
+                    $k = $rel . '|' . $u;
+                    if (isset($seenU[$k])) {
+                        continue;
+                    }
+                    $seenU[$k]              = true;
+                    $urlHits[] = ['file' => $rel, 'url' => $u, 'context' => 'url()'];
+                }
+            }
+
+            if (preg_match_all('/@import\s+[^;]+;/i', $text, $blocks)) {
+                foreach ($blocks[0] as $block) {
+                    if (preg_match('/(https?:\/\/[^\s"\';)]+|\/\/[^\s"\';)]+)/i', (string) $block, $im)) {
+                        $u = $im[1];
+                        if (str_starts_with($u, 'data:')) {
+                            continue;
+                        }
+                        $k = $rel . '|' . $u;
+                        if (isset($seenI[$k])) {
+                            continue;
+                        }
+                        $seenI[$k] = true;
+                        $importHits[] = [
+                            'file'    => $rel,
+                            'url'     => $u,
+                            'snippet' => trim($block),
+                        ];
+                    }
+                }
+            }
+        }
+
+        return [
+            'files_scanned'   => $n,
+            'url_in_css'      => $urlHits,
+            'import_external' => $importHits,
+        ];
+    }
 }
