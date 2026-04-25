@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LP Reverse CMS — 開発経緯・成果とゼロからの構築手順</title>
+  <style>
+    body {
+      font-family: "Yu Gothic UI", "Meiryo", "Hiragino Sans", sans-serif;
+      font-size: 11pt;
+      line-height: 1.65;
+      color: #222;
+      max-width: 46em;
+      margin: 2.5rem auto;
+      padding: 0 2rem 3rem;
+    }
+    h1 {
+      font-size: 16pt;
+      border-bottom: 2px solid #333;
+      padding-bottom: 0.35em;
+      margin-top: 0;
+    }
+    h2 {
+      font-size: 13pt;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      padding: 0.35rem 0 0.35rem 0.65rem;
+      border-left: 4px solid #2c5282;
+      background: linear-gradient(90deg, #f0f4f8 0%, transparent 100%);
+    }
+    h3 {
+      font-size: 11.5pt;
+      margin: 1.35rem 0 0.5rem;
+      padding-left: 0.75rem;
+      border-left: 3px solid #718096;
+      color: #2d3748;
+    }
+    p {
+      margin: 0.65rem 0;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #cbd5e0;
+      margin: 1.75rem 0;
+    }
+    a {
+      color: #2b6cb0;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      margin: 0.5rem 0 0.75rem;
+      padding-left: 0;
+    }
+    ul.lead {
+      list-style: none;
+      padding-left: 0;
+    }
+    ul.lead > li {
+      margin: 0.5rem 0;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+    ul.lead > li::before {
+      content: "・";
+      position: absolute;
+      left: 0;
+      color: #2c5282;
+      font-weight: bold;
+    }
+    .indent-1 {
+      margin-left: 1rem;
+      padding-left: 1rem;
+      border-left: 2px solid #e2e8f0;
+    }
+    .indent-2 {
+      margin-left: 1.5rem;
+      padding-left: 1rem;
+      border-left: 2px solid #edf2f7;
+    }
+    ol.steps {
+      padding-left: 1.5rem;
+    }
+    ol.steps li {
+      margin: 0.45rem 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10.5pt;
+      margin: 0.75rem 0 1rem;
+    }
+    th, td {
+      border: 1px solid #cbd5e0;
+      padding: 0.45rem 0.65rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #edf2f7;
+      font-weight: 600;
+    }
+    tr:nth-child(even) td {
+      background: #fafafa;
+    }
+    pre {
+      margin: 0.75rem 0;
+      padding: 0.85rem 1rem;
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 10pt;
+      line-height: 1.45;
+    }
+    code {
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 0.92em;
+      background: #edf2f7;
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+    }
+    .note-box {
+      margin: 1rem 0;
+      padding: 0.85rem 1rem;
+      background: #fffaf0;
+      border: 1px solid #fbd38d;
+      border-radius: 6px;
+      font-size: 10.5pt;
+    }
+    footer {
+      margin-top: 2.5rem;
+      font-size: 9.5pt;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>LP Reverse CMS — 開発経緯・成果とゼロからの構築手順</h1>
+
+  <p>
+    本ドキュメントは、これまでの実装の経緯と成果を整理し、<strong>新しい環境にゼロから同じスタックを再現する</strong>ための手順書です。<br>
+    アプリの技術概要とディレクトリ説明は <a href="../README.md">README.md</a> にあります。
+  </p>
+
+  <p>
+    <strong>バージョン管理:</strong> 公式リポジトリは <strong><a href="https://github.com/BinaryTraffic/lp-next">https://github.com/BinaryTraffic/lp-next</a></strong>
+    （クローン: <code>https://github.com/BinaryTraffic/lp-next.git</code>）。プロジェクト表示名は LP-NEXT、製品名は「LP Reverse CMS」。
+  </p>
+
+  <p>
+    <strong>DocumentRoot = リポジトリのルート</strong>のとき: 本ファイルの Web 上の例パスは
+    <code>/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.html</code>（または同名 <code>.md</code>）。
+    <strong>本番</strong>の環境・セキュリティ・切り分けの一覧は
+    <a href="../../ENVIRONMENT_AND_OPERATIONS.md">ENVIRONMENT_AND_OPERATIONS.md</a> も併せて参照。
+  </p>
+
+  <hr>
+
+  <h2>1. プロジェクトの目的</h2>
+  <ul class="lead">
+    <li>参照先の <strong>公開 LP（URL）</strong> から HTML を取得する。</li>
+    <li><strong>DOM 解析</strong>でセクション・見出し・段落・画像・リンクなどを抽出し、JSON に保存する。</li>
+    <li>管理画面で <strong>顧客向け文言・画像 URL・リンク</strong> を編集できるようにする。</li>
+    <li><strong>CSS / 画像 / JS / フォント</strong> をローカルに落とし、<strong>静的な <code>output/index.html</code></strong> として再生成する。</li>
+  </ul>
+  <p>すべて <strong>PHP のみ</strong>（DB 不要）で動く MVP として設計されています。</p>
+
+  <hr>
+
+  <h2>2. これまでの経緯と成果（要約）</h2>
+
+  <h3>2.1 フェーズ 1 — MVP（v1.0.x）</h3>
+  <div class="indent-1">
+    <ul class="lead">
+      <li>cURL で HTML 取得、<code>DOMDocument</code> / <code>DOMXPath</code> で構造化。</li>
+      <li><code>lp_structure.json</code> / <code>client_data.json</code>、Bootstrap 5 の管理 UI。</li>
+      <li>素の PHP テンプレートで編集画面・プレビュー・エクスポート。</li>
+    </ul>
+  </div>
+
+  <h3>2.2 フェーズ 2 — アセット取得とローカル化（v1.1.0 〜）</h3>
+  <div class="indent-1">
+    <ul class="lead">
+      <li>スタイルシート・画像・スクリプトを <code>output/assets/</code> に保存。</li>
+      <li><code>asset_map.json</code> で <strong>絶対 URL → 相対パス</strong> を記録し、生成 HTML に反映。</li>
+      <li><code>&lt;head&gt;</code> の <code>&lt;link&gt;</code> は <strong>属性を落とさず</strong> シリアライズして保持。</li>
+    </ul>
+  </div>
+
+  <h3>2.3 フェーズ 3 — URL・Windows・診断（v1.1.1 〜 v1.1.3）</h3>
+  <div class="indent-1">
+    <ul class="lead">
+      <li><strong>Windows</strong> で混入しうる <code>https://host\path</code> や <code>%5C</code> を生成時に正規化。</li>
+      <li><strong><code>&lt;base href&gt;</code></strong> と <strong>CSS <code>url()</code></strong> からフォント等も取得。</li>
+      <li><strong><code>LpUrlContext</code></strong> で相対・プロトコル相対 URL を一貫して解決。</li>
+      <li><strong><code>store/debug.php</code></strong>（JSON）で map 件数・未取得・未置換・fetch 失敗を確認。</li>
+      <li>診断まわりの <strong>パスパターン</strong>（<code>assets/css</code> と <code>/assets/</code> の取り違え）や <strong>未取得の誤検知</strong>（<code>/img</code> と <code>/images</code>、Google Fonts ホスト差など）を修正。</li>
+      <li><strong>favicon</strong> の取得、favicon 用 <strong>preconnect</strong> のノイズ整理。</li>
+    </ul>
+  </div>
+
+  <h3>2.4 フェーズ 4 — 置換ロジックの堅牢化（v1.1.4 〜 v1.1.5）</h3>
+  <div class="indent-1">
+    <ul class="lead">
+      <li>
+        <strong><code>LpGenerator::applyAssetMap</code></strong>
+        <div class="indent-2">
+          <ul class="lead">
+            <li><strong>絶対 URL</strong> と <strong>相対キー</strong>を分離し、<strong>絶対を先に</strong>最長一致で置換（相対が <code>href</code> 内の長い文字列を壊す問題の防止）。</li>
+            <li><strong><code>//host/...</code></strong> を <strong><code>https://...</code> の途中の <code>//</code></strong> に誤マッチさせない（正規表現の <code>(?&lt;![/:])</code>）。</li>
+            <li><strong>相対キー</strong>は <strong>グローバル <code>str_replace</code> 禁止</strong> → 引用符付き <code>href</code> / <code>src</code> 等と <strong><code>srcset</code> のみ</strong>置換し、<code>assets/assets/...</code> の二重化を防止。</li>
+            <li><strong>JSON 展開</strong>で <code>https</code> から <code>//</code> を重複生成しない方針に整理。</li>
+          </ul>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <h3>2.5 フェーズ 5 — 診断の信頼性（v1.1.6）</h3>
+  <div class="indent-1">
+    <ul class="lead">
+      <li>未置換スキャンで <strong>HTML コメント</strong>を除去（コメント内 URL の誤検知防止）。</li>
+      <li><strong><code>debug.php</code> 表示時</strong>に <code>output/index.html</code> を <strong>再スキャンして <code>output_unreplaced.json</code> を更新</strong>（永続 JSON と実ファイルのずれを防ぐ）。</li>
+    </ul>
+  </div>
+
+  <h3>2.6 フェーズ 6 — 編集 UI とヒーロー画像（v1.1.7 〜 v1.1.8）</h3>
+  <div class="indent-1">
+    <ul class="lead">
+      <li><strong><code>&lt;picture&gt;</code> 内の <code>&lt;img&gt;</code></strong> が編集対象に出てこない問題: <strong><code>picture</code> をコンテナとして再帰</strong>するよう変更。</li>
+      <li>元 HTML が <strong><code>&lt;img&gt;</code> の後に誤った <code>&lt;/source&gt;</code></strong> があるなどで、パーサが <strong><code>&lt;img&gt;</code> を <code>&lt;source&gt;</code> の子</strong>にしている場合: <strong><code>source</code> もコンテナとして再帰</strong>し、その内側の <code>img</code> を必ず走査。</li>
+      <li><strong><code>class</code> に <code>bg</code> を含む画像</strong>はラベルを <strong>「背景画像」</strong> に。</li>
+      <li><strong><code>&lt;source srcset&gt;</code></strong> もセクション HTML 内で absolutize。</li>
+    </ul>
+    <p>以上により、<strong>「プレビューでは見えるが編集フォームにヒーロー／背景相当の画像が無い」</strong>状態を解消しました。</p>
+  </div>
+
+  <hr>
+
+  <h2>3. 成果物（何ができれば完成か）</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>成果物</th>
+        <th>説明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>data/lp_structure.json</code></td>
+        <td>解析結果（セクション HTML・<code>data-lp-id</code> 付き要素一覧）</td>
+      </tr>
+      <tr>
+        <td><code>data/client_data.json</code></td>
+        <td>編集した顧客向けデータ</td>
+      </tr>
+      <tr>
+        <td><code>data/asset_map.json</code></td>
+        <td>元 URL とローカル <code>assets/...</code> の対応</td>
+      </tr>
+      <tr>
+        <td><code>output/index.html</code></td>
+        <td>再生成された静的 LP</td>
+      </tr>
+      <tr>
+        <td><code>output/assets/{css,img,js,fonts}/</code></td>
+        <td>取得したアセット</td>
+      </tr>
+      <tr>
+        <td><code>store/debug.php</code></td>
+        <td>診断用 JSON（ブラウザまたは API クライアントで取得）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <h2>4. ゼロから構築する手順</h2>
+
+  <h3>4.1 前提条件</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>項目</th>
+        <th>推奨</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>PHP</td>
+        <td><strong>8.0 以上</strong>（<code>strict_types</code> 使用）</td>
+      </tr>
+      <tr>
+        <td>拡張</td>
+        <td><strong>curl</strong>, <strong>dom</strong>, <strong>json</strong>, <strong>mbstring</strong>（標準的な XAMPP / パッケージで概ね有効）</td>
+      </tr>
+      <tr>
+        <td>書き込み権限</td>
+        <td><code>lp_reverse_cms/data/</code> と <code>lp_reverse_cms/output/</code> に Web サーバー／PHP プロセスが書き込めること</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note-box">
+    <strong>留意:</strong> クローン直後は上記ディレクトリの<strong>所有ユーザー</strong>がデプロイした OS ユーザーのまま<strong>書き込み不可</strong>（例: 755 ＋ 所有者 <code>shimizu</code>）のまま、Apache が <strong><code>www-data</code></strong> として動いている、という不整合で失敗しがちです。
+    <strong><code>chown</code> / <code>chmod</code></strong> で Web・PHP 実ユーザー＋（任意）運用グループに揃えてください。詳細と例はリポジトリルート
+    <a href="../../ENVIRONMENT_AND_OPERATIONS.md">ENVIRONMENT_AND_OPERATIONS.md</a> の「3. 運用」→<strong>留意点</strong>小節。
+  </div>
+
+  <p>データベース・Composer・Node.js は <strong>不要</strong>です。</p>
+
+  <h3>4.2 ソースの配置</h3>
+  <ol class="steps">
+    <li>リポジトリを <strong>クローン</strong>すると、<strong>リポジトリルート</strong>に <code>README.md</code>・<code>index.html</code>（入口）・<strong><code>lp_reverse_cms/</code></strong>（アプリ本体）が揃います。</li>
+    <li>
+      Web サーバーの <strong>DocumentRoot</strong> は次のどちらかです（<a href="../../README.md">ルート README.md</a> に表あり）。
+      <div class="indent-1">
+        <ul class="lead">
+          <li><strong>リポジトリルート</strong> … <code>/</code> で入口 HTML、<strong><code>/lp_reverse_cms/</code></strong> で管理画面。</li>
+          <li><strong><code>lp_reverse_cms</code> のみ</strong> … <code>/</code> が直接管理画面（従来どおり）。</li>
+        </ul>
+      </div>
+    </li>
+    <li>
+      初回は空でもよいですが、以下が <strong>自動作成</strong>されます（いずれの DocumentRoot でもアプリは <code>lp_reverse_cms/data</code> 等を使用）。
+      <div class="indent-1">
+        <ul class="lead">
+          <li><code>lp_reverse_cms/data/</code></li>
+          <li><code>lp_reverse_cms/output/</code></li>
+          <li><code>lp_reverse_cms/output/assets/</code> 配下（アセット取得時）</li>
+        </ul>
+      </div>
+    </li>
+  </ol>
+
+  <h3>4.2.1 DocumentRoot ＝ リポジトリルートのとき（URL の例）</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>パス</th>
+        <th>内容</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/</code></td>
+        <td><a href="../../index.html">リポジトリルートの index.html</a>（入口・リンク集）</td>
+      </tr>
+      <tr>
+        <td><code>/README.md</code></td>
+        <td><a href="../../README.md">ルート README.md</a>（Apache では多くの場合プレーン表示）</td>
+      </tr>
+      <tr>
+        <td><code>/lp_reverse_cms/</code></td>
+        <td>管理画面（<code>index.php</code>）</td>
+      </tr>
+      <tr>
+        <td><code>/lp_reverse_cms/docs/</code></td>
+        <td>本ドキュメントと同じ（DirectoryIndex で HTML を返す）</td>
+      </tr>
+      <tr>
+        <td><code>/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.html</code></td>
+        <td>本ドキュメント（上と同一内容）</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>ブラウザで読むときは <strong>本 <code>.html</code></strong> を推奨します。同名 <code>.md</code> は環境によって文字化けすることがあります。</p>
+
+  <h3>4.3 ローカルで PHP ビルトインサーバーを使う（最短）</h3>
+  <p><strong>パターン 1 — DocumentRoot をリポジトリルートにする</strong></p>
+  <pre><code>cd C:\path\to\lp-next
+php -S localhost:8080</code></pre>
+  <ul class="lead">
+    <li>入口: <code>http://localhost:8080/</code></li>
+    <li>管理画面: <code>http://localhost:8080/lp_reverse_cms/</code></li>
+  </ul>
+
+  <p><strong>パターン 2 — DocumentRoot を <code>lp_reverse_cms</code> のみにする</strong></p>
+  <pre><code>php -S localhost:8080 -t "C:\path\to\lp_reverse_cms"</code></pre>
+  <p>ブラウザで <strong><code>http://localhost:8080</code></strong> を開きます（この場合はいきなり管理画面）。<br>
+  <strong><code>index.php</code> を <code>file://</code> で直接開かない</strong>でください（<code>store/*.php</code> への相対パスが壊れます）。</p>
+
+  <h3>4.4 Apache 等で運用する場合</h3>
+  <ul class="lead">
+    <li><strong>VirtualHost の DocumentRoot</strong> を <strong>リポジトリルート</strong>にするか、<strong><code>lp_reverse_cms</code> のみ</strong>にするかを選ぶ（<a href="../../README.md">ルート README.md</a> の「DocumentRoot の取り方」参照）。</li>
+    <li><strong><code>data/</code> を公開しない</strong>（<code>lp_reverse_cms/.htaccess</code> の意図に沿って設定）。ビルトインサーバーでは <code>.htaccess</code> は効かないため、本番では別途アクセス制御を推奨。</li>
+  </ul>
+
+  <h3>4.5 初回の動作確認フロー</h3>
+  <ol class="steps">
+    <li>管理画面 <strong>Step 1</strong> で参照 LP の <strong>HTTPS URL</strong> を入力し <strong>解析</strong>する。内部で HTML 取得・アセット DL・<code>lp_structure.json</code> 生成まで行われます（実装は <code>store/fetch_lp.php</code> など）。</li>
+    <li><strong>Step 2</strong> で文言・画像 URL などを編集し、<strong>保存＆LP生成</strong>する。</li>
+    <li><strong>Step 3</strong> でプレビュー／エクスポート。</li>
+    <li>必要に応じて <strong><code>store/debug.php</code></strong> を開き、map 件数・未置換が想定どおりか確認する。</li>
+  </ol>
+
+  <h3>4.6 解析をやり直したとき</h3>
+  <ul class="lead">
+    <li><strong><code>elem_sec_*_*</code>（<code>data-lp-id</code>）の並びが変わる</strong>ことがあります。</li>
+    <li>既存の <code>client_data.json</code> のキーとズレる場合は、<strong>必要な項目だけ入れ直す</strong>か、バックアップから移してください。</li>
+  </ul>
+
+  <h3>4.7 リモートと手元が同じか（共同作業）</h3>
+  <pre><code>git fetch origin
+git rev-parse HEAD
+git ls-remote origin refs/heads/main</code></pre>
+  <p>表示されるコミットハッシュの<strong>先頭 7 文字</strong>が一致すれば、GitHub 上の <code>main</code> と手元は同じ先端です。<code>git status</code> が <code>up to date with 'origin/main'</code> でも確認できます。</p>
+
+  <h3>4.8 よくあるつまずき</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>現象</th>
+        <th>確認すること</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>画面が真っ白 / 500</td>
+        <td>PHP エラーログ、<code>php -v</code>、拡張モジュール</td>
+      </tr>
+      <tr>
+        <td>解析は成功するがスタイルが無い</td>
+        <td>アセット取得の完了待ち、<code>output/assets/css</code> の有無、<code>debug.php</code></td>
+      </tr>
+      <tr>
+        <td>favicon や CSS が未置換のまま</td>
+        <td><strong>保存＆LP生成</strong>を再実行（<code>LpGenerator</code> の置換は生成時）</td>
+      </tr>
+      <tr>
+        <td>ヒーロー画像が編集に出ない</td>
+        <td><strong>v1.1.8 以降のコードで解析し直し</strong>（<code>picture</code> / <code>source</code> 内の <code>img</code> 対応）</td>
+      </tr>
+      <tr>
+        <td>解析・プレビューが<strong>古い見た目</strong></td>
+        <td><strong>「保存＆LP生成」</strong>の再実行、<strong><code>asset_map</code> / <code>output/index.html</code> の反映</strong>を確認</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>補足:</strong> 本表の拡充（<code>data/</code> 非公開、HTTPS、タイムアウト、マルチマシン同期など）→ <a href="../../ENVIRONMENT_AND_OPERATIONS.md">ENVIRONMENT_AND_OPERATIONS.md</a></p>
+
+  <hr>
+
+  <h2>5. ソースコードの読み順（理解用）</h2>
+  <ol class="steps">
+    <li><code>index.php</code> — UI とステップ制御</li>
+    <li><code>store/fetch_lp.php</code> — 取得 + ダウンローダ</li>
+    <li><code>store/analyze_lp.php</code> — 解析エンドポイント</li>
+    <li><code>lib/LpAnalyzer.php</code> — セクション抽出・編集可能要素・<code>data-lp-id</code></li>
+    <li><code>lib/LpAssetDownloader.php</code> — DOM / CSS から URL 収集と保存</li>
+    <li><code>lib/LpGenerator.php</code> — 顧客データの反映 + <code>asset_map</code> 適用</li>
+    <li><code>lib/LpOutputAudit.php</code> — 生成 HTML の未置換スキャン</li>
+    <li><code>store/debug.php</code> — 診断 JSON</li>
+  </ol>
+
+  <hr>
+
+  <h2>6. バージョン</h2>
+  <p>アプリの版は <strong><code>index.php</code> の <code>APP_VERSION</code></strong> が正とします。詳細な変更履歴の表は <a href="../README.md">README.md</a> を参照してください。</p>
+
+  <hr>
+
+  <p><em>この文書は LP Reverse CMS の「経緯・成果・再構築手順」を 1 か所に集約したものです。</em></p>
+
+  <footer>
+    ドキュメント: <code>lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.html</code> / 同名 <code>.md</code><br>
+    <a href="../">← 管理画面</a> · <a href="../../">← リポジトリ入口</a>
+  </footer>
+
+</body>
+</html>

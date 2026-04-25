@@ -1,42 +1,25 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LP-NEXT — LP Reverse CMS</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LP-NEXT — リポジトリ入口</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.55; color: #222; }
-    h1 { font-size: 1.35rem; }
-    .lead { color: #444; margin-bottom: 1.5rem; }
-    ul { padding-left: 1.2rem; }
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #222; }
+    h1 { font-size: 1.25rem; }
     a { color: #0b57d0; }
-    code { background: #f4f4f4; padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.92em; }
-    .box { border: 1px solid #ddd; border-radius: 8px; padding: 1rem 1.1rem; margin: 1.25rem 0; background: #fafafa; }
+    code { background: #f4f4f4; padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
   </style>
 </head>
 <body>
-  <h1>LP-NEXT（LP Reverse CMS）</h1>
-  <p class="lead">このページは <strong>リポジトリルートを DocumentRoot にしたとき</strong> の入口です。管理画面は <code>lp_reverse_cms/</code> 配下にあります。</p>
-
-  <div class="box">
-    <strong>管理画面を開く</strong>
-    <ul>
-      <li><a href="lp_reverse_cms/">lp_reverse_cms/</a>（<code>index.php</code>）</li>
-    </ul>
-  </div>
-
-  <p><strong>ドキュメント</strong>（経緯・構築手順はこの HTML のみで十分です）</p>
+  <h1>LP-NEXT</h1>
+  <p>アプリと本番用ドキュメントは <strong><a href="current/">current/</a></strong> です。リポジトリ直下の <code>README.md</code> にフォルダ構成の説明があります。</p>
   <ul>
-    <li><a href="lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.html">lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.html</a>（経緯・ゼロからの構築）</li>
-    <li><a href="lp_reverse_cms/docs/">lp_reverse_cms/docs/</a>（上と同じ内容を開きます）</li>
+    <li><a href="current/">current/</a> — 作業中・デプロイ（推奨 DocumentRoot）</li>
+    <li><a href="current/lp_reverse_cms/">current/lp_reverse_cms/</a> — LP Reverse CMS（管理画面）</li>
+    <li><a href="current/README.md">current/README.md</a> — LP-NEXT 全体説明</li>
+    <li><a href="README.md">README.md</a>（本リポジトリの構成表）</li>
+    <li><a href="releases/">releases/</a> — 版スナップショット</li>
   </ul>
-  <p><strong>その他</strong></p>
-  <ul>
-    <li><a href="README.md">README.md</a>（ルート・リポジトリ概要）</li>
-    <li><a href="lp_reverse_cms/README.md">lp_reverse_cms/README.md</a>（アプリ概要・起動）</li>
-    <li><a href="ENVIRONMENT_AND_OPERATIONS.md">ENVIRONMENT_AND_OPERATIONS.md</a>（環境・運用）</li>
-  </ul>
-
-  <p class="lead" style="margin-top:2rem;font-size:0.9rem;">DocumentRoot を <code>lp_reverse_cms</code> だけにしている場合は、この <code>index.html</code> は URL からは参照されません。直接 <a href="lp_reverse_cms/">管理画面</a>の URL を開いてください。</p>
 </body>
 </html>
