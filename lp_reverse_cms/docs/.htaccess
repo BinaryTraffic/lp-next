@@ -1,3 +1,3 @@
-# 一覧は index.html のみ。/docs/ が rewrite で親の documents.php に届かない場合の保険。
-DirectoryIndex index.html
-Options +Indexes
+# /docs/ ではこの 1 ファイルをそのまま出す（一覧なし）
+DirectoryIndex PROJECT_HISTORY_AND_SETUP.html
+Options -Indexes

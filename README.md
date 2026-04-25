@@ -36,7 +36,7 @@ Web サーバーが **Markdown をそのまま `text/plain` で返す**ことが
 | `/README.md` | 本ファイル（サーバーによっては生テキスト） |
 | `/lp_reverse_cms/` | **管理画面**（`index.php`）← ここがメインのツール |
 | `/lp_reverse_cms/README.md` | アプリ README |
-| `/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md` | 経緯・ゼロからの構築手順 |
+| `/lp_reverse_cms/docs/` または `/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.html` | 経緯・ゼロからの構築手順（HTML） |
 | [`/ENVIRONMENT_AND_OPERATIONS.md`](ENVIRONMENT_AND_OPERATIONS.md) | **環境・起動・セキュリティ・運用**（本番、共同、トラブル目安） |
 
 **PHP ビルトインサーバー例**（リポジトリルートで起動。`-t` はリポジトリルート＝`.`）:

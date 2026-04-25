@@ -4,8 +4,8 @@
 
 **アプリバージョン:** `1.1.11`（`index.php` の `APP_VERSION` と同期）
 
-**ドキュメント:** [開発経緯・成果とゼロからの構築手順（PROJECT_HISTORY_AND_SETUP.md）](docs/PROJECT_HISTORY_AND_SETUP.md)  
-　※ VirtualHost の **DocumentRoot をリポジトリルート**（`lp-next` 直下）にしている場合の URL 例: **`/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md`**（ホスト名は環境に合わせる）
+**ドキュメント:** [開発経緯・成果とゼロからの構築手順（PROJECT_HISTORY_AND_SETUP.html）](docs/PROJECT_HISTORY_AND_SETUP.html)（`/lp_reverse_cms/docs/` でも同じページが開きます）  
+　※ ソースの Markdown は [PROJECT_HISTORY_AND_SETUP.md](docs/PROJECT_HISTORY_AND_SETUP.md)
 
 **公式リポジトリ:** [BinaryTraffic/lp-next](https://github.com/BinaryTraffic/lp-next)（クローン URL は末尾 `.git` 可）
 
