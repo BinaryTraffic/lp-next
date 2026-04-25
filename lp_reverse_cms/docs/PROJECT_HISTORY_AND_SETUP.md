@@ -67,6 +67,11 @@
 
 以上により、**「プレビューでは見えるが編集フォームにヒーロー／背景相当の画像が無い」**状態を解消しました。
 
+### 2.7 本番のフィックス安定版ライン（2026-04）
+
+- **v1.1.11** 前後: `lp_reverse_cms` の **`data` / `output` 書き込み**を厳格化（取得失敗の明示）、デプロイ時の**所有・権限**のドキュメント化（ルート [ENVIRONMENT_AND_OPERATIONS.md](../../ENVIRONMENT_AND_OPERATIONS.md)）。
+- 本番例（リポジトリルート＝DocumentRoot）: 入口 <https://lp-next.jitan.app/> ／ 管理 <https://lp-next.jitan.app/lp_reverse_cms/> 。揃いは Git タグ **`v1.1.11-stable`** と [ルート README.md](../../README.md) の**安定版（フィックス版）の指し示し**。
+
 ---
 
 ## 3. 成果物（何ができれば完成か）

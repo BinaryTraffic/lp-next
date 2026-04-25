@@ -175,7 +175,7 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 | 1.1.8 | `LpAnalyzer`: 誤った `</source>` 位置などで `img` が `source` の子になる DOM でも拾えるよう、`source` をコンテナとして再帰；`docs/PROJECT_HISTORY_AND_SETUP.md`（経緯・ゼロからの構築手順）追加 |
 | 1.1.9 | リポジトリルート用 `index.html`、DocumentRoot をルート／`lp_reverse_cms` の 2 通りで説明（URL から `/lp_reverse_cms/` へ辿る手順）、各 README・SETUP のパス追記 |
 | 1.1.10 | ルートに [ENVIRONMENT_AND_OPERATIONS.md](../ENVIRONMENT_AND_OPERATIONS.md) を追加（環境・セキュリティ・運用・トラブル）。ルート `README` / `index.html`、各手順書から辿る |
-| 1.1.11 | `store/fetch_lp.php`: `data/` への `file_put_contents` 失敗を検出し、書き込み不可時は明確にエラーを返す（従来は取得成功のように見え、続く解析で「HTMLが見つかりません」になることがあった） |
+| 1.1.11 | `store/fetch_lp.php`: `data/` への `file_put_contents` 失敗を検出し、書き込み不可時は明確にエラーを返す。Git タグ **`v1.1.11-stable`** ＆ [ルート README](../README.md) の**安定版（フィックス版）**で本番例（`lp-next.jitan.app`）のラインを指し示し |
 
 ---
 

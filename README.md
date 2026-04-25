@@ -13,6 +13,21 @@ cd lp-next
 
 ---
 
+## 安定版（フィックス版）の指し示し
+
+次の **URL**・**版**に揃えていれば、**2026-04 時点のフィックス安定版**とみなせます（本番検証済みのライン）。
+
+| 項目 | 値 |
+|------|-----|
+| 入口（DocumentRoot＝リポジトリルート） | [https://lp-next.jitan.app/](https://lp-next.jitan.app/) |
+| 管理画面（LP Reverse CMS） | [https://lp-next.jitan.app/lp_reverse_cms/](https://lp-next.jitan.app/lp_reverse_cms/) |
+| アプリ版 | **`1.1.11`**（`lp_reverse_cms/index.php` の `APP_VERSION`） |
+| Git タグ | **`v1.1.11-stable`**（この安定版ラインに対応） |
+
+主な内容: **`data` / `output` 書き込み失敗の明示**（取得 API・v1.1.11）、デプロイ時の **所有権・権限**の留意（[ENVIRONMENT_AND_OPERATIONS.md](ENVIRONMENT_AND_OPERATIONS.md)）、共同作業・運用ドキュメントの整理。
+
+---
+
 ## ドキュメント（.md）の見方
 
 Web サーバーが **Markdown をそのまま `text/plain` で返す**ことがあり、ブラウザでは読みにくい場合があります。次のいずれかを推奨します。
