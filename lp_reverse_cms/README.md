@@ -29,6 +29,12 @@ git branch -M main
 git push -u origin main
 ```
 
+### 共同作業（別マシン・別 Cursor）
+
+- 作業前: `git pull origin main`
+- リモートと同じコミットか確認: `git fetch origin` のあと、`git rev-parse HEAD` と `git ls-remote origin refs/heads/main` のハッシュ先頭が一致するか見る（例: `4895729`）
+- 接続先確認: `git remote -v` → `BinaryTraffic/lp-next.git`
+
 ---
 
 ## 技術スタック

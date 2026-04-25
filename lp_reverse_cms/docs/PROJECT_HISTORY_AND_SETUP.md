@@ -131,7 +131,17 @@ php -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 - **`elem_sec_*_*`（`data-lp-id`）の並びが変わる**ことがあります。  
 - 既存の `client_data.json` のキーとズレる場合は、**必要な項目だけ入れ直す**か、バックアップから移してください。
 
-### 4.7 よくあるつまずき
+### 4.7 リモートと手元が同じか（共同作業）
+
+```bash
+git fetch origin
+git rev-parse HEAD
+git ls-remote origin refs/heads/main
+```
+
+表示されるコミットハッシュの**先頭 7 文字**が一致すれば、GitHub 上の `main` と手元は同じ先端です。`git status` が `up to date with 'origin/main'` でも確認できます。
+
+### 4.8 よくあるつまずき
 
 | 現象 | 確認すること |
 |------|----------------|
