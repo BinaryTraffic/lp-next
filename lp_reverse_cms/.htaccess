@@ -14,8 +14,11 @@
     </If>
 </FilesMatch>
 
-# UTF-8 default charset
+# UTF-8（.md が charset なしで配信されブラウザが誤判定する対策）
 AddDefaultCharset UTF-8
+<IfModule mod_mime.c>
+    AddCharset utf-8 .md
+</IfModule>
 
 # /docs/ だけ DirectoryIndex 無しで 403 になりやすいので PHP に寄せる
 <IfModule mod_rewrite.c>
