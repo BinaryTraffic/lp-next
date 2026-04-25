@@ -1,5 +1,4 @@
-# Browsable documentation directory
-DirectoryIndex index.html
-# Parent lp_reverse_cms/.htaccess sets Options -Indexes; enable listing here so
-# /docs/ returns 200 (file list) when index.html is missing, instead of 403.
+# Browsable documentation directory — index.php works without AllowOverride Options
+DirectoryIndex index.html index.php
+# Fallback if both index files are missing (when AllowOverride permits)
 Options +Indexes
