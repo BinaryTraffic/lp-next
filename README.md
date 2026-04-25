@@ -57,6 +57,8 @@ php -S localhost:8080 -t "C:\path\to\lp-next"
 
 **Apache** では `VirtualHost` の `DocumentRoot` を上記リポジトリルートに設定します。`.md` は多くの環境で **HTML 変換なし**のまま配信される想定です（読み方は上記「ドキュメントの見方」参照）。
 
+**サーバーデプロイの留意点:** 初回に **`lp_reverse_cms/data/`** と **`output/`** を、**Web／PHP 実行ユーザー**（例: `www-data`）が**書き込める**ようにすること（多くの環境で、クローンした OS ユーザーの所有のままだと**解析に失敗**する）。[`ENVIRONMENT_AND_OPERATIONS.md`](ENVIRONMENT_AND_OPERATIONS.md) の **§3 運用**→**留意点**に具体例。
+
 ### B. `lp_reverse_cms` だけを DocumentRoot にする（従来）
 
 **`lp_reverse_cms`**（`index.php` がある階層）だけを DocumentRoot にします。この場合 **`/` がそのまま管理画面**です。ルートの `index.html` やルート `README.md` は **その VirtualHost の URL からは見えません**（別ホスト・別パスで配信しない限り）。

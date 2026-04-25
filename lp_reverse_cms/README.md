@@ -153,6 +153,7 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 - アセットの多い LP は **取得に数十秒** かかることがある。  
 - 動的に挿入されるリソースのみのサイトは、静的取得では取りこぼしがある。  
 - 本番運用では Apache 等のドキュメントルートに配置し、`data/` の保護を維持すること。
+- クローン直後など **`data/` / `output/` の所有者**が、Web・PHP 実行ユーザー（例: `www-data`）と**ずれている**と解析が**書き込めない**（**v1.1.11** 以降は取得段階で**明示**）。[`ENVIRONMENT_AND_OPERATIONS.md`](../ENVIRONMENT_AND_OPERATIONS.md) の**留意点**を参照。
 
 **運用の詳細**（`data/` 非公開、HTTPS、タイムアウト、`git pull` 後の `data`/`output` など）: リポジトリルートの [ENVIRONMENT_AND_OPERATIONS.md](../ENVIRONMENT_AND_OPERATIONS.md) を参照。
 

@@ -92,6 +92,8 @@
 | 拡張 | **curl**, **dom**, **json**, **mbstring**（標準的な XAMPP / パッケージで概ね有効） |
 | 書き込み権限 | `lp_reverse_cms/data/` と `lp_reverse_cms/output/` に Web サーバー／PHP プロセスが書き込めること |
 
+**留意:** クローン直後は上記ディレクトリの**所有ユーザー**が*デプロイした OS ユーザー*のまま**書き込み不可**（例: 755 ＋ 所有者 `shimizu`）のまま、Apache が **`www-data`** として動いている、という不整合で失敗しがちです。**`chown` / `chmod` で Web・PHP 実ユーザー＋（任意）運用グループ**に揃えてください。詳細と例はリポジトリルート [ENVIRONMENT_AND_OPERATIONS.md](../../ENVIRONMENT_AND_OPERATIONS.md) の「3. 運用」→**留意点**小節。
+
 データベース・Composer・Node.js は **不要**です。
 
 ### 4.2 ソースの配置
