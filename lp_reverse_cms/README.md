@@ -2,9 +2,10 @@
 
 参照 LP の URL から HTML を取得し、DOM 解析で編集可能な構造を JSON 化。顧客向け文言を流し込み、同じ構成の LP を静的 HTML として再生成する PHP 製 MVP。
 
-**アプリバージョン:** `1.1.8`（`index.php` の `APP_VERSION` と同期）
+**アプリバージョン:** `1.1.9`（`index.php` の `APP_VERSION` と同期）
 
-**ドキュメント:** [開発経緯・成果とゼロからの構築手順（PROJECT_HISTORY_AND_SETUP.md）](docs/PROJECT_HISTORY_AND_SETUP.md)
+**ドキュメント:** [開発経緯・成果とゼロからの構築手順（PROJECT_HISTORY_AND_SETUP.md）](docs/PROJECT_HISTORY_AND_SETUP.md)  
+　※ VirtualHost の **DocumentRoot をリポジトリルート**（`lp-next` 直下）にしている場合の URL 例: **`/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md`**（ホスト名は環境に合わせる）
 
 **公式リポジトリ:** [BinaryTraffic/lp-next](https://github.com/BinaryTraffic/lp-next)（クローン URL は末尾 `.git` 可）
 
@@ -17,8 +18,11 @@
 ```bash
 git clone https://github.com/BinaryTraffic/lp-next.git
 cd lp-next
-# 組み込みサーバー例（リポジトリルートから）
+# DocumentRoot = lp_reverse_cms のみの例（リポジトリルートがカレント）
 php -S localhost:8080 -t lp_reverse_cms
+
+# DocumentRoot = リポジトリルートの例（入口は / 、管理画面は /lp_reverse_cms/）
+# php -S localhost:8080
 ```
 
 既にローカルで作業している場合のリモート設定例:
@@ -166,6 +170,7 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 | 1.1.6 | 未置換スキャンで HTML コメントを除外（コメント内 URL の誤検知防止）、`debug.php` 表示時に `output/index.html` を再スキャンして `output_unreplaced.json` を更新 |
 | 1.1.7 | `LpAnalyzer`: `<picture>` 内の `img` を走査して編集対象化（従来は `picture` がコンテナ外でヒーロー背景相当の画像がフォームに出ない問題）、`class` に `bg` を含む画像はラベルを「背景画像」に、`source` の `srcset` も absolutize |
 | 1.1.8 | `LpAnalyzer`: 誤った `</source>` 位置などで `img` が `source` の子になる DOM でも拾えるよう、`source` をコンテナとして再帰；`docs/PROJECT_HISTORY_AND_SETUP.md`（経緯・ゼロからの構築手順）追加 |
+| 1.1.9 | リポジトリルート用 `index.html`、DocumentRoot をルート／`lp_reverse_cms` の 2 通りで説明（URL から `/lp_reverse_cms/` へ辿る手順）、各 README・SETUP のパス追記 |
 
 ---
 

@@ -11,10 +11,57 @@ cd lp-next
 
 アプリケーション本体・手順書は **`lp_reverse_cms/`** 以下です（クローン後のカレントはリポジトリルート想定）。
 
-- [lp_reverse_cms/README.md](lp_reverse_cms/README.md) — 概要・ディレクトリ・起動方法
-- [lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md](lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md) — 経緯とゼロからの構築
+---
 
-Web サーバーのドキュメントルートは **`lp_reverse_cms`**（`index.php` がある階層）にしてください。
+## ドキュメント（.md）の見方
+
+Web サーバーが **Markdown をそのまま `text/plain` で返す**ことがあり、ブラウザでは読みにくい場合があります。次のいずれかを推奨します。
+
+- [GitHub 上のファイル](https://github.com/BinaryTraffic/lp-next)で表示する  
+- ローカルで VS Code / Cursor などエディタから開く  
+
+---
+
+## DocumentRoot の取り方（2 通り）
+
+先方が **URL からツール（管理画面）へ辿り着ける**ようにするには、サーバーの **DocumentRoot をどこに置くか**で URL が変わります。
+
+### A. リポジトリルートを DocumentRoot にする（推奨：入口 URL を分かりやすく）
+
+クローン後の **リポジトリのルート**（例: `/home/user/lp-next`、`C:\...\lp-next`）を DocumentRoot にします。ルートに **`index.html`** があり、`/` から説明とリンクに辿れます。
+
+| URL パス（ホスト直下からの相対） | 内容 |
+|----------------------------------|------|
+| `/` | 入口ページ（`index.html`）→ 管理画面・ドキュメントへのリンク |
+| `/README.md` | 本ファイル（サーバーによっては生テキスト） |
+| `/lp_reverse_cms/` | **管理画面**（`index.php`）← ここがメインのツール |
+| `/lp_reverse_cms/README.md` | アプリ README |
+| `/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md` | 経緯・ゼロからの構築手順 |
+
+**PHP ビルトインサーバー例**（リポジトリルートで起動。`-t` はリポジトリルート＝`.`）:
+
+```bash
+cd /path/to/lp-next
+php -S localhost:8080
+```
+
+- 入口: `http://localhost:8080/`  
+- 管理画面: `http://localhost:8080/lp_reverse_cms/`  
+
+**絶対パスで `-t` する例:**
+
+```bash
+php -S localhost:8080 -t "C:\path\to\lp-next"
+```
+
+**Apache** では `VirtualHost` の `DocumentRoot` を上記リポジトリルートに設定します。`.md` は多くの環境で **HTML 変換なし**のまま配信される想定です（読み方は上記「ドキュメントの見方」参照）。
+
+### B. `lp_reverse_cms` だけを DocumentRoot にする（従来）
+
+**`lp_reverse_cms`**（`index.php` がある階層）だけを DocumentRoot にします。この場合 **`/` がそのまま管理画面**です。ルートの `index.html` やルート `README.md` は **その VirtualHost の URL からは見えません**（別ホスト・別パスで配信しない限り）。
+
+- 例: `http://example.com/` → 管理画面  
+- `php -S` 例: `php -S localhost:8080 -t lp_reverse_cms`（カレントはリポジトリルート想定）
 
 ---
 
@@ -34,7 +81,7 @@ git rev-parse HEAD
 git ls-remote origin refs/heads/main
 ```
 
-両方のハッシュの**先頭 7 文字**（例: `4895729`）が一致していれば、同じコミットを指しています。`git status` で `Your branch is up to date with 'origin/main'` でも確認できます。
+両方のハッシュの**先頭 7 文字**が一致していれば、同じコミットを指しています。`git status` で `Your branch is up to date with 'origin/main'` でも確認できます。
 
 **リモート URL**の確認: `git remote -v`（`https://github.com/BinaryTraffic/lp-next.git` であること）。
 

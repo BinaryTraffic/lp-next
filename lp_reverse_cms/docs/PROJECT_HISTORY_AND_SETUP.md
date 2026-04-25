@@ -94,28 +94,53 @@
 
 ### 4.2 ソースの配置
 
-1. リポジトリを取得し、作業ディレクトリを **`lp_reverse_cms`**（`index.php` がある階層）に合わせます。
-2. 初回は空でもよいですが、以下が **自動作成**されます。
-   - `data/`
-   - `output/`
-   - `output/assets/` 配下（アセット取得時）
+1. リポジトリを **クローン**すると、**リポジトリルート**に `README.md`・`index.html`（入口）・**`lp_reverse_cms/`**（アプリ本体）が揃います。
+2. Web サーバーの **DocumentRoot** は次のどちらかです（[ルート README.md](../../README.md) に表あり）。
+   - **リポジトリルート** … `/` で入口 HTML、**`/lp_reverse_cms/`** で管理画面。
+   - **`lp_reverse_cms` のみ** … `/` が直接管理画面（従来どおり）。
+3. 初回は空でもよいですが、以下が **自動作成**されます（いずれの DocumentRoot でもアプリは `lp_reverse_cms/data` 等を使用）。
+   - `lp_reverse_cms/data/`
+   - `lp_reverse_cms/output/`
+   - `lp_reverse_cms/output/assets/` 配下（アセット取得時）
+
+### 4.2.1 DocumentRoot ＝ リポジトリルートのとき（URL の例）
+
+先方がブラウザの **URL だけ**で辿れるようにする場合のイメージです（ホスト名・ポートは環境依存）。
+
+| パス | 内容 |
+|------|------|
+| `/` | [リポジトリルートの index.html](../../index.html)（入口・リンク集） |
+| `/README.md` | [ルート README.md](../../README.md)（Apache では多くの場合プレーン表示） |
+| `/lp_reverse_cms/` | 管理画面（`index.php`） |
+| `/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md` | 本ドキュメント |
+
+Markdown は **HTML にレンダリングされず** `text/plain` のまま配信される想定です。読みやすくするには GitHub 上の表示か、ローカルエディタを使ってください。
 
 ### 4.3 ローカルで PHP ビルトインサーバーを使う（最短）
 
-**ドキュメントルートを `lp_reverse_cms` に設定**してください（`index.php` がその直下にあること）。
+**パターン 1 — DocumentRoot をリポジトリルートにする**
 
 ```powershell
-# 例: プロジェクト内の PHP で起動（パスは環境に合わせて変更）
+cd C:\path\to\lp-next
+php -S localhost:8080
+```
+
+- 入口: `http://localhost:8080/`  
+- 管理画面: `http://localhost:8080/lp_reverse_cms/`  
+
+**パターン 2 — DocumentRoot を `lp_reverse_cms` のみにする**
+
+```powershell
 php -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 ```
 
-ブラウザで **`http://localhost:8080`** を開きます。  
+ブラウザで **`http://localhost:8080`** を開きます（この場合はいきなり管理画面）。  
 **`index.php` を `file://` で直接開かない**でください（`store/*.php` への相対パスが壊れます）。
 
 ### 4.4 Apache 等で運用する場合
 
-- **VirtualHost の DocumentRoot** を `lp_reverse_cms` に向ける。
-- **`data/` を公開しない**（README の `.htaccess` 意図に沿って設定）。  
+- **VirtualHost の DocumentRoot** を **リポジトリルート**にするか、**`lp_reverse_cms` のみ**にするかを選ぶ（[ルート README.md](../../README.md) の「DocumentRoot の取り方」参照）。
+- **`data/` を公開しない**（`lp_reverse_cms/.htaccess` の意図に沿って設定）。  
   ビルトインサーバーでは `.htaccess` は効かないため、本番では別途アクセス制御を推奨。
 
 ### 4.5 初回の動作確認フロー
