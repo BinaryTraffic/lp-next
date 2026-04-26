@@ -1,5 +1,7 @@
 ## 起動時の必須手順
 1. `git pull origin main` を実行して最新化する
+   - 未コミット変更があって止まる場合: `git stash → git pull → git stash pop`
+   - 未コミット変更を捨てて pull したい場合: `git restore <file> → git pull`
 2. このファイル（`.cursorrules`）を最初から最後まで読む
 3. 今回のタスクに対応する `cursor_prompts/*.md` を読む
 4. 実装・テスト・コミット・push を行う
