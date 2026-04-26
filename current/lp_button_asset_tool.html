@@ -252,6 +252,11 @@
       font-size: 0.64rem;
       opacity: 0.95;
     }
+    .plate-dim {
+      font-weight: 600;
+      color: var(--text);
+      margin-left: 0.2rem;
+    }
     .err { background: #fce8e6; border: 1px solid #c5221f; color: #611016; padding: 0.55rem 0.65rem; border-radius: 8px; font-size: 0.82rem; margin-bottom: 0.75rem; }
     .meta-bar { font-size: 0.78rem; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem 0.55rem; margin-bottom: 0.75rem; }
     .filter-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.78rem; }
@@ -426,7 +431,7 @@
             <div class="preview-slot"><img id="orig_preview" alt="元のボタン画像" /></div>
           </figure>
           <figure id="fig_plate" class="preview-cell" hidden>
-            <figcaption>板</figcaption>
+            <figcaption>板<span id="plate_dim_lbl" class="plate-dim"></span></figcaption>
             <div class="preview-slot"><img id="plate_preview" alt="生成した板" /></div>
           </figure>
           <figure id="fig_out" class="preview-cell" hidden>
@@ -656,6 +661,7 @@
       var figPlate = document.getElementById("fig_plate");
       var platePreview = document.getElementById("plate_preview");
       var comparePxLbl = document.getElementById("compare_px_lbl");
+      var plateDimLbl = document.getElementById("plate_dim_lbl");
 
       var allButtonItems = [];
       var selected = null;
@@ -1096,6 +1102,7 @@
         fStatus.textContent = "";
         figOut.hidden = true;
         if (figPlate) figPlate.hidden = true;
+        if (plateDimLbl) plateDimLbl.textContent = "";
         function onOrigDimsReady() {
           if (probeId !== boundsProbeSeq) return;
           var nw = origPreview.naturalWidth;
@@ -1225,10 +1232,25 @@
           });
       }
 
-      function applyPlatePreviewUrl(url) {
+      /**
+       * @param {string} url
+       * @param {number} [genW] 生成リクエスト幅（省略時は画像 onload で実寸のみ）
+       * @param {number} [genH]
+       */
+      function applyPlatePreviewUrl(url, genW, genH) {
         fBg.value = url;
         if (platePreview && figPlate) {
           var abs = resolvePublicOutputUrl(url);
+          if (plateDimLbl && genW >= 16 && genH >= 16) {
+            plateDimLbl.textContent = " · " + genW + "×" + genH + " px";
+          }
+          platePreview.onload = function () {
+            var nw = platePreview.naturalWidth;
+            var nh = platePreview.naturalHeight;
+            if (nw > 0 && nh > 0 && plateDimLbl) {
+              plateDimLbl.textContent = " · " + nw + "×" + nh + " px";
+            }
+          };
           platePreview.src = abs + (abs.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
           figPlate.hidden = false;
         }
@@ -1280,7 +1302,7 @@
           fStatus.textContent = "生成中…";
           fetchPlatePng(payload)
             .then(function (url) {
-              applyPlatePreviewUrl(url);
+              applyPlatePreviewUrl(url, payload.width, payload.height);
               fStatus.textContent = "OK · 文字→書き出し";
             })
             .catch(function (e) {
@@ -1456,7 +1478,7 @@
         fStatus.textContent = "板を生成中…";
         fetchPlatePng(payload)
           .then(function (url) {
-            applyPlatePreviewUrl(url);
+            applyPlatePreviewUrl(url, payload.width, payload.height);
             return runComposite(url);
           })
           .catch(function (e) {
