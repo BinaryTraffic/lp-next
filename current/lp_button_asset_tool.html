@@ -427,7 +427,7 @@
       <div id="ws_form" hidden>
         <div class="preview-row preview-row--compare" role="region" aria-label="比較プレビュー">
           <figure class="preview-cell">
-            <figcaption>元</figcaption>
+            <figcaption>元<span id="orig_dim_lbl" class="plate-dim"></span></figcaption>
             <div class="preview-slot"><img id="orig_preview" alt="元のボタン画像" /></div>
           </figure>
           <figure id="fig_plate" class="preview-cell" hidden>
@@ -662,6 +662,7 @@
       var platePreview = document.getElementById("plate_preview");
       var comparePxLbl = document.getElementById("compare_px_lbl");
       var plateDimLbl = document.getElementById("plate_dim_lbl");
+      var origDimLbl = document.getElementById("orig_dim_lbl");
 
       var allButtonItems = [];
       var selected = null;
@@ -1103,10 +1104,14 @@
         figOut.hidden = true;
         if (figPlate) figPlate.hidden = true;
         if (plateDimLbl) plateDimLbl.textContent = "";
+        if (origDimLbl) origDimLbl.textContent = "";
         function onOrigDimsReady() {
           if (probeId !== boundsProbeSeq) return;
           var nw = origPreview.naturalWidth;
           var nh = origPreview.naturalHeight;
+          if (nw > 0 && nh > 0 && origDimLbl) {
+            origDimLbl.textContent = " · " + nw + "×" + nh + " px";
+          }
           if (nw > 0) {
             fW.value = String(nw);
             fH.value = String(nh);
