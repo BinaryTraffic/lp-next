@@ -7,12 +7,19 @@ declare(strict_types=1);
  *
  * POST JSON: { "image_url", "width", "height", "api_key"? }
  * 返却: {
- *   "type": "photo|illustration|ui|composite",
- *   "texts": [{ "content", "x_pct", "y_pct", "w_pct", "h_pct", "font_size_pct", "bold", "color" }],
- *   "icons": [{ "label", "x_pct", "y_pct", "w_pct", "h_pct" }]  // 装飾アイコンのみ（文字グリフは texts）
- *   "illustration_style": "line_art|flat|none",
- *   "background_description": "..."
+ *   "type": "photo|illustration|ui|composite|gradient|bordered|badge",
+ *   "texts": [...], "icons": [...],
+ *   "illustration_style": "...",
+ *   "background_description": "...",
+ *   "gradient": { ... },   // type=gradient のみ
+ *   "border": { ... },    // type=bordered のみ
+ *   "badge": { ... }      // type=badge のみ
  * }
+ *
+ * bordered 後続フロー（実装は呼出元）:
+ * ① 本レスポンスで border.width_pct 等を取得
+ * ② inner 寸法を算出し hf_image_proxy で inner 画像生成
+ * ③ image_composite.php に border_fill + background_url(inner) を POST
  */
 require_once __DIR__ . '/../lib/env_load.php';
 require_once __DIR__ . '/../lib/api_usage_log.php';
@@ -100,9 +107,28 @@ $prompt = <<<PROMPT
 
 以下のJSONのみを返してください（説明文・コードブロック不要）:
 {
-  "type": "photo | illustration | ui | composite",
+  "type": "photo | illustration | ui | composite | gradient | bordered | badge",
   "illustration_style": "line_art | flat | watercolor | none",
   "background_description": "背景の視覚的説明（英語、FLUX生成プロンプト用）",
+  "gradient": {
+    "type": "linear | radial",
+    "angle": 180,
+    "colors": [
+      { "color": "#3a7bd5", "stop": 0.0 },
+      { "color": "#00d2ff", "stop": 1.0 }
+    ]
+  },
+  "border": {
+    "color": "#c8a96e",
+    "width_pct": 0.06,
+    "inner_type": "photo | illustration",
+    "inner_description": "English prompt for inner image generation"
+  },
+  "badge": {
+    "shape": "circle | pill | ribbon | rect",
+    "bg_color": "#e63c3c",
+    "text_color": "#ffffff"
+  },
   "texts": [
     {
       "content": "テキスト内容",
@@ -133,6 +159,15 @@ typeの判定基準:
 - illustration: イラスト・アイコン・ベクター
 - ui: ボタン・電話番号・バナー文字など機能的UI
 - composite: 上記が複数混在（背景+テキスト+イラストなど）
+- gradient: グラデーション単色背景（写真なし。テキストを乗せる前提の帯・セクション背景）
+- bordered: 写真やイラストを縁取るフレーム・ボーダーが存在する画像
+- badge: ナンバリング丸・NEWリボン・価格タグなど小型アクセント要素
+
+gradient: type が gradient のときのみ gradient を埋める。gradient.colors に開始・終了（必要なら中間）の色を stop(0.0〜1.0) 付きで返す。angle は linear のとき度数(0=上→下, 90=左→右)。radial のとき 0。
+bordered: type が bordered のときのみ border を埋める。border.width_pct は画像短辺に対するフレーム幅の比率（片側）。inner_description は FLUX へ渡す英語プロンプト。
+badge: type が badge のときのみ badge を埋める。badge.shape は形状の最も近いもの。色は badge に含める。テキスト内容は通常どおり texts[] に含める。
+
+type が gradient / bordered / badge でないときは gradient, border, badge は null または省略可能（空オブジェクトでも可）。
 
 textsには画像内に見えるすべてのテキストを含めてください。
 PROMPT;
@@ -278,6 +313,51 @@ lp_reverse_api_usage_record([
 
 if (!isset($parsed['icons']) || !is_array($parsed['icons'])) {
     $parsed['icons'] = [];
+}
+
+$allowedTypes = ['photo', 'illustration', 'ui', 'composite', 'gradient', 'bordered', 'badge'];
+$ty = isset($parsed['type']) ? strtolower(trim((string) $parsed['type'])) : '';
+if (!in_array($ty, $allowedTypes, true)) {
+    $parsed['type'] = 'composite';
+} else {
+    $parsed['type'] = $ty;
+}
+
+if ($parsed['type'] === 'gradient') {
+    if (!isset($parsed['gradient']) || !is_array($parsed['gradient'])) {
+        $parsed['gradient'] = [];
+    }
+    $g = $parsed['gradient'];
+    $parsed['gradient'] = [
+        'type'   => in_array($g['type'] ?? '', ['linear', 'radial'], true) ? $g['type'] : 'linear',
+        'angle'  => isset($g['angle']) ? (int) $g['angle'] : 180,
+        'colors' => (isset($g['colors']) && is_array($g['colors'])) ? $g['colors'] : [],
+    ];
+}
+
+if ($parsed['type'] === 'bordered') {
+    if (!isset($parsed['border']) || !is_array($parsed['border'])) {
+        $parsed['border'] = [];
+    }
+    $b = $parsed['border'];
+    $parsed['border'] = [
+        'color'             => isset($b['color']) ? (string) $b['color'] : '#000000',
+        'width_pct'         => isset($b['width_pct']) ? (float) $b['width_pct'] : 0.05,
+        'inner_type'        => in_array($b['inner_type'] ?? '', ['photo', 'illustration'], true) ? $b['inner_type'] : 'photo',
+        'inner_description' => isset($b['inner_description']) ? (string) $b['inner_description'] : '',
+    ];
+}
+
+if ($parsed['type'] === 'badge') {
+    if (!isset($parsed['badge']) || !is_array($parsed['badge'])) {
+        $parsed['badge'] = [];
+    }
+    $bd = $parsed['badge'];
+    $parsed['badge'] = [
+        'shape'      => in_array($bd['shape'] ?? '', ['circle', 'pill', 'ribbon', 'rect'], true) ? $bd['shape'] : 'circle',
+        'bg_color'   => isset($bd['bg_color']) ? (string) $bd['bg_color'] : '#e63c3c',
+        'text_color' => isset($bd['text_color']) ? (string) $bd['text_color'] : '#ffffff',
+    ];
 }
 
 echo json_encode($parsed, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);

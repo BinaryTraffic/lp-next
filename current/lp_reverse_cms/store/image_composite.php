@@ -19,11 +19,20 @@ declare(strict_types=1);
  *   "icons": [{
  *     "label": "LINE",
  *     "x_pct": 0.05, "y_pct": 0.15, "w_pct": 0.20, "h_pct": 0.70
- *   }]
+ *   }],
+ *   "border_fill": { "color": "#c8a96e", "width_px": 24 }
  * }
  *
  * source_url を指定すると、元画像からグレー帯などの余白（RGB 各チャンネル 200 以上かつほぼ白でない画素の帯）を検出し、
  * 出力キャンバスを width×height で余白色で塗ったうえで、内側矩形に background のみリサイズ合成する。
+ *
+ * border_fill を指定したときは source_url による余白検出は行わない。全面を color で塗り、width_px 幅の枠の内側に background を貼る（bordered フロー用）。
+ *
+ * bordered 呼出フロー（新規ファイル不要）:
+ * ① 本エンドポイントで type=bordered を解析（claude_image_analyze.php）
+ * ② クライアントで inner_w/h = width - 2*round(min(w,h)*width_pct) 等を算出
+ * ③ hf_image_proxy.php で内側画像を生成 → inner_url
+ * ④ 本エンドポイントに background_url=inner_url, border_fill={color,width_px}, width/height=外枠サイズ を POST
  *
  * icons が空でないときは SVG を Imagick でラスタライズして背景の上・テキストの下に重ねる（Imagick 必須）。
  *
@@ -39,6 +48,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../lib/env_load.php';
 require_once __DIR__ . '/../lib/icon_map.php';
 require_once __DIR__ . '/../lib/composite_content_bounds.php';
+require_once __DIR__ . '/../lib/composite_fonts.php';
+require_once __DIR__ . '/../lib/composite_color_geom.php';
+require_once __DIR__ . '/../lib/composite_gd_draw_texts.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -61,6 +73,15 @@ if (!is_array($in)) {
 
 $backgroundUrl = isset($in['background_url']) ? trim((string) $in['background_url']) : '';
 $sourceUrl = isset($in['source_url']) ? trim((string) $in['source_url']) : '';
+/** @var array{color: string, width_px: int}|null $borderFill */
+$borderFill = null;
+if (isset($in['border_fill']) && is_array($in['border_fill'])) {
+    $bf = $in['border_fill'];
+    $borderFill = [
+        'color'    => isset($bf['color']) ? trim((string) $bf['color']) : '#000000',
+        'width_px' => isset($bf['width_px']) ? (int) $bf['width_px'] : 0,
+    ];
+}
 $outW = isset($in['width']) ? (int) $in['width'] : 0;
 $outH = isset($in['height']) ? (int) $in['height'] : 0;
 /** @var list<array<string, mixed>> $texts */
@@ -105,11 +126,24 @@ if ($bgPath === null) {
 }
 
 $sourcePath = null;
-if ($sourceUrl !== '') {
+if ($sourceUrl !== '' && $borderFill === null) {
     $sourcePath = composite_resolve_background_path($sourceUrl);
     if ($sourcePath === null) {
         http_response_code(400);
         echo json_encode(['error' => 'source_url が無効か、output 配下のファイルとして解決できません'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+if ($borderFill !== null) {
+    $bp = max(0, $borderFill['width_px']);
+    if ($bp * 2 >= $outW || $bp * 2 >= $outH) {
+        http_response_code(400);
+        echo json_encode(['error' => 'border_fill.width_px がキャンバスに対して大きすぎます'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if ($outW - 2 * $bp < 1 || $outH - 2 * $bp < 1) {
+        http_response_code(400);
+        echo json_encode(['error' => 'border_fill 指定時の内側サイズが無効です'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 }
@@ -163,16 +197,16 @@ if ($hasIcons) {
     $fontBoldGdIcons = $fontBoldFile !== '' ? composite_expand_font_for_gd($fontBoldFile) : '';
     $gdFontsOkIcons = ($fontRegularGdIcons !== '' || $fontBoldGdIcons !== '');
     if ($gdFontsOkIcons) {
-        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularGdIcons, $fontBoldGdIcons, $sourcePath);
+        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularGdIcons, $fontBoldGdIcons, $sourcePath, $borderFill);
     } else {
-        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath);
+        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill);
     }
 } elseif ($engine === 'gd') {
     $fontRegularGd = composite_expand_font_for_gd($fontRegularFile);
     $fontBoldGd = $fontBoldFile !== '' ? composite_expand_font_for_gd($fontBoldFile) : '';
     $gdFontsOk = ($fontRegularGd !== '' || $fontBoldGd !== '');
     if (!$gdFontsOk && composite_imagick_available()) {
-        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath);
+        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill);
     } elseif (!$gdFontsOk) {
         http_response_code(500);
         echo json_encode([
@@ -180,10 +214,10 @@ if ($hasIcons) {
         ], JSON_UNESCAPED_UNICODE);
         exit;
     } else {
-        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularGd, $fontBoldGd, $sourcePath);
+        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularGd, $fontBoldGd, $sourcePath, $borderFill);
     }
 } else {
-    $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath);
+    $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill);
 }
 if ($renderResult['error'] !== null) {
     $err = $renderResult['error'];
@@ -215,46 +249,6 @@ function composite_pick_engine(): string
 function composite_imagick_available(): bool
 {
     return extension_loaded('imagick') && class_exists('Imagick', false);
-}
-
-/**
- * 入力座標は元キャンバス outW×outH に対する比率。戻りは内側キャンバス上の矩形（交差なしなら null）。
- *
- * @return array{0: int, 1: int, 2: int, 3: int}|null boxLeft, boxTop, boxW, boxH
- */
-function composite_map_full_box_to_inner(
-    int $outW,
-    int $outH,
-    int $buttonX,
-    int $buttonY,
-    int $buttonW,
-    int $buttonH,
-    float $xPct,
-    float $yPct,
-    float $wPct,
-    float $hPct
-): ?array {
-    $fl = (int) round($outW * $xPct);
-    $ft = (int) round($outH * $yPct);
-    $fw = max(1, (int) round($outW * $wPct));
-    $fh = max(1, (int) round($outH * $hPct));
-    $fr = $fl + $fw - 1;
-    $fb = $ft + $fh - 1;
-
-    $ir0 = $buttonX;
-    $it0 = $buttonY;
-    $ir1 = $buttonX + $buttonW - 1;
-    $ib1 = $buttonY + $buttonH - 1;
-
-    $il = max($fl, $ir0);
-    $it = max($ft, $it0);
-    $ir = min($fr, $ir1);
-    $ib = min($fb, $ib1);
-    if ($il > $ir || $it > $ib) {
-        return null;
-    }
-
-    return [$il - $buttonX, $it - $buttonY, $ir - $il + 1, $ib - $it + 1];
 }
 
 /**
@@ -404,9 +398,54 @@ function composite_render_gd(
     string $destAbs,
     string $fontRegularGd,
     string $fontBoldGd,
-    ?string $sourcePath = null
+    ?string $sourcePath = null,
+    ?array $borderFill = null
 ): array {
-    if ($sourcePath !== null) {
+    if ($borderFill !== null) {
+        $borderPx = max(0, (int) ($borderFill['width_px'] ?? 0));
+        [$br, $bgc, $bb] = composite_parse_color((string) ($borderFill['color'] ?? '#000000')) ?? [0, 0, 0];
+        $bx = $borderPx;
+        $by = $borderPx;
+        $bw = $outW - 2 * $borderPx;
+        $bh = $outH - 2 * $borderPx;
+        $fullBase = imagecreatetruecolor($outW, $outH);
+        if ($fullBase === false) {
+            return ['error' => 'キャンバスの作成に失敗しました', 'content_bounds' => []];
+        }
+        $matte = imagecolorallocate($fullBase, $br, $bgc, $bb);
+        if ($matte === false) {
+            imagedestroy($fullBase);
+
+            return ['error' => 'キャンバスの初期化に失敗しました', 'content_bounds' => []];
+        }
+        imagefilledrectangle($fullBase, 0, 0, max(0, $outW - 1), max(0, $outH - 1), $matte);
+        imagealphablending($fullBase, true);
+        imagesavealpha($fullBase, false);
+
+        $plateIm = composite_image_load($bgPath);
+        if ($plateIm === false) {
+            imagedestroy($fullBase);
+
+            return ['error' => '背景画像の読み込みに失敗しました', 'content_bounds' => []];
+        }
+        imagesavealpha($plateIm, true);
+        imagealphablending($plateIm, true);
+        $pw = imagesx($plateIm);
+        $ph = imagesy($plateIm);
+        $marginBounds = [
+            'padding_top'    => $borderPx,
+            'padding_right'  => $borderPx,
+            'padding_bottom' => $borderPx,
+            'padding_left'   => $borderPx,
+            'button_x'       => $bx,
+            'button_y'       => $by,
+            'button_w'       => $bw,
+            'button_h'       => $bh,
+        ];
+        $cbJson = composite_content_bounds_for_json($marginBounds);
+        imagecopyresampled($fullBase, $plateIm, $bx, $by, 0, 0, $bw, $bh, $pw, $ph);
+        imagedestroy($plateIm);
+    } elseif ($sourcePath !== null) {
         $sourceGd = composite_image_load($sourcePath);
         if ($sourceGd === false) {
             return ['error' => 'source_url の画像を読み込めませんでした', 'content_bounds' => []];
@@ -519,81 +558,8 @@ function composite_render_gd(
     imagealphablending($work, true);
     imagesavealpha($work, true);
 
-    $drewText = false;
-
-    foreach ($texts as $item) {
-        if (!is_array($item)) {
-            continue;
-        }
-        $content = isset($item['content']) ? (string) $item['content'] : '';
-        if ($content === '') {
-            continue;
-        }
-        $xPct = composite_clamp_pct($item['x_pct'] ?? 0.0);
-        $yPct = composite_clamp_pct($item['y_pct'] ?? 0.0);
-        $wPct = composite_clamp_pct($item['w_pct'] ?? 1.0);
-        $hPct = composite_clamp_pct($item['h_pct'] ?? 1.0);
-        $fsPct = isset($item['font_size_pct']) ? (float) $item['font_size_pct'] : 0.3;
-        $fsPct = max(0.05, min($fsPct, 1.0));
-        $bold = !empty($item['bold']);
-        $colorStr = isset($item['color']) ? trim((string) $item['color']) : '#ffffff';
-        $rgb = composite_parse_color($colorStr) ?? [255, 255, 255];
-
-        $mapped = composite_map_full_box_to_inner($outW, $outH, $bx, $by, $bw, $bh, $xPct, $yPct, $wPct, $hPct);
-        if ($mapped === null) {
-            continue;
-        }
-        [$boxLeft, $boxTop, $boxW, $boxH] = $mapped;
-
-        $fontFile = $bold && $fontBoldGd !== '' ? $fontBoldGd : ($fontRegularGd !== '' ? $fontRegularGd : $fontBoldGd);
-        if ($fontFile === '') {
-            continue;
-        }
-        $fontPx = max(6, (int) round($boxH * $fsPct * 0.76));
-        $fontPx = min($fontPx, max(6, $boxH - 2));
-        $maxTh = max(6, (int) round($boxH * 0.82));
-
-        $bbox = @imagettfbbox($fontPx, 0, $fontFile, $content);
-        if ($bbox === false && $fontFile !== $fontRegularGd && $fontRegularGd !== '') {
-            $fontFile = $fontRegularGd;
-            $bbox = @imagettfbbox($fontPx, 0, $fontFile, $content);
-        }
-        if ($bbox === false) {
-            continue;
-        }
-        $tw = (int) abs($bbox[2] - $bbox[0]);
-        $th = (int) abs($bbox[7] - $bbox[1]);
-        while (($tw > $boxW || $th > $maxTh) && $fontPx > 6) {
-            --$fontPx;
-            $bbox = @imagettfbbox($fontPx, 0, $fontFile, $content);
-            if ($bbox === false) {
-                break;
-            }
-            $tw = (int) abs($bbox[2] - $bbox[0]);
-            $th = (int) abs($bbox[7] - $bbox[1]);
-        }
-        if ($bbox === false) {
-            continue;
-        }
-
-        $asc = (int) abs($bbox[7]);
-        $xDraw = (int) round($boxLeft + ($boxW - $tw) / 2);
-        $yDraw = (int) round($boxTop + ($boxH - $th) / 2 + $asc);
-        $xDraw = max($boxLeft, min($xDraw, $boxLeft + max(0, $boxW - $tw)));
-
-        $col = imagecolorallocate($work, $rgb[0], $rgb[1], $rgb[2]);
-        if ($col === false) {
-            continue;
-        }
-        if ($bold && $fontBoldGd === '' && $fontRegularGd !== '') {
-            if (@imagettftext($work, $fontPx, 0, $xDraw + 1, $yDraw, $col, $fontFile, $content) !== false) {
-                $drewText = true;
-            }
-        }
-        if (@imagettftext($work, $fontPx, 0, $xDraw, $yDraw, $col, $fontFile, $content) !== false) {
-            $drewText = true;
-        }
-    }
+    $drawR = composite_gd_draw_texts($work, $outW, $outH, $bx, $by, $bw, $bh, $texts, $fontRegularGd, $fontBoldGd);
+    $drewText = $drawR['drew'];
 
     $nonEmpty = 0;
     foreach ($texts as $it) {
@@ -829,10 +795,44 @@ function composite_render_imagick(
     string $destAbs,
     string $fontRegularFile,
     string $fontBoldFile,
-    ?string $sourcePath = null
+    ?string $sourcePath = null,
+    ?array $borderFill = null
 ): array {
     try {
-        if ($sourcePath !== null) {
+        if ($borderFill !== null) {
+            $borderPx = max(0, (int) ($borderFill['width_px'] ?? 0));
+            [$br, $bgc, $bb] = composite_parse_color((string) ($borderFill['color'] ?? '#000000')) ?? [0, 0, 0];
+            $bx = $borderPx;
+            $by = $borderPx;
+            $bw = $outW - 2 * $borderPx;
+            $bh = $outH - 2 * $borderPx;
+            $marginBounds = [
+                'padding_top'    => $borderPx,
+                'padding_right'  => $borderPx,
+                'padding_bottom' => $borderPx,
+                'padding_left'   => $borderPx,
+                'button_x'       => $bx,
+                'button_y'       => $by,
+                'button_w'       => $bw,
+                'button_h'       => $bh,
+            ];
+            $cbJson = composite_content_bounds_for_json($marginBounds);
+
+            $canvas = new Imagick();
+            $canvas->newImage($outW, $outH, new ImagickPixel(sprintf('rgb(%d,%d,%d)', $br, $bgc, $bb)));
+            $canvas->setImageColorspace(Imagick::COLORSPACE_SRGB);
+
+            $plate = new Imagick($bgPath);
+            $plate->setImageColorspace(Imagick::COLORSPACE_SRGB);
+            $plate->resizeImage($bw, $bh, Imagick::FILTER_LANCZOS, 1, false);
+            $canvas->compositeImage($plate, Imagick::COMPOSITE_OVER, $bx, $by);
+            $plate->clear();
+
+            $base = clone $canvas;
+            $inner = clone $canvas;
+            $canvas->clear();
+            $inner->cropImage($bw, $bh, $bx, $by);
+        } elseif ($sourcePath !== null) {
             $sourceGd = composite_image_load($sourcePath);
             if ($sourceGd === false) {
                 return ['error' => 'source_url の画像を読み込めませんでした', 'content_bounds' => []];
@@ -1079,220 +1079,6 @@ function composite_resolve_background_path(string $url): ?string
     return $resolved;
 }
 
-/** getenv の値を .env 由来の改行・前後空白を除いて解釈する */
-function composite_getenv_trimmed(string $key): string
-{
-    $v = getenv($key);
-    if (!is_string($v)) {
-        return '';
-    }
-    $v = trim($v, " \t\n\r\0\x0B");
-    $v = str_replace("\r", '', $v);
-
-    return $v;
-}
-
-/**
- * フォント解決失敗時の短文ヒント（シェルでは find できるが PHP では不可＝open_basedir 等）。
- */
-function composite_font_missing_hint(): string
-{
-    $parts = [];
-    $ob = ini_get('open_basedir');
-    if (is_string($ob) && $ob !== '') {
-        $parts[] = 'Web 用 PHP に open_basedir があります。シェルで /usr/share/fonts が見えても、この PHP からは読めないことがあります。';
-        $parts[] = '対策: lp_reverse_cms/fonts/ に NotoSansCJK-Regular.ttc / NotoSansCJK-Bold.ttc をコピーし、.env でその絶対パスを IMAGE_COMPOSITE_FONT / IMAGE_COMPOSITE_FONT_BOLD に書く（または open_basedir に /usr/share/fonts を追加）。';
-    }
-    $er = composite_getenv_trimmed('IMAGE_COMPOSITE_FONT');
-    if ($er !== '' && !is_readable($er)) {
-        $parts[] = 'IMAGE_COMPOSITE_FONT は設定されていますが読み取れません（パス誤り・末尾改行・権限）。';
-    }
-    $eb = composite_getenv_trimmed('IMAGE_COMPOSITE_FONT_BOLD');
-    if ($eb !== '' && !is_readable($eb)) {
-        $parts[] = 'IMAGE_COMPOSITE_FONT_BOLD も読み取れません。';
-    }
-    if ($parts === []) {
-        return 'fonts-noto-cjk の有無、または lp_reverse_cms/fonts/ への配置と .env の IMAGE_COMPOSITE_FONT* を確認してください（.env.example）。';
-    }
-
-    return implode(' ', $parts);
-}
-
-/** @return list<string> */
-function composite_font_local_bundled_paths(bool $bold): array
-{
-    $root = realpath(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'fonts');
-    if ($root === false || !is_dir($root)) {
-        return [];
-    }
-    $names = $bold
-        ? [
-            'NotoSansCJK-Bold.ttc',
-            'NotoSansCJKjp-Bold.otf',
-            'NotoSansJP-Bold.otf',
-            'NotoSansCJK-Regular.ttc',
-            'NotoSansCJKjp-Regular.otf',
-            'NotoSansJP-Regular.otf',
-        ]
-        : [
-            'NotoSansCJK-Regular.ttc',
-            'NotoSansCJKjp-Regular.otf',
-            'NotoSansJP-Regular.otf',
-        ];
-    $out = [];
-    foreach ($names as $name) {
-        $out[] = $root . DIRECTORY_SEPARATOR . $name;
-    }
-
-    return $out;
-}
-
-/**
- * fontconfig が使える環境では :lang=ja の最初の読み取り可能なパスを返す。
- */
-function composite_font_from_fontconfig(bool $bold): string
-{
-    if (!function_exists('shell_exec')) {
-        return '';
-    }
-    $df = ini_get('disable_functions');
-    if (is_string($df) && str_contains($df, 'shell_exec')) {
-        return '';
-    }
-    $out = @shell_exec("fc-list -f '%{file}\n' ':lang=ja' 2>/dev/null");
-    if (!is_string($out) || trim($out) === '') {
-        return '';
-    }
-    $paths = array_values(array_filter(array_map('trim', explode("\n", $out))));
-    if ($paths === []) {
-        return '';
-    }
-    if ($bold) {
-        foreach ($paths as $p) {
-            if (!is_readable($p)) {
-                continue;
-            }
-            if (preg_match('/Bold|bold/', $p) === 1) {
-                return $p;
-            }
-        }
-    }
-    foreach ($paths as $p) {
-        if (is_readable($p)) {
-            return $p;
-        }
-    }
-
-    return '';
-}
-
-/** ディスク上のフォントファイル（.ttc / .otf）。GD 用は composite_expand_font_for_gd で :index を付与。 */
-function composite_resolve_font_file(bool $bold): string
-{
-    if ($bold) {
-        $b = composite_getenv_trimmed('IMAGE_COMPOSITE_FONT_BOLD');
-        if ($b !== '' && is_readable($b)) {
-            return $b;
-        }
-    }
-    $r = composite_getenv_trimmed('IMAGE_COMPOSITE_FONT');
-    if ($r !== '' && is_readable($r)) {
-        return $r;
-    }
-
-    foreach (composite_font_local_bundled_paths($bold) as $p) {
-        if (is_readable($p)) {
-            return $p;
-        }
-    }
-
-    $candidates = $bold
-        ? [
-            '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc',
-            '/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc',
-            '/usr/share/fonts/opentype/noto/NotoSansCJKjp-Bold.otf',
-            '/usr/share/fonts/google-noto-cjk/NotoSansCJKjp-Bold.otf',
-            '/usr/share/fonts/opentype/noto/NotoSansJP-Bold.otf',
-            '/usr/share/fonts/truetype/noto/NotoSansJP-Bold.otf',
-            '/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc',
-            '/usr/share/fonts/truetype/noto/NotoSerifCJK-Bold.ttc',
-            '/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf',
-            '/usr/share/fonts/google-noto-cjk/NotoSansCJKjp-Regular.otf',
-            '/usr/share/fonts/opentype/noto/NotoSansJP-Regular.otf',
-        ]
-        : [
-            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-            '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
-            '/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf',
-            '/usr/share/fonts/google-noto-cjk/NotoSansCJKjp-Regular.otf',
-            '/usr/share/fonts/opentype/noto/NotoSansJP-Regular.otf',
-            '/usr/share/fonts/truetype/noto/NotoSansJP-Regular.otf',
-            '/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc',
-            '/usr/share/fonts/truetype/noto/NotoSerifCJK-Regular.ttc',
-        ];
-
-    foreach ($candidates as $p) {
-        if (is_readable($p)) {
-            return $p;
-        }
-    }
-
-    $fc = composite_font_from_fontconfig($bold);
-    if ($fc !== '') {
-        return $fc;
-    }
-
-    return '';
-}
-
-/**
- * Windows 等でバックスラッシュ＋「C:」を含むパスに :index を付けると GD が誤解することがあるため / に揃える。
- */
-function composite_normalize_font_path_for_gd(string $path): string
-{
-    if ($path === '') {
-        return '';
-    }
-    $rp = realpath($path);
-    if ($rp !== false) {
-        $path = $rp;
-    }
-
-    return str_replace('\\', '/', $path);
-}
-
-/**
- * GD の imagettftext は .ttc では index が必要なことがある（fontpath:index）。
- * NotoSansCJK の JP face は環境により index が大きい。index 未指定の .ttc は環境によっては動く。
- */
-function composite_expand_font_for_gd(string $path): string
-{
-    if ($path === '' || !is_readable($path)) {
-        return '';
-    }
-    $lower = strtolower($path);
-    if (!str_ends_with($lower, '.ttc')) {
-        return composite_normalize_font_path_for_gd($path);
-    }
-    $pathNorm = composite_normalize_font_path_for_gd($path);
-    if ($pathNorm === '') {
-        return '';
-    }
-    foreach (['あ', '国', '無'] as $ch) {
-        if (@imagettfbbox(12, 0, $pathNorm, $ch) !== false) {
-            return $pathNorm;
-        }
-        for ($i = 0; $i < 48; $i++) {
-            $arg = $pathNorm . ':' . $i;
-            if (@imagettfbbox(12, 0, $arg, $ch) !== false) {
-                return $arg;
-            }
-        }
-    }
-
-    return '';
-}
-
 /**
  * @return GdImage|false
  */
@@ -1310,45 +1096,4 @@ function composite_image_load(string $path)
         IMAGETYPE_WEBP => function_exists('imagecreatefromwebp') ? imagecreatefromwebp($path) : false,
         default => false,
     };
-}
-
-/**
- * @return array{0: int, 1: int, 2: int}|null
- */
-function composite_parse_color(string $hex): ?array
-{
-    $hex = trim($hex);
-    if (preg_match('/^#([0-9a-f]{6})$/i', $hex, $m)) {
-        $s = $m[1];
-
-        return [
-            (int) hexdec(substr($s, 0, 2)),
-            (int) hexdec(substr($s, 2, 2)),
-            (int) hexdec(substr($s, 4, 2)),
-        ];
-    }
-    if (preg_match('/^#([0-9a-f]{3})$/i', $hex, $m)) {
-        $s = $m[1];
-
-        return [
-            (int) hexdec($s[0] . $s[0]),
-            (int) hexdec($s[1] . $s[1]),
-            (int) hexdec($s[2] . $s[2]),
-        ];
-    }
-
-    return null;
-}
-
-function composite_clamp_pct(mixed $v): float
-{
-    $f = is_numeric($v) ? (float) $v : 0.0;
-    if ($f < 0.0) {
-        return 0.0;
-    }
-    if ($f > 1.0) {
-        return 1.0;
-    }
-
-    return $f;
 }
