@@ -13,3 +13,4 @@
 - 保存先: output/ai_images/
 ## 既知のバグ防止
 - flock()のアンロックは LOCK_UN を使うこと（LOCK_UNLOCKは未定義でFatal Error）
+- ファイル変更後は必ず git add && git commit を実行する
