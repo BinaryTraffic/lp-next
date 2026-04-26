@@ -299,9 +299,9 @@ bordered フローの④で使う。
 
 ---
 
-## 実装後の確認
+## 実装後の確認（Cursor が自分で実行する）
 
-以下の curl を Apache 経由で実行し、各エンドポイントが JSON を返すこと。
+push 後、以下の curl を GCP VM 上で実行し、`"url"` キーを含む JSON が返ることを確認してレポートに含めること。
 
 ```bash
 # gradient_bg_generator.php
