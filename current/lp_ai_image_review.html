@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI画像差し替え・精度確認 — LP-NEXT</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #fff;
+      --border: #1a1a1a;
+      --accent: #0b57d0;
+      --accent-soft: #e8f0fe;
+      --hero: #e8f5e9;
+      --hero-border: #1b5e20;
+      --text: #1a1a1a;
+      --muted: #555;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      margin: 0;
+      padding: 0 1rem 2.5rem;
+      color: var(--text);
+      line-height: 1.5;
+      background: var(--bg);
+      max-width: min(52rem, 100%);
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .topnav { font-size: 0.88rem; margin: 0.75rem 0 0.35rem; }
+    .topnav a { color: var(--accent); }
+    .page-title { font-size: 1.05rem; margin: 0 0 0.25rem; }
+    .lead { font-size: 0.84rem; color: var(--muted); margin: 0 0 1rem; }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 0.85rem;
+      margin-bottom: 0.75rem;
+    }
+    .panel h2 { font-size: 0.88rem; margin: 0 0 0.5rem; }
+    .row-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.45rem; }
+    .row-tools label { font-size: 0.78rem; color: var(--muted); }
+    input[type="url"], input[type="text"], select {
+      font: inherit;
+      font-size: 0.82rem;
+      padding: 0.35rem 0.45rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      max-width: 100%;
+    }
+    input.json-file { font-size: 0.78rem; }
+    button.ctl {
+      font: inherit;
+      font-size: 0.8rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      cursor: pointer;
+      min-height: 40px;
+    }
+    button.ctl.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    textarea.prompt-ta {
+      width: 100%;
+      min-height: 5.5rem;
+      font: inherit;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      padding: 0.45rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      resize: vertical;
+    }
+    .stat-bar {
+      font-size: 0.8rem;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 0.45rem 0.6rem;
+      margin-bottom: 0.75rem;
+    }
+    .stat-bar strong { color: var(--accent); }
+    .review-grid { display: flex; flex-direction: column; gap: 1rem; }
+    .review-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .review-card--hero {
+      border-color: var(--hero-border);
+      box-shadow: 0 0 0 1px rgba(27, 94, 32, 0.15);
+    }
+    .review-card__head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem 0.65rem;
+      padding: 0.45rem 0.6rem;
+      background: #f6f8fa;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.78rem;
+    }
+    .review-card--hero .review-card__head { background: var(--hero); }
+    .badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      padding: 0.12rem 0.4rem;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .badge--hero { background: #c8e6c9; color: #1b5e20; }
+    .badge--btn { background: #fff3e0; color: #e65100; }
+    .badge--logo { background: #e3f2fd; color: #0d47a1; }
+    .badge--sec { background: #eceff1; color: #37474f; }
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      padding: 0.5rem;
+    }
+    @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+    .compare-col { min-width: 0; }
+    .compare-col h3 {
+      font-size: 0.72rem;
+      margin: 0 0 0.25rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .compare-col .orig-dims,
+    .compare-col .ai-dims-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin: 0 0 0.35rem;
+      line-height: 1.35;
+      white-space: pre-line;
+    }
+    .img-frame {
+      aspect-ratio: 16 / 10;
+      background: #e8eaed;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    .img-frame img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .img-frame__refresh {
+      position: absolute;
+      top: 0.3rem;
+      right: 0.3rem;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: rgba(255,255,255,0.92);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      color: var(--accent);
+      padding: 0;
+    }
+    .review-card__body { padding: 0.5rem 0.6rem 0.65rem; }
+    .field-label { font-size: 0.72rem; color: var(--muted); margin: 0.35rem 0 0.2rem; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
+    .err { background: #fce8e6; border: 1px solid #c5221f; color: #611016; padding: 0.5rem; border-radius: 8px; font-size: 0.82rem; margin-bottom: 0.5rem; }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.68rem; word-break: break-all; color: #444; }
+    .hidden { display: none !important; }
+    .api-stat { display: block; margin-top: 0.35rem; font-size: 0.78rem; }
+    .api-stat.is-on { color: #0d3d1f; font-weight: 600; }
+    .api-stat.is-off { color: var(--muted); }
+    input.api-token-field { min-width: 12rem; }
+    .api-key-status {
+      font-size: 0.78rem;
+      margin: 0 0 0.55rem;
+      padding: 0.45rem 0.55rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #fafafa;
+    }
+    .api-key-status dl { margin: 0; display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.25rem 0.5rem; align-items: start; }
+    .api-key-status dt { margin: 0; color: var(--muted); font-weight: 600; }
+    .api-key-status dd { margin: 0; }
+    .api-key-status .st-ok { color: #0d3d1f; font-weight: 600; }
+    .api-key-status .st-ng { color: #c5221f; font-weight: 600; }
+    .api-key-status .st-warn { color: #e65100; font-weight: 600; }
+    .api-key-status .st-mute { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <p class="topnav">
+    <a href="index.html">← LP-NEXT 入口</a> ·
+    <a href="prompt_context_demo.html">店舗文脈（JSON作成）</a> ·
+    <a href="lp_layout_images.html">レイアウト画像のみ</a>
+  </p>
+  <h1 class="page-title">AI画像差し替え・精度確認</h1>
+  <p class="lead">
+    DALL-E で生成して元画像と比較。文脈は <a href="prompt_context_demo.html">文脈ページ</a>の「AI画像レビューへ」か、下へ貼る。鍵はサーバーの <code>OPENAI_API_KEY</code> があれば足りる。無ければ下でトークン保存。
+  </p>
+
+  <div class="panel">
+    <h2>1. 構造データ（クローンLP）</h2>
+    <div class="row-tools">
+      <label>取得URL <input type="url" id="structure_url" style="width:min(28rem,85vw)" spellcheck="false" /></label>
+      <button type="button" class="ctl primary" id="btn_load_structure">構造を読込</button>
+    </div>
+    <p style="font-size:0.76rem;color:var(--muted);margin:0">既定URLのまま「読込」でOK（<code>data/*.json</code> 直叩きは403）。</p>
+  </div>
+
+  <div class="panel">
+    <h2>2. 店舗文脈 JSON（プロンプト条件）</h2>
+    <div class="row-tools">
+      <input type="file" id="context_file" class="json-file" accept=".json,application/json" />
+      <button type="button" class="ctl" id="btn_apply_context">文脈を適用（プロンプト再生成）</button>
+      <button type="button" class="ctl" id="btn_export_review">検証結果JSONをコピー</button>
+    </div>
+    <p class="field-label">JSON貼り付け（ファイルより優先）</p>
+    <textarea id="context_paste" class="prompt-ta" style="min-height:4rem" placeholder='{"schema":"prompt_context_v2","company":{...},"context":{...}}'></textarea>
+  </div>
+
+  <div class="panel" id="api_panel">
+    <h2>3. OpenAI API</h2>
+    <div id="api_key_status" class="api-key-status" aria-live="polite"></div>
+    <p id="api_mode_summary" class="hint" style="margin:0 0 0.5rem"></p>
+    <div class="row-tools" style="align-items:flex-end">
+      <label>モデル
+        <select id="api_model">
+          <option value="dall-e-3" selected>dall-e-3</option>
+          <option value="dall-e-2">dall-e-2</option>
+        </select>
+      </label>
+    </div>
+    <div id="api_client_row" class="row-tools" style="align-items:flex-end;margin-top:0.35rem">
+      <label>API トークン（サーバー未設定時のみ） <input type="password" id="api_token" class="api-token-field" autocomplete="off" placeholder="sk-…" spellcheck="false" /></label>
+      <button type="button" class="ctl primary" id="btn_api_token_save">トークンを保存</button>
+      <button type="button" class="ctl" id="btn_api_token_clear">トークン削除</button>
+    </div>
+    <p id="api_mode_detail" style="font-size:0.74rem;color:var(--muted);margin:0.35rem 0 0"></p>
+  </div>
+
+  <div id="ctx_err" class="err hidden"></div>
+  <p id="gen_status" class="hint" style="display:none;margin:0.35rem 0;color:var(--accent)" aria-live="polite"></p>
+
+  <div class="stat-bar" id="stat_bar" hidden>
+    <strong>条件</strong> <span id="stat_ctx">—</span><br />
+    <strong>ヒーロー案</strong>
+    <select id="hero_variant" title="ヒーロー候補スロットに使う案">
+      <option value="0">案1（優先角度に合わせた並びの先頭）</option>
+      <option value="1">案2</option>
+      <option value="2">案3</option>
+    </select>
+    · <strong>進捗</strong> <span id="stat_fill">0 / 0</span> 件にAI生成画像あり
+    <span id="api_stat" class="api-stat is-off" aria-live="polite"></span>
+  </div>
+
+  <div id="review_root" class="review-grid" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      var LS_KEY = "lp-next-ai-image-review-v1";
+      var API_TOKEN_LS = "lp-next-openai-api-token-v1";
+      /** prompt_context_demo からの文脈引き継ぎ（sessionStorage・同一オリジン） */
+      var CONTEXT_HANDOFF_SS = "lp-next-prompt-context-handoff-v1";
+      var OPENAI_PROXY = "lp_reverse_cms/store/openai_image_proxy.php";
+      var PROXY_STATUS_URL = "lp_reverse_cms/store/ai_image_proxy_status.php";
+      var DEFAULT_STRUCTURE = "lp_reverse_cms/store/get_lp_structure.php";
+      var proxyMode = { server_key_configured: false, client_key_allowed: true, status_fetch_ok: null };
+
+      var PRESET_HTML = [
+        { v: "omakase", t: "未選択（お任せ）" },
+        { v: "station", t: "駅前・好アクセス" },
+        { v: "hideaway", t: "隠れ家・静か" },
+        { v: "street", t: "路面・一見" },
+        { v: "mall", t: "商業施設内" },
+        { v: "office", t: "オフィス・フロア" },
+        { v: "detached", t: "戸建て" },
+        { v: "studio", t: "スタジオ" },
+        { v: "online", t: "オンライン/訪問" }
+      ];
+      var HERO_PRESET_SCENE = {
+        omakase: "店舗の雰囲気は業種と参照LPのトーンに合わせる。",
+        station: "駅からアクセスしやすい明るい街角・入口付近。利便性が伝わるが雑然としすぎない。",
+        hideaway: "静かな佇まい・路地や奥まった位置の連想。看板はさりげなく、内観の垣間見せで特別感。",
+        street: "路面店の看板と入口が分かるアングル。お店の存在が一目で伝わる。",
+        mall: "商業施設内の清潔なフロアと店舗前。安心感とついで利用のしやすさ。",
+        office: "オフィスビル内の落ち着いた玄関・受付・通路。プロフェッショナルで誠実。",
+        detached: "戸建て・一軒家型の外観。住宅街に馴染むプライベート感、過度な看板強調は避ける。",
+        studio: "作業台・手元・道具・素材。職人・スタッフの所作が伝わるクローズアップ（顔は判読しにくい構図）。",
+        online: "実店舗に依存しないサービス・ブランドイメージ。ライフスタイルや抽象モチーフも可。"
+      };
+      var HERO_NEGATIVE = "混雑無秩序な街並みの主役化、過剰な文字だらけ看板、実在ブランドロゴ・固有名、特定有名人の顔、低解像度・ボケ過ぎ、不自然な人体の変形、画像内の英日の長文・段落・ダミー文案・ウォーターマーク（見出し用の余白のみ）";
+
+      function normalizeIndustryText(s) {
+        var t = (s || "").toString();
+        try { t = t.normalize("NFKC"); } catch (e) {}
+        return t.replace(/\s+/g, " ").trim();
+      }
+      function industryCompareKey(s) {
+        return normalizeIndustryText(s).toLowerCase();
+      }
+      function presetLocationLabel(v) {
+        for (var i = 0; i < PRESET_HTML.length; i++) {
+          if (PRESET_HTML[i].v === v) return PRESET_HTML[i].t;
+        }
+        return "未選択（お任せ）";
+      }
+      function industryHeroSubject(industry) {
+        var i = normalizeIndustryText(industry);
+        var map = {
+          "理美容室": "洗練された美容室の内観、鏡と椅子、清潔感とモダンさ",
+          "リラクゼーション・マッサージ": "リラクゼーション空間、温かみのある間接照明と落ち着いた施術室",
+          "歯科・矯正": "清潔感のあるクリニック受付〜診療室イメージ、信頼と安心",
+          "整体・鍼灸": "施術ベッドと静かな治療室、ほっとする木質とリネン",
+          "治療院・美容皮膚": "ホスピタリティのある受付・個室施術イメージ、清潔で上質",
+          "学習塾・習い事": "明るい教室・学習机・教材が整った前向きな学習空間",
+          "飲食店": "料理の魅力と温かみのある店内またはダイニングの雰囲気",
+          "不動産": "明るく誠実な相談スペースまたはモデルルームの上品さ",
+          "EC・通販": "商品が映えるシンプルなスタイリング、ライフスタイルショット",
+          "フィットネス・ジム": "明るく活力のあるトレーニング空間、器具と動きの連想",
+          "ペット・動物": "清潔で安心感のあるペットサービス空間、動物との穏やかな触れ合いのイメージ",
+          "士業・コンサル": "きちんとした執務・相談空間、信頼感と知的な落ち着き",
+          "製造・ものづくり": "工房・ライン・職人の手元、品質と技術が伝わる現場感"
+        };
+        for (var k in map) {
+          if (Object.prototype.hasOwnProperty.call(map, k) && industryCompareKey(k) === industryCompareKey(i)) return map[k];
+        }
+        return i + " の業態に合う店舗・サービスシーン（具体的人物は避け、空間・モノ中心）";
+      }
+      function heroWorldviewPhrase(chip) {
+        if (!chip) return "全体として自然で誠実なトーン";
+        if (chip === "落ち着き") return "落ち着いた低彩度、柔らかい自然光、余白多め";
+        if (chip === "上質") return "上質な素材感（木・布・石）、品のある照明、過度な装飾は避ける";
+        if (chip === "明るい・親しみ") return "明るい自然光、親しみやすい暖色系アクセント";
+        return "全体として自然で誠実なトーン";
+      }
+      function heroAudiencePhrase(aud) {
+        if (aud === "affluent") return "ターゲットは余裕のある層：安っぽさを避け、品位を感じさせる";
+        if (aud === "general") return "幅広い世帯に安心感：派手すぎず親しみやすさ優先";
+        return "";
+      }
+      function heroRegionPhrase(region, onlineNw, industry) {
+        var pet = industryCompareKey(normalizeIndustryText(industry || "")) === industryCompareKey("ペット・動物");
+        if (onlineNw) {
+          if (pet) return "オンライン全国想定：現代の都市・商業地の一般的な空気感。神社・寺・参道・鳥居・観光向けの歴史街並みは主題にしない。";
+          return "オンライン全国想定：地域固有名所は避け汎用的な日本の文脈";
+        }
+        if (region === "オンライン全国") {
+          if (pet) return "地域ランドマークは避ける。現代の商業地の空気感。参道・寺社境内・観光古街のみの画は避ける。";
+          return "地域ランドマークは避け、汎用的な日本の文脈";
+        }
+        if (region) {
+          if (pet) return "空気感は「" + region + "」想定（名所の固有名は入れない）。ただし参道・神社仏閣・石畳の旧街道を主題にしない。";
+          return "空気感は「" + region + "」想定（名所の固有名は入れない）";
+        }
+        if (pet) return "現代の商業・住宅地の一般的な日本の街。参道・寺社・観光古街の主題は避ける。";
+        return "";
+      }
+
+      function heroPresetSceneForIndustry(preset, industry) {
+        var k = industryCompareKey(normalizeIndustryText(industry || ""));
+        var pet = k === industryCompareKey("ペット・動物");
+        var base = HERO_PRESET_SCENE[preset] || HERO_PRESET_SCENE.omakase;
+        if (!pet) return base;
+        if (preset === "street" || preset === "station") {
+          return "現代の商業地の路面。ペットサロン・動物病院・ペットホテルに似た清潔な入口・ガラス扉・看板。木造の古い町屋が連なる観光街・寺社の参道は避ける。";
+        }
+        if (preset === "omakase" || preset === "hideaway") {
+          return "現代のペット向けサービス店の内観・外観の雰囲気。寺社・参道・古い石畳の路地を主題にしない。";
+        }
+        return base;
+      }
+      function buildHeroPromptTriplet(company, context) {
+        var indLabel = normalizeIndustryText(context.industry);
+        var indLead = "業種「" + indLabel + "」の店舗・サービスLP向け。上記業種に合う画題のみ。 ";
+        var subj = industryHeroSubject(context.industry);
+        var preset = context.preset_location || "omakase";
+        var scene = heroPresetSceneForIndustry(preset, context.industry);
+        var light = heroWorldviewPhrase(context.worldview_chip);
+        var aud = heroAudiencePhrase(context.audience);
+        var reg = heroRegionPhrase(context.region, !!company.online_nationwide, context.industry);
+        var ref = (context.reference_url || "").trim() ? "参照LPの世界観・配色に近いクリーンな構図。" : "";
+        var free = (context.free_note || "").trim();
+        var freebit = free ? " メモ（反映）: " + free.slice(0, 100) : "";
+        var commonTail = light + "。" + reg + (aud ? "。" + aud : "") + (ref ? " " + ref : "") + freebit + " 日本人向けサービスLP。テキスト（見出し）を載せやすい余白。実在の特定建物・チェーンロゴ・固有名は含めない。" + industryHeroVisualAnchor(context.industry);
+        var balanced = indLead + "【LPヒーロー・バランス案】 " + subj + " " + scene + " " + commonTail;
+        var interior = indLead + "【LPヒーロー・内観主体】 店内・サービス空間の魅力を広角で。 " + subj + " " + scene + " " + commonTail;
+        var exterior = indLead + "【LPヒーロー・外観・入口】 所在地と入りやすさが伝わる構図。 " + scene + " " + light + "。" + reg + (aud ? "。" + aud : "") + " " + subj + "に合う外装・玄関イメージ。テキスト余白あり。";
+        var order;
+        if (preset === "street" || preset === "station" || preset === "mall") order = [exterior, balanced, interior];
+        else if (preset === "studio" || preset === "hideaway" || preset === "office" || preset === "detached") order = [interior, balanced, exterior];
+        else order = [balanced, interior, exterior];
+        return { prompt_candidates: order };
+      }
+      function buildHeroImageBrief(company, context) {
+        var preset = context.preset_location || "omakase";
+        var tri = buildHeroPromptTriplet(company, context);
+        var summary = "業種「" + normalizeIndustryText(context.industry) + "」・立地「" + presetLocationLabel(preset) + "」・世界観「" + (context.worldview_chip || "お任せ") + "」に基づくヒーロー案。";
+        return {
+          summary: summary,
+          prompt_candidates: tri.prompt_candidates,
+          negative_hints: HERO_NEGATIVE
+        };
+      }
+
+      function collectImages(structure) {
+        var out = [];
+        (structure.sections || []).forEach(function (sec) {
+          var secLabel = sec.label || sec.id || "";
+          var secType = sec.type || "general";
+          (sec.elements || []).forEach(function (el) {
+            if (el.type !== "image" || !el.original_src) return;
+            var u = String(el.original_src);
+            if (/favicon\.ico/i.test(u)) return;
+            out.push({
+              id: el.id || "",
+              label: el.label || "（ラベルなし）",
+              alt: el.original_text || "",
+              src: u,
+              section_id: sec.id || "",
+              section_label: secLabel,
+              section_type: secType
+            });
+          });
+        });
+        return out;
+      }
+
+      function itemProbeText(item) {
+        return ((item.label || "") + " " + (item.alt || "")).trim();
+      }
+
+      /** 構造JSONでは「背景」が alt にしか無いことが多い。label のみだと先頭のUI枠がヒーロー扱いになりプロンプトが外れる */
+      function heroSlotIndex(items) {
+        for (var i = 0; i < items.length; i++) {
+          if (/背景/i.test(itemProbeText(items[i]))) return i;
+        }
+        return 0;
+      }
+
+      function industryHeroVisualAnchor(industry) {
+        var k = industryCompareKey(normalizeIndustryText(industry));
+        if (k === industryCompareKey("ペット・動物")) {
+          return " 【必須の視覚要素】犬・猫・小動物のいずれか、またはトリミング台・バス・ケージ・肉球マークの看板・ペット可の受付など、業種が一目で分かるモチーフを必ず含める。 【避ける】神社・寺・鳥居・参道・灯篭だらけの観光街、昔風の木造商店街のみ、一般オフィスビル街のみ。";
+        }
+        return "";
+      }
+
+      function industryExtraNegative(industry) {
+        var k = industryCompareKey(normalizeIndustryText(industry || ""));
+        if (k === industryCompareKey("ペット・動物")) {
+          return " 神社・寺院・鳥居・石段の参道、寺社の境内、観光地の歴史的町並みを主題にしない。ペット要素なしの「日本的な古い街」だけの画は不可。";
+        }
+        return "";
+      }
+
+      function clearStoredPrompts() {
+        Object.keys(state.replacements).forEach(function (id) {
+          var r = state.replacements[id];
+          if (r && Object.prototype.hasOwnProperty.call(r, "prompt")) delete r.prompt;
+        });
+      }
+
+      function classifyItem(item) {
+        var t = (item.label || "") + " " + (item.alt || "");
+        if (/ロゴ|logo/i.test(t)) return "logo";
+        if (/ボタン|btn|申込|資料|友だち|CTA|無料プラン/i.test(t)) return "btn";
+        return "sec";
+      }
+
+      function buildSecondaryPrompt(item, company, context) {
+        var ind = normalizeIndustryText(context.industry || "（業種未設定）");
+        var wv = context.worldview_chip || "お任せ";
+        var preset = presetLocationLabel(context.preset_location || "omakase");
+        var label = item.label || "";
+        var path = (item.src || "").replace(/^https?:\/\/[^/]+/i, "");
+        var kind = classifyItem(item);
+        var must = "必ず業種「" + ind + "」に合う内容のみ。離れた業種のモチーフは避ける。 ";
+        if (industryCompareKey(ind) === industryCompareKey("ペット・動物")) {
+          must += "神社・参道・寺社の風景のみは不可。 ";
+        }
+        if (kind === "btn") {
+          return must + "【LP差し替え・ボタン／バナー】業種「" + ind + "」。世界観「" + wv + "」。元の役割: " + label + "。クリック導線が自然な日本語LP向け。装飾テキストは最小限。実在ブランドの模倣は避ける。";
+        }
+        if (kind === "logo") {
+          return must + "【LP差し替え・ロゴ枠】業種「" + ind + "」。シンプルなシンボルまたはタイポのみの抽象ロゴ風（固有名・既存商標の再現は不可）。余白とバランス重視。";
+        }
+        var role = label + (item.alt ? "（元画像の説明: " + String(item.alt).slice(0, 120) + "）" : "");
+        return must + "【LP差し替え・セクション画像】業種「" + ind + "」。立地「" + preset + "」。世界観「" + wv + "」。レイアウト上の役割: " + role + "。" +
+          ((context.reference_url || "").trim() ? "参照元LPの構図・余白を意識。" : "汎用LP向け。") +
+          " パス参考: " + path;
+      }
+
+      function derivePromptForIndex(items, idx, heroIdx, heroVar, company, context, heroBrief) {
+        var base = heroBrief.prompt_candidates[heroVar] || heroBrief.prompt_candidates[0];
+        var neg = "\n\n【ネガティブ候補】" + heroBrief.negative_hints + industryExtraNegative(context.industry);
+        if (idx === heroIdx) return base + neg;
+        return buildSecondaryPrompt(items[idx], company, context) + neg;
+      }
+
+      function parseContextPayload(raw) {
+        var obj = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (!obj || typeof obj !== "object") throw new Error("JSON がオブジェクトではありません");
+        var company = obj.company;
+        var context = obj.context;
+        if (!company || !context) throw new Error("company / context がありません（prompt_context_v2 想定）");
+        if (!context.industry || !String(context.industry).trim()) throw new Error("context.industry が空です");
+        /** JSON 内の hero_image は業種ズレ・古いプロンプトの原因になるため常に company/context から再計算 */
+        var hero = buildHeroImageBrief(company, context);
+        return { company: company, context: context, hero_image: hero };
+      }
+
+      function loadLsState() {
+        try {
+          var s = localStorage.getItem(LS_KEY);
+          if (!s) return { replacements: {}, hero_variant: 0 };
+          var o = JSON.parse(s);
+          return {
+            replacements: o.replacements && typeof o.replacements === "object" ? o.replacements : {},
+            hero_variant: typeof o.hero_variant === "number" ? o.hero_variant : 0
+          };
+        } catch (e) {
+          return { replacements: {}, hero_variant: 0 };
+        }
+      }
+      function saveLsState(replacements, heroVariant) {
+        try {
+          localStorage.setItem(LS_KEY, JSON.stringify({ replacements: replacements, hero_variant: heroVariant }));
+        } catch (e) {}
+      }
+
+      function stripBust(url) {
+        try {
+          var u = new URL(url, window.location.href);
+          u.searchParams.delete("r");
+          u.searchParams.delete("_");
+          return u.toString();
+        } catch (e) {
+          return url.split("?")[0];
+        }
+      }
+
+      function formatApproxAspect(w, h) {
+        if (!w || !h) return "";
+        var r = w / h;
+        var cand = [
+          [16 / 10, "16:10"],
+          [4 / 3, "4:3"],
+          [3 / 2, "3:2"],
+          [1, "1:1"],
+          [16 / 9, "16:9"],
+          [1792 / 1024, "約16:9"],
+          [1024 / 1792, "約9:16"]
+        ];
+        for (var i = 0; i < cand.length; i++) {
+          if (Math.abs(r - cand[i][0]) < 0.05) return " ・ 約 " + cand[i][1];
+        }
+        return " ・ 横:縦 ≈ " + (Math.round(r * 100) / 100) + ":1";
+      }
+
+      function bindOrigDimensions(img, labelEl, dimAiEl, isHero) {
+        if (dimAiEl) {
+          dimAiEl.textContent =
+            "送信サイズ: クローン元の読込後に確定します。\n（DALL-E 3 は固定3解像度のみ。LP では img/CSS の枠に合わせて表示します）";
+        }
+        function apply() {
+          if (!labelEl) return;
+          if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+            labelEl.textContent =
+              "参考サイズ（クローン元）: " +
+              img.naturalWidth +
+              " × " +
+              img.naturalHeight +
+              " px" +
+              formatApproxAspect(img.naturalWidth, img.naturalHeight);
+            setAiDimHintFromOrig(dimAiEl, !!isHero, img);
+          } else if (img.complete && img.naturalWidth === 0) {
+            labelEl.textContent = "参考サイズ: 取得できませんでした";
+            if (dimAiEl) {
+              dimAiEl.textContent =
+                "送信サイズ: 元画像から寸法を取得できませんでした。\nDALL-E は固定解像度のみ。生成時はヒーロー／通常ルールでサイズを選びます。";
+            }
+          }
+        }
+        img.addEventListener("load", apply);
+        img.addEventListener("error", function () {
+          if (labelEl) labelEl.textContent = "参考サイズ: 元画像の読込に失敗";
+          if (dimAiEl) {
+            dimAiEl.textContent =
+              "送信サイズ: 元画像が読めないため未確定。\nAPI は固定解像度のみ。公開側では width/height・object-fit でレイアウトに合わせてください。";
+          }
+        });
+        if (img.complete) apply();
+        else labelEl.textContent = "参考サイズ: 読込中…";
+      }
+
+      function refreshImg(img) {
+        if (!img) return;
+        var base = img.getAttribute("data-base-src") || stripBust(img.src);
+        img.setAttribute("data-base-src", base);
+        var sep = base.indexOf("?") >= 0 ? "&" : "?";
+        img.src = base + sep + "r=" + Date.now();
+      }
+
+      function getStoredApiToken() {
+        try { return localStorage.getItem(API_TOKEN_LS) || ""; } catch (e) { return ""; }
+      }
+      function setStoredApiToken(v) {
+        try {
+          if (v) localStorage.setItem(API_TOKEN_LS, v);
+          else localStorage.removeItem(API_TOKEN_LS);
+        } catch (e) {}
+      }
+      function getApiToken() {
+        var inp = document.getElementById("api_token");
+        var v = inp && inp.value.trim();
+        if (v) return v;
+        return getStoredApiToken().trim();
+      }
+      function isApiMode() {
+        if (proxyMode.server_key_configured) return true;
+        if (!proxyMode.client_key_allowed) return false;
+        return !!getApiToken();
+      }
+      /** DALL-E 3: 1024x1024 | 1024x1792 | 1792x1024 のみ。任意ピクセルは不可。 */
+      function pickOpenAiSize(isHero, model, origW, origH) {
+        if (model === "dall-e-2") return "1024x1024";
+        if (isHero) return "1792x1024";
+        var ow = origW == null ? 0 : Number(origW);
+        var oh = origH == null ? 0 : Number(origH);
+        if (ow > 0 && oh > 0) {
+          var r = ow / oh;
+          if (r > 1.15) return "1792x1024";
+          if (r < 1 / 1.15) return "1024x1792";
+        }
+        return "1024x1024";
+      }
+      function buildAiDimHint(apiSz, ow, oh) {
+        var head = "送信サイズ（このカード・API 固定）: " + apiSz;
+        var apiLimit =
+          "DALL-E 3 の Images API は 1024×1024・1024×1792・1792×1024 のいずれかだけ指定できます。363×50 のような任意ピクセル寸法は API 上は指定できません。";
+        var ratioNote = "";
+        if (ow > 0 && oh > 0) {
+          var r = ow / oh;
+          var rr = Math.round(r * 100) / 100;
+          if (r > 2.2 || r < 0.45) {
+            ratioNote =
+              "クローン元は約 " +
+              rr +
+              ":1 と極端な比率のため、どの API サイズもラスタのピクセルでは一致しません。公開 HTML では表示枠（width/height）に合わせ、必要なら object-fit やトリミングで調整してください。";
+          }
+        }
+        var preview =
+          "この画面の枠は CSS で object-fit: contain なので、生成画像の縦横比がクローンと違うと余白が見えます（レイアウト崩れではなくプレビューの見え方です）。";
+        return head + "\n" + apiLimit + (ratioNote ? "\n" + ratioNote : "") + "\n" + preview;
+      }
+      function setAiDimHintFromOrig(dimAiEl, isHero, origImg) {
+        if (!dimAiEl) return;
+        var mdlPick = document.getElementById("api_model");
+        var modelPick = mdlPick && mdlPick.value ? mdlPick.value : "dall-e-3";
+        if (!origImg || origImg.naturalWidth <= 0 || origImg.naturalHeight <= 0) return;
+        var apiSz = pickOpenAiSize(isHero, modelPick, origImg.naturalWidth, origImg.naturalHeight);
+        dimAiEl.textContent = buildAiDimHint(apiSz, origImg.naturalWidth, origImg.naturalHeight);
+      }
+      function itemMetaById(elemId) {
+        var idx = -1;
+        for (var i = 0; i < state.items.length; i++) {
+          if (state.items[i].id === elemId) { idx = i; break; }
+        }
+        if (idx < 0) return { idx: -1, isHero: false, kind: "sec" };
+        var heroIdx = heroSlotIndex(state.items);
+        return { idx: idx, isHero: idx === heroIdx, kind: classifyItem(state.items[idx]) };
+      }
+
+      var state = {
+        items: [],
+        payload: null,
+        replacements: loadLsState().replacements
+      };
+
+      var elStructureUrl = document.getElementById("structure_url");
+      var elCtxErr = document.getElementById("ctx_err");
+      var elStatBar = document.getElementById("stat_bar");
+      var elStatCtx = document.getElementById("stat_ctx");
+      var elStatFill = document.getElementById("stat_fill");
+      var elHeroVar = document.getElementById("hero_variant");
+      var elRoot = document.getElementById("review_root");
+      var elPaste = document.getElementById("context_paste");
+      var elApiStat = document.getElementById("api_stat");
+
+      elStructureUrl.value = DEFAULT_STRUCTURE;
+      var elApiTok = document.getElementById("api_token");
+      if (elApiTok && getStoredApiToken()) elApiTok.value = getStoredApiToken();
+      if (elApiTok) elApiTok.addEventListener("input", function () { refreshApiKeyStatusDisplay(); });
+      elHeroVar.value = String(Math.min(2, Math.max(0, loadLsState().hero_variant)));
+
+      function showCtxErr(msg) {
+        if (msg) {
+          elCtxErr.textContent = msg;
+          elCtxErr.classList.remove("hidden");
+        } else {
+          elCtxErr.classList.add("hidden");
+        }
+      }
+
+      function setGenStatus(msg) {
+        var el = document.getElementById("gen_status");
+        if (!el) return;
+        if (msg) {
+          el.textContent = msg;
+          el.style.display = "block";
+        } else {
+          el.textContent = "";
+          el.style.display = "none";
+        }
+      }
+
+      function refreshApiKeyStatusDisplay() {
+        var root = document.getElementById("api_key_status");
+        if (!root) return;
+        if (proxyMode.status_fetch_ok === null) {
+          root.innerHTML = "<p class=\"st-warn\" style=\"margin:0\">鍵状態を確認中…</p>";
+          return;
+        }
+        var serverOk = proxyMode.server_key_configured;
+        var browserHas = !!getApiToken();
+        var canGen = isApiMode();
+        var serverLine;
+        var serverCls;
+        if (!proxyMode.status_fetch_ok) {
+          serverLine = "不明（status API に接続できません）";
+          serverCls = "st-warn";
+        } else if (serverOk) {
+          serverLine = "あり";
+          serverCls = "st-ok";
+        } else {
+          serverLine = "なし";
+          serverCls = "st-ng";
+        }
+        var browserLine;
+        var browserCls;
+        if (serverOk) {
+          browserLine = "不要";
+          browserCls = "st-mute";
+        } else if (!proxyMode.client_key_allowed) {
+          browserLine = "使えません（サーバー設定で禁止）";
+          browserCls = "st-ng";
+        } else if (browserHas) {
+          browserLine = "あり（入力中 or 保存済み）";
+          browserCls = "st-ok";
+        } else {
+          browserLine = "なし";
+          browserCls = "st-ng";
+        }
+        var genLine;
+        var genCls;
+        if (canGen) {
+          genLine = "可能";
+          genCls = "st-ok";
+        } else if (!proxyMode.status_fetch_ok) {
+          genLine = "不明";
+          genCls = "st-warn";
+        } else if (!serverOk && !proxyMode.client_key_allowed) {
+          genLine = "不可（サーバーに OPENAI_API_KEY を）";
+          genCls = "st-ng";
+        } else if (!serverOk && !browserHas) {
+          genLine = "不可（下でトークン保存）";
+          genCls = "st-ng";
+        } else {
+          genLine = "不可";
+          genCls = "st-ng";
+        }
+        root.innerHTML =
+          "<dl>" +
+          "<dt>サーバー鍵</dt><dd class=\"" + serverCls + "\">" + serverLine + "</dd>" +
+          "<dt>ブラウザ</dt><dd class=\"" + browserCls + "\">" + browserLine + "</dd>" +
+          "<dt>画像生成</dt><dd class=\"" + genCls + "\">" + genLine + "</dd>" +
+          "</dl>";
+      }
+
+      function updateStats() {
+        var n = state.items.length;
+        var filled = 0;
+        state.items.forEach(function (it) {
+          var r = state.replacements[it.id];
+          if (r && r.ai_url && String(r.ai_url).trim()) filled++;
+        });
+        elStatFill.textContent = filled + " / " + n;
+        if (state.payload) {
+          var c = state.payload.context;
+          elStatCtx.textContent = "業種「" + normalizeIndustryText(c.industry) + "」· 世界観「" + (c.worldview_chip || "お任せ") + "」· " + (state.payload.hero_image.summary || "");
+        } else {
+          elStatCtx.textContent = "未適用（文脈JSONを読み込んでください）";
+        }
+        if (elApiStat) {
+          var mdl = document.getElementById("api_model");
+          var mn = mdl && mdl.value ? mdl.value : "dall-e-3";
+          if (isApiMode()) {
+            if (proxyMode.server_key_configured) {
+              elApiStat.textContent = "生成: ON（サーバー鍵 · " + mn + "）";
+            } else {
+              elApiStat.textContent = "生成: ON（ブラウザ鍵 · " + mn + "）";
+            }
+            elApiStat.className = "api-stat is-on";
+          } else {
+            elApiStat.textContent = "生成: OFF（サーバー鍵 or トークン保存）";
+            elApiStat.className = "api-stat is-off";
+          }
+        }
+        refreshApiKeyStatusDisplay();
+      }
+
+      function fetchProxyMode() {
+        proxyMode.status_fetch_ok = null;
+        refreshApiKeyStatusDisplay();
+        return fetch(PROXY_STATUS_URL, { credentials: "same-origin" })
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (j) {
+            proxyMode.status_fetch_ok = true;
+            proxyMode.server_key_configured = !!j.server_key_configured;
+            proxyMode.client_key_allowed = j.client_key_allowed !== false;
+            syncProxyModeUi();
+          })
+          .catch(function () {
+            proxyMode.status_fetch_ok = false;
+            proxyMode.server_key_configured = false;
+            proxyMode.client_key_allowed = true;
+            syncProxyModeUi();
+          });
+      }
+
+      function syncProxyModeUi() {
+        var sum = document.getElementById("api_mode_summary");
+        var det = document.getElementById("api_mode_detail");
+        var row = document.getElementById("api_client_row");
+        if (sum && det && row) {
+          if (proxyMode.server_key_configured) {
+            sum.textContent = "サーバーに鍵あり → この欄のトークンは不要。";
+            det.textContent = ".env は Git に入れない。";
+            row.classList.add("hidden");
+          } else if (proxyMode.client_key_allowed) {
+            sum.textContent = "サーバーに鍵なし → 下でトークン保存（開発用）。本番はサーバーに OPENAI_API_KEY。";
+            det.textContent = "トークンはこのブラウザの localStorage のみ。共有PCでは保存しない。";
+            row.classList.remove("hidden");
+          } else {
+            sum.textContent = "ブラウザからのキーは拒否中。サーバーに OPENAI_API_KEY が必要。";
+            det.textContent = "管理者に .env 設定を依頼。";
+            row.classList.add("hidden");
+          }
+        }
+        if (state.items.length) renderCards();
+        else updateStats();
+      }
+
+      function gatherReplacementsFromDom() {
+        state.items.forEach(function (it) {
+          var urlEl = document.getElementById("aiurl_" + it.id);
+          var ta = document.getElementById("prompt_" + it.id);
+          if (!urlEl) return;
+          var u = urlEl.value.trim();
+          var p = ta ? ta.value : "";
+          if (!state.replacements[it.id]) state.replacements[it.id] = {};
+          state.replacements[it.id].ai_url = u;
+          state.replacements[it.id].prompt = p;
+        });
+      }
+
+      function renderCards() {
+        gatherReplacementsFromDom();
+        var items = state.items;
+        var heroIdx = heroSlotIndex(items);
+        var hv = parseInt(elHeroVar.value, 10) || 0;
+        var company = state.payload ? state.payload.company : { online_nationwide: false };
+        var context = state.payload ? state.payload.context : { industry: "（未設定）", preset_location: "omakase", worldview_chip: null, audience: "omakase", region: null, reference_url: null, free_note: "" };
+        var heroBrief = state.payload ? state.payload.hero_image : buildHeroImageBrief(company, context);
+
+        elRoot.innerHTML = "";
+        items.forEach(function (it, idx) {
+          var isHero = idx === heroIdx;
+          var kind = classifyItem(it);
+          var badgeText = isHero ? "ヒーロー候補" : (kind === "btn" ? "ボタン系" : kind === "logo" ? "ロゴ系" : "セクション");
+
+          var rep = state.replacements[it.id] || {};
+          var promptText = rep.prompt;
+          if (promptText == null || promptText === "") {
+            promptText = derivePromptForIndex(items, idx, heroIdx, hv, company, context, heroBrief);
+          }
+          var aiUrl = rep.ai_url || "";
+
+          var card = document.createElement("article");
+          card.className = "review-card" + (isHero ? " review-card--hero" : "");
+          card.dataset.elemId = it.id;
+
+          var head = document.createElement("div");
+          head.className = "review-card__head";
+          head.innerHTML =
+            "<span class=\"badge badge--" + (isHero ? "hero" : kind === "btn" ? "btn" : kind === "logo" ? "logo" : "sec") + "\">" + escapeHtml(badgeText) + "</span>" +
+            "<span>" + escapeHtml(it.section_label) + "</span>" +
+            "<span class=\"mono\">" + escapeHtml(it.id) + "</span>";
+
+          var compare = document.createElement("div");
+          compare.className = "compare";
+
+          var colO = document.createElement("div");
+          colO.className = "compare-col";
+          colO.innerHTML = "<h3>クローン元</h3>";
+          var dimOrig = document.createElement("p");
+          dimOrig.className = "orig-dims";
+          dimOrig.id = "orig_dims_" + it.id;
+          colO.appendChild(dimOrig);
+          var frameO = document.createElement("div");
+          frameO.className = "img-frame";
+          var imgO = document.createElement("img");
+          imgO.alt = it.alt || it.label;
+          imgO.loading = "lazy";
+          imgO.setAttribute("data-base-src", stripBust(it.src));
+          imgO.src = it.src;
+          var btnO = document.createElement("button");
+          btnO.type = "button";
+          btnO.className = "img-frame__refresh";
+          btnO.title = "元画像を再読込";
+          btnO.textContent = "⟳";
+          btnO.dataset.role = "refresh-orig";
+          btnO.dataset.targetImg = "orig_" + it.id;
+          imgO.id = "orig_" + it.id;
+          bindOrigDimensions(imgO, dimOrig, dimAi, isHero);
+          frameO.appendChild(imgO);
+          frameO.appendChild(btnO);
+          colO.appendChild(frameO);
+
+          var colA = document.createElement("div");
+          colA.className = "compare-col";
+          var h3a = document.createElement("h3");
+          h3a.textContent = "AI生成";
+          colA.appendChild(h3a);
+          var dimAi = document.createElement("p");
+          dimAi.className = "ai-dims-hint";
+          colA.appendChild(dimAi);
+          var frameA = document.createElement("div");
+          frameA.className = "img-frame";
+          var imgA = document.createElement("img");
+          imgA.alt = "AI生成画像";
+          imgA.id = "aiimg_" + it.id;
+          if (aiUrl) {
+            imgA.setAttribute("data-base-src", stripBust(aiUrl));
+            imgA.referrerPolicy = "no-referrer";
+            imgA.onload = function () {
+              imgA.style.display = "";
+              var old = frameA.querySelector("[data-ai-img-err]");
+              if (old) old.remove();
+            };
+            imgA.onerror = function () {
+              imgA.style.display = "none";
+              var err = frameA.querySelector("[data-ai-img-err]");
+              if (!err) {
+                err = document.createElement("p");
+                err.setAttribute("data-ai-img-err", "1");
+                err.style.cssText = "font-size:0.72rem;color:#c5221f;margin:0;padding:0.35rem;text-align:center;";
+                err.textContent = "画像を表示できません（URL期限切れ・ブロックの可能性）。再生成か新しいURLを確認してください。";
+                frameA.insertBefore(err, frameA.firstChild);
+              }
+            };
+            imgA.src = aiUrl;
+            imgA.style.display = "";
+          } else {
+            imgA.removeAttribute("src");
+            imgA.style.display = "none";
+            var ph = document.createElement("span");
+            ph.style.cssText = "font-size:0.75rem;color:#888;padding:0.5rem;text-align:center;";
+            ph.textContent = "「OpenAIで生成」でここに表示されます";
+            frameA.appendChild(ph);
+          }
+          var btnA = document.createElement("button");
+          btnA.type = "button";
+          btnA.className = "img-frame__refresh";
+          btnA.title = "AI生成画像を再読込";
+          btnA.textContent = "⟳";
+          btnA.dataset.role = "refresh-ai";
+          btnA.dataset.elemId = it.id;
+          frameA.appendChild(imgA);
+          if (aiUrl) frameA.appendChild(btnA);
+
+          colA.appendChild(frameA);
+
+          compare.appendChild(colO);
+          compare.appendChild(colA);
+
+          var body = document.createElement("div");
+          body.className = "review-card__body";
+          var ta = document.createElement("textarea");
+          ta.className = "prompt-ta";
+          ta.id = "prompt_" + it.id;
+          ta.value = promptText;
+
+          var urlWrap = document.createElement("div");
+          urlWrap.className = "hidden";
+          urlWrap.setAttribute("aria-hidden", "true");
+          var urlIn = document.createElement("input");
+          urlIn.type = "hidden";
+          urlIn.id = "aiurl_" + it.id;
+          urlIn.value = aiUrl;
+          urlWrap.appendChild(urlIn);
+
+          var btnRow = document.createElement("div");
+          btnRow.className = "btn-row";
+          var bCopy = document.createElement("button");
+          bCopy.type = "button";
+          bCopy.className = "ctl";
+          bCopy.textContent = "プロンプトをコピー";
+          bCopy.dataset.role = "copy-prompt";
+          bCopy.dataset.elemId = it.id;
+          var bClear = document.createElement("button");
+          bClear.type = "button";
+          bClear.className = "ctl";
+          bClear.textContent = "生成結果をクリア";
+          bClear.dataset.role = "clear-ai";
+          bClear.dataset.elemId = it.id;
+          if (isApiMode()) {
+            var bGen = document.createElement("button");
+            bGen.type = "button";
+            bGen.className = "ctl primary";
+            bGen.textContent = "OpenAIで生成";
+            bGen.dataset.role = "generate-openai";
+            bGen.dataset.elemId = it.id;
+            btnRow.appendChild(bGen);
+          }
+          btnRow.appendChild(bCopy);
+          btnRow.appendChild(bClear);
+
+          body.appendChild(ta);
+          body.appendChild(urlWrap);
+          body.appendChild(btnRow);
+
+          card.appendChild(head);
+          card.appendChild(compare);
+          card.appendChild(body);
+          elRoot.appendChild(card);
+        });
+
+        updateStats();
+        elStatBar.hidden = items.length === 0;
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+
+      function loadStructure(onDone) {
+        var url = elStructureUrl.value.trim() || DEFAULT_STRUCTURE;
+        elStructureUrl.value = url;
+        var bust = url + (url.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
+        elRoot.innerHTML = "<p style=\"color:var(--muted)\">読み込み中…</p>";
+        fetch(bust, { credentials: "same-origin" })
+          .then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+          })
+          .then(function (data) {
+            if (data.error && !data.sections) throw new Error(data.error);
+            state.items = collectImages(data);
+            if (!state.items.length) {
+              elRoot.innerHTML = "<p class=\"err\">画像要素がありません。</p>";
+              elStatBar.hidden = true;
+              if (onDone) onDone(false);
+              return;
+            }
+            clearStoredPrompts();
+            renderCards();
+            if (onDone) onDone(true);
+          })
+          .catch(function (e) {
+            elRoot.innerHTML = "";
+            elStatBar.hidden = true;
+            showCtxErr("構造の取得に失敗: " + (e.message || e));
+            if (onDone) onDone(false);
+          });
+      }
+
+      function applyContextPayload(obj) {
+        state.payload = parseContextPayload(obj);
+        elHeroVar.value = "0";
+        clearStoredPrompts();
+        renderCards();
+        saveLsState(state.replacements, parseInt(elHeroVar.value, 10) || 0);
+      }
+
+      function tryConsumeContextHandoff() {
+        var raw;
+        try {
+          raw = sessionStorage.getItem(CONTEXT_HANDOFF_SS);
+        } catch (e) {
+          return;
+        }
+        if (!raw) return;
+        try {
+          var obj = JSON.parse(raw);
+          sessionStorage.removeItem(CONTEXT_HANDOFF_SS);
+          showCtxErr("");
+          applyContextPayload(obj);
+          if (elPaste) elPaste.value = JSON.stringify(obj, null, 2);
+        } catch (e) {
+          try {
+            sessionStorage.removeItem(CONTEXT_HANDOFF_SS);
+          } catch (e2) {}
+          showCtxErr("文脈の引き継ぎに失敗: " + (e.message || e));
+        }
+      }
+
+      function applyContext() {
+        showCtxErr("");
+        var raw = elPaste.value.trim();
+        var fileInput = document.getElementById("context_file");
+
+        if (raw) {
+          try {
+            applyContextPayload(JSON.parse(raw));
+          } catch (e) {
+            showCtxErr("文脈JSONの解析に失敗: " + (e.message || e));
+          }
+          return;
+        }
+        var f = fileInput.files && fileInput.files[0];
+        if (!f) {
+          showCtxErr("テキストを貼るか、JSONファイルを選んでください。");
+          return;
+        }
+        var reader = new FileReader();
+        reader.onload = function () {
+          try {
+            applyContextPayload(JSON.parse(reader.result));
+          } catch (e) {
+            showCtxErr("ファイルの解析に失敗: " + (e.message || e));
+          }
+        };
+        reader.readAsText(f, "UTF-8");
+      }
+
+      elRoot.addEventListener("click", function (ev) {
+        var genBtn = ev.target.closest && ev.target.closest("button[data-role=\"generate-openai\"]");
+        if (genBtn) {
+          ev.preventDefault();
+          var eid = genBtn.dataset.elemId;
+          if (!eid) return;
+          if (!proxyMode.server_key_configured) {
+            if (!proxyMode.client_key_allowed) {
+              alert("API キーがサーバーに設定されていません。管理者に連絡してください。");
+              return;
+            }
+            var token = getApiToken();
+            if (!token) {
+              alert("API トークンを入力して「トークンを保存」してください（サーバー未設定の開発用モード）");
+              return;
+            }
+          }
+          var taGen = document.getElementById("prompt_" + eid);
+          var pr = taGen ? taGen.value.trim() : "";
+          if (!pr) {
+            alert("プロンプトが空です");
+            return;
+          }
+          var origIm = document.getElementById("orig_" + eid);
+          if (origIm && origIm.naturalWidth > 0 && origIm.naturalHeight > 0) {
+            pr +=
+              "\n\n【クローン元の参考】元画像のピクセルサイズはおおよそ " +
+              origIm.naturalWidth +
+              "×" +
+              origIm.naturalHeight +
+              " px。構図・主題の位置・アスペクト比をこれに近づける。Images API は 1024×1024 等の固定解像度のみでラスタのピクセル数は一致しない。公開ページでは img の width/height や CSS で表示枠に合わせてスケールする前提。";
+          }
+          var mdlEl = document.getElementById("api_model");
+          var model = mdlEl && mdlEl.value ? mdlEl.value : "dall-e-3";
+          var meta = itemMetaById(eid);
+          var ow = origIm && origIm.naturalWidth > 0 ? origIm.naturalWidth : 0;
+          var oh = origIm && origIm.naturalHeight > 0 ? origIm.naturalHeight : 0;
+          var size = pickOpenAiSize(meta.isHero, model, ow, oh);
+          genBtn.disabled = true;
+          var prevLbl = genBtn.textContent;
+          genBtn.textContent = "生成中…";
+          setGenStatus("OpenAI に送信中です（数十秒〜2分かかることがあります。この間はタブを閉じないでください）");
+          var body = { prompt: pr, model: model, size: size };
+          if (!proxyMode.server_key_configured) {
+            body.api_key = getApiToken();
+          }
+          var ac = new AbortController();
+          var fetchTid = setTimeout(function () {
+            ac.abort();
+          }, 130000);
+          fetch(OPENAI_PROXY, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify(body),
+            signal: ac.signal
+          })
+            .then(function (r) {
+              var st = r.status;
+              return r.text().then(function (text) {
+                var j = {};
+                if (text) {
+                  try {
+                    j = JSON.parse(text);
+                  } catch (e) {
+                    return {
+                      ok: false,
+                      j: {
+                        error:
+                          "プロキシが JSON 以外を返しました（HTTP " +
+                          st +
+                          "）。PHPのURLやサーバーエラーの可能性: " +
+                          text.replace(/\s+/g, " ").trim().slice(0, 280)
+                      }
+                    };
+                  }
+                }
+                return { ok: r.ok, status: st, j: j };
+              });
+            })
+            .then(function (x) {
+              clearTimeout(fetchTid);
+              genBtn.disabled = false;
+              genBtn.textContent = prevLbl;
+              setGenStatus("");
+              function errMsg(j) {
+                if (!j) return "応答が空です";
+                if (typeof j.error === "string") return j.error;
+                if (j.error && typeof j.error.message === "string") return j.error.message;
+                return JSON.stringify(j).slice(0, 400);
+              }
+              if (!x.ok || x.j.error) {
+                var detail = errMsg(x.j);
+                if (x.status && x.status >= 400) detail = "[HTTP " + x.status + "] " + detail;
+                showCtxErr("生成エラー: " + detail);
+                alert("生成に失敗: " + detail);
+                return;
+              }
+              var imageUrl = x.j.url;
+              if (!imageUrl) {
+                showCtxErr("画像 URL が返りませんでした: " + errMsg(x.j));
+                alert("画像 URL が返りませんでした: " + errMsg(x.j));
+                return;
+              }
+              showCtxErr("");
+              gatherReplacementsFromDom();
+              if (!state.replacements[eid]) state.replacements[eid] = {};
+              state.replacements[eid].ai_url = imageUrl;
+              state.replacements[eid].prompt = pr;
+              saveLsState(state.replacements, parseInt(elHeroVar.value, 10) || 0);
+              renderCards();
+            })
+            .catch(function (err) {
+              clearTimeout(fetchTid);
+              genBtn.disabled = false;
+              genBtn.textContent = prevLbl;
+              setGenStatus("");
+              var msg = err && err.name === "AbortError" ? "タイムアウト（約2分）しました。サーバーまたは OpenAI の応答を確認してください。" : (err && err.message ? err.message : String(err));
+              showCtxErr("通信エラー: " + msg);
+              alert("通信エラー: " + msg);
+            });
+          return;
+        }
+        var refOrig = ev.target.closest && ev.target.closest("button.img-frame__refresh[data-role=\"refresh-orig\"]");
+        if (refOrig) {
+          ev.preventDefault();
+          var im = document.getElementById(refOrig.dataset.targetImg);
+          refreshImg(im);
+          return;
+        }
+        var refAi = ev.target.closest && ev.target.closest("button.img-frame__refresh[data-role=\"refresh-ai\"]");
+        if (refAi) {
+          ev.preventDefault();
+          var im2 = document.getElementById("aiimg_" + refAi.dataset.elemId);
+          refreshImg(im2);
+          return;
+        }
+        var copyBtn = ev.target.closest && ev.target.closest("button[data-role=\"copy-prompt\"]");
+        if (copyBtn) {
+          ev.preventDefault();
+          var ta = document.getElementById("prompt_" + copyBtn.dataset.elemId);
+          if (ta) {
+            navigator.clipboard.writeText(ta.value).catch(function () {
+              alert("コピーに失敗しました（ブラウザのクリップボード権限を確認してください）");
+            });
+          }
+          return;
+        }
+        var clearBtn = ev.target.closest && ev.target.closest("button[data-role=\"clear-ai\"]");
+        if (clearBtn) {
+          ev.preventDefault();
+          var id = clearBtn.dataset.elemId;
+          var u = document.getElementById("aiurl_" + id);
+          if (u) u.value = "";
+          if (!state.replacements[id]) state.replacements[id] = {};
+          state.replacements[id].ai_url = "";
+          renderCards();
+          saveLsState(state.replacements, parseInt(elHeroVar.value, 10) || 0);
+          return;
+        }
+      });
+
+      document.getElementById("btn_api_token_save").addEventListener("click", function () {
+        var v = document.getElementById("api_token").value.trim();
+        setStoredApiToken(v);
+        if (state.items.length) renderCards();
+        else updateStats();
+      });
+      document.getElementById("btn_api_token_clear").addEventListener("click", function () {
+        document.getElementById("api_token").value = "";
+        setStoredApiToken("");
+        if (state.items.length) renderCards();
+        else updateStats();
+      });
+      document.getElementById("api_model").addEventListener("change", function () {
+        if (state.items.length) renderCards();
+        else updateStats();
+      });
+
+      document.getElementById("btn_load_structure").addEventListener("click", function () {
+        loadStructure(function (ok) {
+          if (ok) tryConsumeContextHandoff();
+        });
+      });
+      document.getElementById("btn_apply_context").addEventListener("click", applyContext);
+      elHeroVar.addEventListener("change", function () {
+        gatherReplacementsFromDom();
+        var items = state.items;
+        var hi = heroSlotIndex(items);
+        var hid = items[hi] && items[hi].id;
+        if (hid && state.replacements[hid]) delete state.replacements[hid].prompt;
+        saveLsState(state.replacements, parseInt(elHeroVar.value, 10) || 0);
+        renderCards();
+      });
+
+      document.getElementById("btn_export_review").addEventListener("click", function () {
+        gatherReplacementsFromDom();
+        var rows = state.items.map(function (it) {
+          var r = state.replacements[it.id] || {};
+          return {
+            element_id: it.id,
+            label: it.label,
+            clone_src: it.src,
+            prompt_for_ai: r.prompt || "",
+            ai_result_url: (r.ai_url || "").trim(),
+            verified: !!(r.ai_url && String(r.ai_url).trim())
+          };
+        });
+        var out = {
+          schema: "lp_ai_image_review_v1",
+          generated_at: new Date().toISOString(),
+          context_summary: state.payload ? state.payload.hero_image.summary : null,
+          items: rows
+        };
+        navigator.clipboard.writeText(JSON.stringify(out, null, 2)).then(function () {
+          alert("検証結果JSONをクリップボードにコピーしました");
+        });
+      });
+
+      fetchProxyMode().then(function () {
+        loadStructure(function (ok) {
+          if (ok) tryConsumeContextHandoff();
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,3 +1,7 @@
+# 開発専用のローカル置き場（推奨: 大容量・下書きは Git 管理外）
+current/dev/**/_local/*
+!current/dev/**/_local/README.md
+
 # 作業データ・生成物（current 配下）
 current/lp_reverse_cms/data/*
 !current/lp_reverse_cms/data/.gitkeep
@@ -21,6 +25,9 @@ Thumbs.db
 
 # 任意: Cursor ローカル（チームで共有する場合はこの行を削除）
 .cursor/
+
+# シークレット（VM 上のみ配置）
+current/lp_reverse_cms/.env
 
 # ログ・一時ファイル
 *.log

@@ -13,6 +13,8 @@ cd lp-next/current
 
 アプリケーション本体・手順書は **`lp_reverse_cms/`** 以下です（本 README を含む `current/` が基準ディレクトリ）。
 
+**スクリプト・画像の配置（開発用と本番用の分離）:** ルートHTML向けの配信用は **`assets/`**、作業専用は **`dev/`**。一覧と運用方針は [JOURNAL.md](JOURNAL.md) の「**開発/デプロイの棲み分け（スクリプト・画像）**」、詳細は [`dev/README.md`](dev/README.md) ・ [`assets/README.md`](assets/README.md) を参照。
+
 ---
 
 ## 安定版（フィックス版）の指し示し
@@ -22,7 +24,9 @@ cd lp-next/current
 | 項目 | 値 |
 |------|-----|
 | 入口（DocumentRoot＝**`current/`**） | [https://lp-next.jitan.app/](https://lp-next.jitan.app/)（`current/index.html`） |
-| 管理画面（LP Reverse CMS） | [https://lp-next.jitan.app/lp_reverse_cms/](https://lp-next.jitan.app/lp_reverse_cms/) |
+| リポジトリルート＝DocumentRoot（`/current/` 入口） | [https://lp-next.jitan.app/current/](https://lp-next.jitan.app/current/) |
+| プロジェクトジャーナル（共同レビュー用） | [https://lp-next.jitan.app/current/journal.html](https://lp-next.jitan.app/current/journal.html)（素源: `current/JOURNAL.md`） |
+| 管理画面（LP Reverse CMS） | DocumentRoot により: [https://lp-next.jitan.app/lp_reverse_cms/](https://lp-next.jitan.app/lp_reverse_cms/) または [https://lp-next.jitan.app/current/lp_reverse_cms/](https://lp-next.jitan.app/current/lp_reverse_cms/)（リポジトリルートを Web ルートにした場合の後者） |
 | アプリ版 | **`1.2.0`**（`lp_reverse_cms/index.php` の `APP_VERSION`） |
 | Git タグ | **`v1.2.0`**（`main` の本番想定）／過去: **`v1.1.0`**, **`v1.0.0`**。レガシー表記: `v1.1.11-stable` |
 

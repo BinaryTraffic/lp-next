@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LP レイアウト画像リスト — LP-NEXT</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #fff;
+      --border: #1a1a1a;
+      --accent: #0b57d0;
+      --accent-soft: #e8f0fe;
+      --text: #1a1a1a;
+      --muted: #555;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      margin: 0;
+      padding: 0 1rem 2rem;
+      color: var(--text);
+      line-height: 1.5;
+      background: var(--bg);
+      max-width: min(56rem, 100%);
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin: 0.85rem 0 1rem;
+      padding-bottom: 0.65rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { font-size: 1.1rem; margin: 0; font-weight: 700; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      align-items: center;
+    }
+    .toolbar label { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 0.35rem; }
+    .toolbar input[type="url"] {
+      width: min(22rem, 70vw);
+      font: inherit;
+      font-size: 0.82rem;
+      padding: 0.35rem 0.45rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    button.ctl {
+      font: inherit;
+      font-size: 0.82rem;
+      padding: 0.42rem 0.85rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      cursor: pointer;
+      min-height: 40px;
+    }
+    button.ctl.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .hint { font-size: 0.78rem; color: var(--muted); margin: 0 0 0.75rem; }
+    .meta {
+      font-size: 0.8rem;
+      color: var(--muted);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.65rem;
+      margin-bottom: 1rem;
+    }
+    .meta strong { color: var(--text); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+      gap: 0.75rem;
+    }
+    .img-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .img-card__visual {
+      position: relative;
+      aspect-ratio: 16 / 10;
+      background: #e8eaed;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .img-card__visual img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .img-card__refresh {
+      position: absolute;
+      top: 0.35rem;
+      right: 0.35rem;
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 8px;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: rgba(255,255,255,0.92);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      cursor: pointer;
+      font-size: 1.1rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      color: var(--accent);
+    }
+    .img-card__refresh:hover { background: var(--accent-soft); }
+    .img-card__refresh:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .img-card__body {
+      padding: 0.5rem 0.6rem 0.6rem;
+      font-size: 0.78rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .img-card__label { font-weight: 600; color: #222; font-size: 0.8rem; line-height: 1.35; }
+    .img-card__sec { color: var(--muted); font-size: 0.72rem; }
+    .img-card__id { font-family: ui-monospace, monospace; font-size: 0.68rem; color: #666; word-break: break-all; }
+    .img-card__url a { color: var(--accent); font-size: 0.7rem; word-break: break-all; }
+    .err {
+      background: #fce8e6;
+      border: 1px solid #c5221f;
+      color: #611016;
+      padding: 0.65rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+    .empty { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.9rem; }
+    .topnav { font-size: 0.88rem; margin-bottom: 0.35rem; }
+    .topnav a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <p class="topnav"><a href="index.html">← LP-NEXT 入口</a> · <a href="prompt_context_demo.html">店舗文脈デモ</a></p>
+  <div class="topbar">
+    <h1>LP レイアウト画像リスト</h1>
+    <div class="toolbar">
+      <label>取得元 <input type="url" id="json_url" placeholder="get_lp_structure.php の URL" spellcheck="false" /></label>
+      <button type="button" class="ctl primary" id="btn_reload_json" title="lp_structure.json を再取得して一覧を組み直す">データ再読込</button>
+      <button type="button" class="ctl" id="btn_refresh_all" title="表示中のサムネイルをすべてキャッシュバイパスで再読み込み">サムネ一括更新</button>
+    </div>
+  </div>
+  <p class="hint"><code>lp_reverse_cms/data/lp_structure.json</code> 内の <code>type: image</code> をセクション順に一覧します。本番では <code>data/*.json</code> は <strong>.htaccess で直リンク禁止</strong>（403）のため、既定は <strong><code>store/get_lp_structure.php</code></strong> 経由で取得します。各カード右上 <strong>⟳</strong> でそのサムネのみキャッシュバイパスします。<a href="lp_ai_image_review.html">店舗文脈JSONでプロンプト付き検証（AIモード確認）</a>はこちら。</p>
+  <div id="meta" class="meta" hidden></div>
+  <div id="err" class="err" hidden></div>
+  <div id="grid" class="grid" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      var DEFAULT_JSON = "lp_reverse_cms/store/get_lp_structure.php";
+      var STRUCTURE_LOGICAL = "lp_reverse_cms/data/lp_structure.json";
+      var SECTION_TYPE_JA = {
+        hero: "ヒーロー",
+        nav: "ナビ",
+        features: "特徴",
+        testimonials: "お客様の声",
+        cta: "CTA",
+        pricing: "料金",
+        faq: "FAQ",
+        footer: "フッター",
+        general: "セクション"
+      };
+
+      var jsonUrlInput = document.getElementById("json_url");
+      var btnReload = document.getElementById("btn_reload_json");
+      var btnAll = document.getElementById("btn_refresh_all");
+      var metaEl = document.getElementById("meta");
+      var errEl = document.getElementById("err");
+      var gridEl = document.getElementById("grid");
+
+      function sectionTypeJa(t) {
+        return SECTION_TYPE_JA[t] || t || "—";
+      }
+
+      function stripRefreshParam(url) {
+        try {
+          var u = new URL(url, window.location.href);
+          u.searchParams.delete("r");
+          return u.toString();
+        } catch (e) {
+          return url.split("?")[0];
+        }
+      }
+
+      function collectImages(structure) {
+        var out = [];
+        var sections = structure.sections || [];
+        sections.forEach(function (sec) {
+          var secLabel = sec.label || sec.id || "";
+          var secType = sec.type || "general";
+          (sec.elements || []).forEach(function (el) {
+            if (el.type !== "image" || !el.original_src) return;
+            var u = String(el.original_src);
+            if (/favicon\.ico/i.test(u)) return;
+            out.push({
+              id: el.id || "",
+              label: el.label || "（ラベルなし）",
+              alt: el.original_text || "",
+              src: u,
+              section_id: sec.id || "",
+              section_label: secLabel,
+              section_type: secType
+            });
+          });
+        });
+        return out;
+      }
+
+      function showErr(msg) {
+        errEl.hidden = !msg;
+        errEl.textContent = msg || "";
+      }
+
+      function refreshImage(img) {
+        if (!img) return;
+        var base = img.getAttribute("data-base-src");
+        if (!base) {
+          base = stripRefreshParam(img.src);
+          img.setAttribute("data-base-src", base);
+        }
+        var sep = base.indexOf("?") >= 0 ? "&" : "?";
+        img.src = base + sep + "r=" + Date.now();
+      }
+
+      function renderGrid(items, meta) {
+        showErr("");
+        metaEl.hidden = false;
+        var srcLine = meta.logical_source
+          ? escapeHtml(meta.logical_source) + "（<span title=\"実際の HTTP リクエスト先\">" + escapeHtml(meta.url) + "</span>）"
+          : escapeHtml(meta.url);
+        metaEl.innerHTML =
+          "<strong>データ</strong> " + srcLine +
+          " · <strong>解析</strong> " + escapeHtml(meta.analyzed_at || "—") +
+          " · <strong>画像要素</strong> " + items.length + " 件";
+
+        if (!items.length) {
+          gridEl.innerHTML = "<div class=\"empty\" style=\"grid-column:1/-1\">画像要素がありません。</div>";
+          return;
+        }
+
+        var frag = document.createDocumentFragment();
+        items.forEach(function (it) {
+          var card = document.createElement("article");
+          card.className = "img-card";
+          card.setAttribute("data-elem-id", it.id);
+
+          var vis = document.createElement("div");
+          vis.className = "img-card__visual";
+
+          var img = document.createElement("img");
+          img.alt = it.alt || it.label;
+          img.loading = "lazy";
+          img.decoding = "async";
+          img.setAttribute("data-base-src", stripRefreshParam(it.src));
+          img.src = it.src;
+
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "img-card__refresh";
+          btn.setAttribute("aria-label", "この画像を再読み込み");
+          btn.title = "この画像を再読み込み（キャッシュ回避）";
+          btn.textContent = "⟳";
+
+          vis.appendChild(img);
+          vis.appendChild(btn);
+
+          var body = document.createElement("div");
+          body.className = "img-card__body";
+          body.innerHTML =
+            "<div class=\"img-card__label\">" + escapeHtml(it.label) + "</div>" +
+            "<div class=\"img-card__sec\">" + escapeHtml(sectionTypeJa(it.section_type)) + " · " + escapeHtml(it.section_label) + "</div>" +
+            "<div class=\"img-card__id\">" + escapeHtml(it.id) + "</div>" +
+            "<div class=\"img-card__url\"><a href=\"" + escapeAttr(it.src) + "\" target=\"_blank\" rel=\"noopener\">URL を開く</a></div>";
+
+          card.appendChild(vis);
+          card.appendChild(body);
+          frag.appendChild(card);
+        });
+        gridEl.innerHTML = "";
+        gridEl.appendChild(frag);
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+      function escapeAttr(s) {
+        return escapeHtml(s).replace(/'/g, "&#39;");
+      }
+
+      function resolveFetchUrl(input) {
+        var raw = (input || "").trim();
+        if (!raw) return DEFAULT_JSON;
+        try {
+          return new URL(raw, window.location.href).toString();
+        } catch (e) {
+          return DEFAULT_JSON;
+        }
+      }
+
+      function loadJson() {
+        var url = resolveFetchUrl(jsonUrlInput.value);
+        jsonUrlInput.value = url;
+        var bust = url + (url.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
+        showErr("");
+        gridEl.innerHTML = "<div class=\"empty\" style=\"grid-column:1/-1\">読み込み中…</div>";
+
+        fetch(bust, { credentials: "same-origin" })
+          .then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+          })
+          .then(function (data) {
+            if (!data || typeof data !== "object") throw new Error("不正な JSON です");
+            if (data.error != null && !Array.isArray(data.sections)) {
+              throw new Error(typeof data.error === "string" ? data.error : "サーバーがエラーを返しました");
+            }
+            var items = collectImages(data);
+            var logical = url.indexOf("get_lp_structure.php") !== -1 ? STRUCTURE_LOGICAL : null;
+            renderGrid(items, {
+              url: url,
+              logical_source: logical,
+              analyzed_at: data.analyzed_at || ""
+            });
+          })
+          .catch(function (e) {
+            gridEl.innerHTML = "";
+            metaEl.hidden = true;
+            var msg = e && e.message ? e.message : String(e);
+            showErr(
+              "取得に失敗しました: " + msg +
+              " — Web サーバーの DocumentRoot をリポジトリに合わせ（例: GCP VM 上で current/ またはルート）、既定 URL（" + DEFAULT_JSON + "）を使ってください。" +
+              " data/lp_structure.json への直リンクは 403 になります（.htaccess 等による保護）。"
+            );
+          });
+      }
+
+      gridEl.addEventListener("click", function (ev) {
+        var btn = ev.target.closest(".img-card__refresh");
+        if (!btn) return;
+        ev.preventDefault();
+        var visual = btn.closest(".img-card__visual");
+        var img = visual && visual.querySelector("img");
+        refreshImage(img);
+      });
+
+      btnReload.addEventListener("click", loadJson);
+      btnAll.addEventListener("click", function () {
+        gridEl.querySelectorAll(".img-card__visual img").forEach(refreshImage);
+      });
+
+      jsonUrlInput.placeholder = DEFAULT_JSON;
+      if (!jsonUrlInput.value) jsonUrlInput.value = DEFAULT_JSON;
+
+      loadJson();
+    })();
+  </script>
+</body>
+</html>

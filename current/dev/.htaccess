@@ -1,0 +1,9 @@
+# Apache: 開発専用ディレクトリをブラウザから直参照されにくくする
+# Nginx では等価の location 拒否、または本番に dev/ を置かない運用を推奨
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order deny,allow
+  Deny from all
+</IfModule>

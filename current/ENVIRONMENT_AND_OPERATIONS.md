@@ -30,6 +30,7 @@
 - **`data/`** と **`output/`** への**書き込み権限**を、Web サーバー／**PHP の実行ユーザー**に付与する。解析・**アセット取得**で失敗しがち。
 - **アセット取得**は**時間がかかる**ことがある。**タイムアウト**（PHP `max_execution_time`、**プロキシ**・**ロードバランサ**）を確認する。
 - **バージョン確認**は管理画面のバッジ、または `index.php` の **`APP_VERSION`**。不具合時はリポジトリの **`main`** と **`git rev-parse HEAD`** を揃えて比較する。
+- **静的ファイルの入れ分け（`current/`）:** 開発専用のスクリプト・モック画像は **`dev/`**、本番に配信するルート用アセットは **`assets/`**（`current/` 直下。DocumentRoot＝`current/` 想定）。本番に **`dev/` を同梱する場合**は Apache の `dev/.htaccess` 拒否＋Nginx では同等制御、または**デプロイ先に `dev/` を置かない**（`rsync` の `--exclude 'dev'` 等）。[JOURNAL.md](JOURNAL.md)（該当節）・[dev/README.md](dev/README.md) を参照。
 
 ### 留意点: `data/` と `output/` の**所有・権限**（再発しがち）
 

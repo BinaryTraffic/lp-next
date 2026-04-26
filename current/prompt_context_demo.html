@@ -1,0 +1,1977 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>店舗・事業文脈（ステップ入力）— LP-NEXT</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #fff;
+      --border: #1a1a1a;
+      --accent: #0b57d0;
+      --accent-soft: #e8f0fe;
+      --text: #1a1a1a;
+      --muted: #555;
+      /* フローティング・項目ラベル：未浮上は薄く、浮上後は本文と同じ濃さ */
+      --label-idle: #95a0ac;
+      --label-active: var(--text);
+      --ok: #0d3d1f;
+      --ok-bg: #e6f4ea;
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      margin: 0;
+      padding: 0 1rem 2.5rem;
+      padding-left: max(1rem, env(safe-area-inset-left));
+      /* 項目右の ❔・ツールチップが端で見切れないよう余白 */
+      padding-right: max(1rem, calc(0.75rem + env(safe-area-inset-right, 0px) + 2.15rem));
+      color: var(--text);
+      line-height: 1.5;
+      background: var(--bg);
+      max-width: min(42rem, 100%);
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .topnav { font-size: 0.88rem; margin: 0.75rem 0 0.5rem; }
+    .topnav a { color: var(--accent); }
+    h1 { font-size: 1.15rem; margin: 0; flex: 1; min-width: 0; }
+    .page-title-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap;
+      margin: 0 0 0.5rem;
+    }
+    .page-title-main {
+      display: flex; align-items: flex-start; gap: 0.35rem; flex: 1; min-width: 0; flex-wrap: wrap;
+    }
+    .page-title-main h1 { min-width: 12rem; }
+    .mode-toggle {
+      display: inline-flex; flex-shrink: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+      background: var(--card);
+    }
+    .mode-toggle__btn {
+      margin: 0; font: inherit; font-size: 0.72rem; padding: 0.42rem 0.6rem; border: none; background: #fff;
+      color: var(--muted); cursor: pointer; line-height: 1.25; white-space: nowrap;
+    }
+    .mode-toggle__btn + .mode-toggle__btn { border-left: 1px solid var(--border); }
+    .mode-toggle__btn.is-on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    /* 戻る・ステップタブ・次へ を1行に（狭い幅では折り返し可） */
+    .steps-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+      margin: 0 0 0.65rem;
+      padding: 0.4rem 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    }
+    .steps-toolbar__back,
+    .steps-toolbar__next { flex-shrink: 0; min-height: 40px; padding: 0.38rem 0.85rem; font-size: 0.86rem; }
+    .steps-toolbar .steps-rail {
+      flex: 1;
+      min-width: 12rem;
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 0.15rem;
+      margin: 0;
+      padding: 0;
+      border: none;
+    }
+    .steps-rail button {
+      flex: 1; min-width: 0; font: inherit; font-size: 0.65rem; padding: 0.38rem 0.08rem; border: none; background: none; color: var(--muted); cursor: pointer; line-height: 1.15; text-align: center; border-radius: 4px;
+    }
+    @media (min-width: 480px) { .steps-rail button { font-size: 0.72rem; padding: 0.4rem 0.12rem; } }
+    .steps-rail button[aria-current="step"] { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+    .steps-rail button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .step-panel[hidden] { display: none !important; }
+    .step-panel h2 { font-size: 0.95rem; margin: 0 0 0.4rem; color: #222; }
+    .step-panel {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.9rem max(1rem, calc(0.65rem + 2rem + env(safe-area-inset-right, 0px))) 0.9rem 0.9rem;
+      margin-bottom: 0.6rem;
+      overflow-x: visible;
+    }
+    .step-num { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.2rem; }
+
+    .req { color: #b00; font-size: 0.75em; font-weight: 600; }
+    .field-float {
+      position: relative;
+      display: block;
+      margin-bottom: 0.35rem;
+      overflow: visible;
+    }
+    /* ❔ をビューポート外に出さない：入力の右にガターを確保し、ヒントは枠内右端に固定 */
+    .field-float:has(> .field-float__hint) {
+      padding-right: 2rem;
+    }
+    .field-float:has(> .field-float__hint) > label {
+      right: 2.35rem;
+    }
+    .field-float > input:not([type="checkbox"]):not([type="radio"]),
+    .field-float > select,
+    .field-float > textarea {
+      width: 100%; font: inherit; font-size: 0.95rem; border: 1px solid var(--border); border-radius: 6px; background: #fff;
+      padding: 1.05rem 0.55rem 0.42rem 0.5rem; position: relative; z-index: 0;
+    }
+    .field-float > textarea { min-height: 3.15rem; resize: vertical; line-height: 1.4; }
+    .field-float .input-group { border-radius: 6px; margin: 0; min-height: 2.75rem; position: relative; z-index: 0; }
+    .field-float .input-group input[type="text"] { padding: 1.05rem 0.35rem 0.42rem 0.5rem; }
+    .field-float > select { cursor: pointer; -webkit-appearance: menulist; appearance: auto; }
+    .field-float:not(:focus-within):not(.is-filled) > select { color: transparent; -webkit-text-fill-color: transparent; }
+    .field-float:focus-within > select, .field-float.is-filled > select { color: var(--text); -webkit-text-fill-color: var(--text); }
+    .field-float > label {
+      position: absolute; left: 0.55rem; right: 0.55rem; top: 50%; transform: translateY(-50%);
+      font-size: 0.92rem; line-height: 1.2; color: var(--label-idle); font-weight: 400;
+      pointer-events: none; z-index: 1;
+      transition: top 0.16s ease, transform 0.16s ease, color 0.16s ease, font-size 0.16s ease, padding 0.16s ease, font-weight 0.16s ease;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* 枠線の左上（淵に沿って白で切り抜き） */
+    .field-float:focus-within > label,
+    .field-float.is-filled > label,
+    .field-float > input:not(:placeholder-shown) + label,
+    .field-float > textarea:not(:placeholder-shown) + label {
+      top: 0;
+      left: 0.6rem;
+      right: auto;
+      max-width: calc(100% - 1.25rem);
+      transform: translateY(-50%) scale(0.82);
+      transform-origin: left center;
+      font-size: 0.88rem;
+      color: var(--label-active);
+      font-weight: 600;
+      background: var(--card);
+      padding: 0 0.2rem;
+      line-height: 1.15;
+    }
+    /* ツールチップ：フィールド右ガター内（left:100% だとパネル外にはみ出してクリップされやすい） */
+    .field-float__hint {
+      position: absolute;
+      left: auto;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      margin-left: 0;
+      z-index: 4;
+      pointer-events: auto;
+      flex-shrink: 0;
+    }
+    /* 郵便番号：入力グループと ❔ を同一行（nowrap で下に落とさない） */
+    .field-float--zip .field-float__zip-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 0.32rem;
+      flex-wrap: nowrap;
+      width: 100%;
+      min-width: 0;
+    }
+    .field-float--zip .field-float__zip-row .input-group {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .field-float--zip .field-float__zip-row .field-float__hint {
+      position: static;
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      margin: 0;
+      transform: none;
+      left: auto;
+      top: auto;
+      z-index: 4;
+    }
+    .field-float--zip .zip-lookup-msg {
+      display: block;
+      width: 100%;
+      margin: 0.2rem 0 0;
+    }
+    .field-float:not(.field-float--zip):focus-within .field-float__hint,
+    .field-float:not(.field-float--zip).is-filled .field-float__hint,
+    .field-float > input:not(:placeholder-shown) + label + .field-float__hint,
+    .field-float > textarea:not(:placeholder-shown) + label + .field-float__hint {
+      top: 0.42rem; transform: translateY(0);
+    }
+    .addr-section-title { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem; font-size: 0.82rem; color: var(--label-idle); font-weight: 600; margin: 0.15rem 0 0.3rem; }
+    label.block--check { display: flex; font-size: 0.84rem; margin-bottom: 0.35rem; color: var(--label-idle); }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+    /* 郵便番号＋都道府県：県は最長「鹿児島県」程度の実幅に抑え、行に余白を残す */
+    .grid2--addr {
+      grid-template-columns: minmax(0, 10.5rem) max-content;
+      gap: 0.5rem 0.65rem;
+      align-items: start;
+      justify-content: start;
+    }
+    @media (min-width: 401px) {
+      .grid2--addr > .field-float:not(.field-float--zip) {
+        width: max-content;
+        max-width: 100%;
+      }
+      .grid2--addr > .field-float:not(.field-float--zip) > select {
+        width: auto;
+        min-width: 8.25rem;
+        max-width: 10rem;
+      }
+    }
+    @media (max-width: 400px) {
+      .grid2 { grid-template-columns: 1fr; }
+      .grid2--addr { grid-template-columns: 1fr; gap: 0.4rem; }
+      .grid2--addr > .field-float:not(.field-float--zip) {
+        width: 100%;
+        max-width: none;
+      }
+      .grid2--addr > .field-float:not(.field-float--zip) > select {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+      }
+    }
+    .row { margin-bottom: 0.4rem; }
+    .row:last-child { margin-bottom: 0; }
+    .row.industry-row { margin-bottom: 0.25rem; }
+    .industry-field > select.industry-combo { cursor: pointer; }
+    .industry-custom-input {
+      width: 100%; margin-top: 0.35rem; font: inherit; font-size: 0.95rem;
+      border: 1px solid var(--border); border-radius: 6px; background: #fff;
+      padding: 0.55rem 0.55rem; box-sizing: border-box;
+    }
+    .row.industry-save-row { margin-top: 0; margin-bottom: 0.4rem; }
+    .industry-save-row .industry-add-btn { font-size: 0.82rem; padding: 0.42rem 0.75rem; min-height: 44px; }
+    /* 業種コンボはプレースホルダ透明ルールを当てない（+ 追加を常に読める） */
+    .field-float.industry-field:not(.is-filled) > select.industry-combo {
+      color: var(--text); -webkit-text-fill-color: var(--text);
+    }
+    .hint { font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }
+    .field-err {
+      display: block; font-size: 0.76rem; color: #7d1212; margin-top: 0.2rem; line-height: 1.35;
+    }
+    .field-err[hidden] { display: none !important; }
+    .field-url-probe { display: block; font-size: 0.74rem; color: var(--muted); margin-top: 0.15rem; line-height: 1.35; }
+    .field-url-probe[hidden] { display: none !important; }
+    .field-url-probe.is-ok { color: #0d3d1f; }
+    .box-soft { background: #f6f8fa; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.55rem; font-size: 0.8rem; margin: 0.4rem 0; line-height: 1.45; }
+    .box-soft strong { color: #333; }
+    .hero-brief-out { margin-bottom: 0.75rem; }
+    .hero-brief-out > h2 { font-size: 0.95rem; }
+    .hero-brief-summary { font-size: 0.84rem; line-height: 1.5; margin: 0.35rem 0 0.5rem; }
+    .hero-prompt-row {
+      border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.55rem; margin-bottom: 0.45rem;
+      background: #fafbfc;
+    }
+    .hero-prompt-label { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.25rem; }
+    .hero-prompt-pre {
+      font-size: 0.76rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+      margin: 0 0 0.4rem; padding: 0; font-family: system-ui, sans-serif;
+    }
+    .hero-negative { font-size: 0.74rem; color: var(--muted); line-height: 1.45; margin: 0.5rem 0 0; }
+    button.hero-copy { font-size: 0.82rem; min-height: 40px; padding: 0.35rem 0.75rem; }
+    button.ctl {
+      font: inherit; font-size: 0.9rem; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid var(--border);
+      background: #fff; cursor: pointer; min-height: 44px;
+    }
+    button.ctl.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .input-group {
+      display: flex; align-items: stretch; width: 100%;
+      border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: #fff;
+    }
+    .input-group:focus-within { outline: 2px solid var(--accent); outline-offset: 0; }
+    .input-group input[type="text"] {
+      flex: 1; min-width: 0; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+    }
+    .btn-zip-lookup {
+      flex: 0 0 2.35rem; min-height: 2.5rem; width: 2.35rem; padding: 0; margin: 0;
+      border: 0; border-left: 1px solid var(--border); border-radius: 0; background: #f0f3f6; color: #3d4a5c;
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .btn-zip-lookup:hover { background: #e2e8f0; color: var(--accent); }
+    .btn-zip-lookup:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .btn-zip-lookup:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-zip-lookup svg { display: block; }
+    .zip-lookup-msg { display: block; font-size: 0.75rem; margin-top: 0.25rem; }
+    .zip-lookup-msg:not([hidden]) { color: #1a3d0f; }
+    .zip-lookup-msg.err { color: #7d1212; }
+    .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+    .chips .chip-wrap input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .chips .chip-wrap label { display: inline-block; padding: 0.38rem 0.6rem; font-size: 0.82rem; border: 1px solid var(--border); border-radius: 999px; cursor: pointer; background: #fafbfc; }
+    .chips .chip-wrap input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .chips .chip-wrap:has(input:checked) label { background: var(--accent-soft); border-color: var(--accent); color: #0a2d6b; }
+    .chip-wrap { position: relative; }
+    .preset-grid { display: grid; grid-template-columns: 1fr; gap: 0.35rem; }
+    @media (min-width: 480px) { .preset-grid { grid-template-columns: 1fr 1fr; } }
+    .preset-item input { position: absolute; opacity: 0; }
+    .preset-item label { display: block; padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; background: #fafbfc; min-height: 2.5rem; font-size: 0.8rem; line-height: 1.3; }
+    .preset-item input:checked + label { background: var(--accent-soft); border-color: var(--accent); }
+    .preset-item strong { display: block; font-size: 0.85rem; margin-bottom: 0.08rem; }
+    .hidden { display: none !important; }
+    #out {
+      font-family: ui-monospace, monospace; font-size: 0.72rem; white-space: pre-wrap; word-break: break-all;
+      background: #0d1117; color: #c9d1d9; padding: 0.65rem; border-radius: 6px; max-height: 11rem; overflow: auto;
+    }
+    .out-section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem; margin-top: 0.5rem; }
+    .out-section.out-section--in-step { margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--border); border-radius: 0 0 10px 10px; border-left: 0; border-right: 0; border-bottom: 0; background: #fafbfc; margin-left: -0.1rem; margin-right: -0.1rem; padding-left: 0.85rem; padding-right: 0.85rem; }
+    .btns { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; }
+    .okbanner { background: var(--ok-bg); color: var(--ok); padding: 0.35rem 0.5rem; border-radius: 6px; font-size: 0.82rem; margin-top: 0.35rem; display: none; }
+    .okbanner.on { display: block; }
+
+    h2.heading-ttp { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; }
+    .lbl-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; color: var(--label-idle); }
+    .ttp-wrap { position: relative; display: inline-flex; align-items: center; vertical-align: middle; }
+    button.ttp {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 1.1rem; height: 1.1rem; padding: 0; margin: 0; box-sizing: border-box; flex: 0 0 auto;
+      border: 1px solid var(--border); border-radius: 50%; background: #fff; cursor: help;
+      font-size: 0.52rem; line-height: 1; color: #3d4a5c;
+    }
+    button.ttp:hover, button.ttp:focus-visible { background: #f0f4fa; border-color: var(--accent); color: var(--accent); }
+    /* 角丸の説明ボックス（尻尾なし・位置は JS fixed で枠内にクランプ） */
+    .ttp-bubble {
+      display: none; position: absolute; z-index: 200; min-width: 11.5rem; max-width: min(19rem, calc(100vw - 1.25rem));
+      left: 50%; transform: translateX(calc(-50% + var(--ttp-shift, 0px)));
+      bottom: calc(100% + 6px);
+      padding: 0.55rem 0.7rem; background: #24292f; color: #f6f8fa; font-size: 0.78rem; font-weight: 400; line-height: 1.45;
+      border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); text-align: left; pointer-events: none;
+    }
+    .ttp-bubble.ttp-bubble--fixed {
+      position: fixed; z-index: 200; left: 0; top: 0; right: auto; bottom: auto;
+      transform: none; margin: 0; min-width: 11.5rem; max-width: min(19rem, calc(100vw - 1.25rem));
+      pointer-events: auto;
+    }
+    .ttp-bubble.ttp-bubble--fixed.ttp-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .ttp-wrap.ttp-below .ttp-bubble { bottom: auto; top: calc(100% + 6px); }
+    .ttp-wrap.ttp-below .ttp-bubble.ttp-bubble--fixed { bottom: auto; }
+    .ttp-wrap:hover .ttp-bubble, .ttp-wrap:focus-within .ttp-bubble, .ttp-wrap.is-open .ttp-bubble { display: block; }
+    .out-section h2 { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; font-size: 0.9rem; margin: 0 0 0.4rem; }
+  </style>
+</head>
+<body>
+  <p class="topnav"><a href="index.html">← LP-NEXT 入口</a></p>
+  <div class="page-title-row">
+    <div class="mode-toggle" role="group" aria-label="入力モード">
+      <button type="button" class="mode-toggle__btn" id="mode_test" aria-pressed="false">テスト</button>
+      <button type="button" class="mode-toggle__btn is-on" id="mode_prod" aria-pressed="true">本番</button>
+    </div>
+    <div class="page-title-main">
+      <h1>店舗・事業文脈（ステップ入力）</h1>
+      <span class="ttp-wrap">
+        <button type="button" class="ttp" aria-label="この画面の流れ">❔</button>
+        <span class="ttp-bubble" role="tooltip">画面の流れ：1〜5 のステップのあと Step5 で <strong>JSON</strong> を出力します。まず<strong>会社・店舗</strong>、参照LPと<strong>業種</strong>、<strong>立地</strong>と LP 用<strong>ざっくり地域</strong>（住所・都道府県から流用可）、顧客像と世界観、最後に詳細と JSON です。都道府県は LP 用<strong>地域ブロック</strong>にマッピングされます（後から変更可）。<strong>テスト</strong>では必須・検証を通るサンプル値を一括で入れます。</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="steps-toolbar" role="toolbar" aria-label="ステップ移動">
+    <button type="button" class="ctl steps-toolbar__back" id="nav_back" hidden>戻る</button>
+    <div class="steps-rail" role="tablist" aria-label="ステップ" id="rail"></div>
+    <button type="button" class="ctl primary steps-toolbar__next" id="nav_next">次へ</button>
+  </div>
+
+  <form id="f" autocomplete="on">
+    <div class="step-panel" id="step-1" data-step="1">
+      <p class="step-num">Step 1 / 5</p>
+      <h2 class="heading-ttp">会社・店舗
+        <span class="ttp-wrap">
+          <button type="button" class="ttp" aria-label="Step1の説明">❔</button>
+          <span class="ttp-bubble" role="tooltip">LP に載せる想定の「<strong>誰向けの事業か</strong>」を特定する基本情報です。ここを先に埋めると、<strong>地域</strong>（都道府県 → LP用のざっくり地域）に<strong>流用</strong>しやすくなります。</span>
+        </span>
+      </h2>
+      <div class="row">
+        <div class="field-float">
+          <input type="text" name="company_name" id="company_name" required maxlength="120" placeholder=" " title="例：株式会社さくら / 川崎駅前 整体院さくら" autocomplete="organization" />
+          <label for="company_name">会社名・店舗名 <span class="req">必須</span></label>
+          <div class="field-float__hint">
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="社名の説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">LP に載せる想定の屋号・店舗名。後のステップの<strong>要約表示</strong>にも使います。</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field-float">
+          <select name="org_type" id="org_type">
+            <option value="">（未指定）</option>
+            <option value="法人">法人</option>
+            <option value="個人事業主">個人事業主</option>
+            <option value="その他">その他</option>
+          </select>
+          <label for="org_type">事業者区分</label>
+          <div class="field-float__hint">
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="事業者区分の説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">法人・個人事業主など。表記トーンの参考にする場合があります。未指定でも構いません。</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <label class="block--check" style="align-items:flex-start;gap:0.5rem;flex-wrap:wrap;">
+          <input type="checkbox" name="online_nationwide" id="ol_nw" style="width:auto;margin-top:0.2rem" />
+          <span class="lbl-row">主に<strong>オンライン全国</strong>展開（所在地は補足程度）
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="オンライン全国の説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">ON にすると、LP 用の地域は <strong>オンライン全国</strong>に寄せます。オフなら、下の<strong>所在地・都道府県</strong>から、LP 向けのざっくり地域に<strong>流用</strong>します。</span>
+            </span>
+          </span>
+        </label>
+      </div>
+      <div id="addr_block">
+        <div class="addr-section-title">所在地
+          <span class="ttp-wrap">
+            <button type="button" class="ttp" aria-label="所在地の説明">❔</button>
+            <span class="ttp-bubble" role="tooltip">都道府県は、次のステップの<strong>LP 向けざっくり地域</strong>に<strong>自動反映</strong>されます。番地・建物は要約表示用です。</span>
+          </span>
+        </div>
+        <div class="row grid2 grid2--addr">
+          <div class="field-float field-float--zip">
+            <div class="field-float__zip-row">
+              <div class="input-group">
+                <input type="text" name="postal_code" id="postal_code" inputmode="numeric" placeholder=" " maxlength="8" pattern="[0-9０-９-]*" autocomplete="postal-code" title="7桁（ハイフン可・未入力可）" aria-describedby="val_postal zip_lookup_msg" />
+                <button type="button" class="btn-zip-lookup" id="btn_zip_lookup" title="郵便番号で住所を補完" aria-label="郵便番号で住所を補完">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6" />
+                    <line x1="20" y1="20" x2="16.2" y2="16.2" />
+                  </svg>
+                </button>
+              </div>
+              <div class="field-float__hint">
+                <span class="ttp-wrap">
+                  <button type="button" class="ttp" aria-label="郵便番号の説明">❔</button>
+                  <span class="ttp-bubble" role="tooltip">ハイフンありなしどちらでも。右の<strong>検索</strong>で郵便番号API（zipcloud）から都道府県・市区町村を補完します。必須ではありません。</span>
+                </span>
+              </div>
+            </div>
+            <label for="postal_code">郵便番号</label>
+            <span class="zip-lookup-msg hint" id="zip_lookup_msg" hidden></span>
+            <span class="field-err" id="val_postal" role="alert" hidden></span>
+          </div>
+          <div class="field-float">
+            <select name="prefecture" id="pref">
+              <option value="">（選択）</option>
+            </select>
+            <label for="pref">都道府県</label>
+            <div class="field-float__hint">
+              <span class="ttp-wrap">
+                <button type="button" class="ttp" aria-label="都道府県の説明">❔</button>
+                <span class="ttp-bubble" role="tooltip"><strong>地域流用のキー</strong>です。選ぶと、LP 用のざっくり地域（北海道・首都圏など）にマッピングされます。</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field-float">
+            <input type="text" name="city_address" id="city_address" maxlength="200" placeholder=" " title="例：川崎市川崎区駅前1-2" />
+            <label for="city_address">市区町村・番地</label>
+            <div class="field-float__hint">
+              <span class="ttp-wrap">
+                <button type="button" class="ttp" aria-label="市区町村の説明">❔</button>
+                <span class="ttp-bubble" role="tooltip">Step3 の要約に出ます。LP の本文にそのまま載せるかは、あとで編集で調整する想定です。</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field-float">
+            <input type="text" name="building" id="building" maxlength="80" placeholder=" " title="例：○○ビル 3F" />
+            <label for="building">建物名・階（任意）</label>
+            <div class="field-float__hint">
+              <span class="ttp-wrap">
+                <button type="button" class="ttp" aria-label="建物名の説明">❔</button>
+                <span class="ttp-bubble" role="tooltip">面談用・道順用の補足。地図アプリ用の厳密な表記は不要な場合が多いです。</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field-float">
+            <input type="tel" name="company_phone" id="company_phone" inputmode="tel" placeholder=" " title="例：03-1234-5678・090-1234-5678（未入力可）" autocomplete="tel" aria-describedby="val_phone" />
+            <label for="company_phone">電話（任意）</label>
+            <div class="field-float__hint">
+              <span class="ttp-wrap">
+                <button type="button" class="ttp" aria-label="電話の説明">❔</button>
+                <span class="ttp-bubble" role="tooltip">LP に載せる連絡先想定。JSON に含め、本番のテンプレで使う用です。</span>
+              </span>
+            </div>
+          </div>
+          <span class="field-err" id="val_phone" role="alert" hidden></span>
+        </div>
+        <div class="row">
+          <div class="field-float">
+            <input type="text" name="company_url" id="company_url" inputmode="url" placeholder=" " title="https:// から。未入力可" autocomplete="url" aria-describedby="val_url url_probe_msg" />
+            <label for="company_url">自社HP（任意）</label>
+            <div class="field-float__hint">
+              <span class="ttp-wrap">
+                <button type="button" class="ttp" aria-label="自社HPの説明">❔</button>
+                <span class="ttp-bubble" role="tooltip">信頼補足用。未入力可。形式を検証し、入力後に可能な範囲で HEAD リクエストによる応答確認を試みます（相手サイトの設定によりブラウザからは分からない場合があります）。</span>
+              </span>
+            </div>
+          </div>
+          <span class="field-err" id="val_url" role="alert" hidden></span>
+          <span class="field-url-probe" id="url_probe_msg" hidden></span>
+        </div>
+        <div class="addr-section-title" style="margin-top:0.35rem">SNS（任意）</div>
+        <div class="row">
+          <div class="field-float">
+            <input type="text" name="sns_x" id="sns_x" inputmode="url" placeholder=" " title="https://… 未入力可" autocomplete="off" aria-describedby="val_sns_x sns_x_probe" />
+            <label for="sns_x">X（旧 Twitter）</label>
+          </div>
+          <span class="field-err" id="val_sns_x" role="alert" hidden></span>
+          <span class="field-url-probe" id="sns_x_probe" hidden></span>
+        </div>
+        <div class="row">
+          <div class="field-float">
+            <input type="text" name="sns_instagram" id="sns_instagram" inputmode="url" placeholder=" " title="https://… 未入力可" autocomplete="off" aria-describedby="val_sns_instagram sns_instagram_probe" />
+            <label for="sns_instagram">Instagram</label>
+          </div>
+          <span class="field-err" id="val_sns_instagram" role="alert" hidden></span>
+          <span class="field-url-probe" id="sns_instagram_probe" hidden></span>
+        </div>
+        <div class="row">
+          <div class="field-float">
+            <input type="text" name="sns_other" id="sns_other" inputmode="url" placeholder=" " title="Facebook / LINE 等・未入力可" autocomplete="off" aria-describedby="val_sns_other sns_other_probe" />
+            <label for="sns_other">その他 SNS（Facebook / LINE 等）</label>
+          </div>
+          <span class="field-err" id="val_sns_other" role="alert" hidden></span>
+          <span class="field-url-probe" id="sns_other_probe" hidden></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-panel" id="step-2" data-step="2" hidden>
+      <p class="step-num">Step 2 / 5</p>
+      <h2 class="heading-ttp">事業内容・参照
+        <span class="ttp-wrap">
+          <button type="button" class="ttp" aria-label="事業内容・参照の説明">❔</button>
+          <span class="ttp-bubble" role="tooltip">差し替え元としたい<strong>参照LP</strong>（任意）と、生成先の<strong>業種</strong>（必須）です。業種はコピー・画像候補のトーンの軸になります。</span>
+        </span>
+      </h2>
+      <div class="row">
+        <div class="field-float">
+          <input type="url" name="reference_url" id="reference_url" placeholder=" " title="真似たい元ページ" />
+          <label for="reference_url">参照LPのURL（任意）</label>
+          <div class="field-float__hint">
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="参照URLの説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">真似たい元ページのURL。取り込み済み想定。未入力の場合は、別途セッション上の参照のみ、という想定にできます。</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="row industry-row">
+        <div class="field-float industry-field">
+          <select id="industry_combo" class="industry-combo" title="一覧から選ぶか、先頭の + 追加で自由入力" aria-describedby="industry_custom"></select>
+          <input type="hidden" name="industry" id="industry" value="" />
+          <input type="text" id="industry_custom" class="industry-custom-input hidden" placeholder="業種を自由入力" autocomplete="off" title="一覧に無い業種" />
+          <label for="industry_combo">業種 <span class="req">必須</span></label>
+          <div class="field-float__hint">
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="業種の説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">一覧の<strong>+ 追加</strong>で自由入力欄が開きます。代表業種は下のリストから選択。<strong>一覧に追加</strong>で端末に保存した候補が次回以降リストに載ります（重複は登録されません）。</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="row industry-save-row hidden" id="industry_save_row">
+        <button type="button" class="ctl industry-add-btn" id="btn_industry_save_list" title="自由入力の業種を下の候補一覧へ追加（重複不可）">一覧に追加</button>
+      </div>
+    </div>
+
+    <div class="step-panel" id="step-3" data-step="3" hidden>
+      <p class="step-num">Step 3 / 5</p>
+      <h2 class="heading-ttp">立地の見せ方 ＆ <strong>LP 向け地域</strong>
+        <span class="ttp-wrap">
+          <button type="button" class="ttp" aria-label="立地と地域の説明">❔</button>
+          <span class="ttp-bubble" role="tooltip">上の<strong>会社住所</strong>を要約し、LP文案で使う<strong>ざっくり地域</strong>を表示します。都道府県は下の「LP用の地域」に<strong>自動</strong>で入ります。違う場合はプルダウンで上書きしてください。</span>
+        </span>
+      </h2>
+      <div class="box-soft" id="addr_summary" aria-live="polite">会社情報の住所が入ると、ここに要約と<strong>流用した地域</strong>が出ます。</div>
+      <p class="hint" style="margin:0.25rem 0 0.45rem">
+        <span class="ttp-wrap" style="margin-right:0.2rem;vertical-align:middle">
+          <button type="button" class="ttp" aria-label="要約欄の説明">❔</button>
+          <span class="ttp-bubble" role="tooltip">住所未入力のときは、地域を手で選べる旨のメッセージになります。オンライン全国を選んでいる場合は、その前提が表示されます。</span>
+        </span>
+        上の要約欄の見方
+      </p>
+      <div class="row">
+        <span class="lbl-row lbl" style="font-size:0.84rem">立地（立ち位置）— 1 つ。未選＝お任せ
+          <span class="ttp-wrap">
+            <button type="button" class="ttp" aria-label="立地プリセットの説明">❔</button>
+            <span class="ttp-bubble" role="tooltip">店の「立ち位置」のイメージ。1 つだけ選びます。未選は <strong>お任せ</strong>（業種＋参照LPの雰囲気を優先）。</span>
+          </span>
+        </span>
+        <div class="preset-grid" id="presets"></div>
+      </div>
+      <div class="row">
+        <div class="field-float">
+          <select name="region" id="region">
+            <option value="">（未指定）</option>
+            <option value="北海道">北海道</option>
+            <option value="東北">東北</option>
+            <option value="首都圏">首都圏</option>
+            <option value="関東（首都圏以外）">関東（首都圏以外）</option>
+            <option value="北陸・甲信越">北陸・甲信越</option>
+            <option value="東海">東海</option>
+            <option value="関西">関西</option>
+            <option value="中国">中国</option>
+            <option value="四国">四国</option>
+            <option value="九州・沖縄">九州・沖縄</option>
+            <option value="オンライン全国">オンライン全国</option>
+          </select>
+          <label for="region">LP 用の地域（ざっくり）</label>
+          <div class="field-float__hint">
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="LP用地域の説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">都道府県から<strong>自動</strong>で入れます。プロンプトに渡す「大まかな地域」です。違う場合はここで<strong>上書き</strong>してください。</span>
+            </span>
+          </div>
+        </div>
+        <label class="block--check" style="display:flex;align-items:center;gap:0.45rem;flex-wrap:wrap;font-size:0.84rem;margin-top:0.4rem">
+          <input type="checkbox" name="region_lock" id="reg_lock" />
+          <span class="lbl-row">今後、住所を変えても<strong>地域を自動で上書きしない</strong>
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="地域ロックの説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">チェックすると、Step1で<strong>住所や都道府県</strong>を直しても、ここで選んだ <strong>LP 用の地域</strong>を<strong>勝手に変えません</strong>。確定した地域表現を保ちたいとき用です。</span>
+            </span>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div class="step-panel" id="step-4" data-step="4" hidden>
+      <p class="step-num">Step 4 / 5</p>
+      <h2 class="heading-ttp">顧客層・世界観
+        <span class="ttp-wrap">
+          <button type="button" class="ttp" aria-label="顧客層と世界観の説明">❔</button>
+          <span class="ttp-bubble" role="tooltip">価格感の目安（客層）と、<strong>人口比</strong>（お任せなら数値不要）、<strong>世界観</strong>（デモは固定チップ。本番は参照LPから候補を出す想定）。</span>
+        </span>
+      </h2>
+      <div class="row">
+        <span class="lbl-row lbl" style="font-size:0.84rem">客層
+          <span class="ttp-wrap" style="margin-left:0.2rem;vertical-align:middle">
+            <button type="button" class="ttp" aria-label="客層の説明">❔</button>
+            <span class="ttp-bubble" role="tooltip">富裕層寄り・一般世帯寄り・お任せ。お任せのときは、業種の一般的イメージに寄せます。</span>
+          </span>
+        </span>
+        <div class="chips" role="radiogroup" aria-label="客層">
+          <div class="chip-wrap"><input type="radio" name="audience" value="omakase" id="a_om" checked /><label for="a_om">お任せ</label></div>
+          <div class="chip-wrap"><input type="radio" name="audience" value="affluent" id="a_af" /><label for="a_af">富裕層寄り</label></div>
+          <div class="chip-wrap"><input type="radio" name="audience" value="general" id="a_ge" /><label for="a_ge">一般世帯寄り</label></div>
+        </div>
+      </div>
+      <div class="row">
+        <label class="block--check" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;font-size:0.84rem;">
+          <input type="checkbox" name="demographics_omakase" id="demo_om" checked style="width:auto" />
+          <span class="lbl-row">年齢・性別の人口比は <strong>お任せ</strong>
+            <span class="ttp-wrap" style="margin-left:0.2rem">
+              <button type="button" class="ttp" aria-label="人口比お任せの説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">ON の間は、性別比・年齢帯をプロンプトに含めず<strong>省略</strong>します。人口を細かく入れたいときはチェックを外してください。</span>
+            </span>
+          </span>
+        </label>
+        <div id="demo_extra" class="hidden" style="margin-top:0.4rem">
+          <div class="grid2">
+            <div class="field-float">
+              <input type="number" name="female_pct" id="female_pct" min="0" max="100" value="50" placeholder=" " />
+              <label for="female_pct">女性比（%）</label>
+            </div>
+            <div class="field-float">
+              <select name="age_band" id="age_band">
+                <option value="20-30">20〜30</option>
+                <option value="30-40">30〜40</option>
+                <option value="40-50" selected>40〜50</option>
+                <option value="50-60">50〜60</option>
+                <option value="60+">60以上</option>
+                <option value="mix">幅広い</option>
+              </select>
+              <label for="age_band">主な年齢帯</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <span class="lbl-row lbl" style="font-size:0.84rem">世界観チップ
+          <span class="ttp-wrap" style="margin-left:0.2rem;vertical-align:middle">
+            <button type="button" class="ttp" aria-label="世界観チップの説明">❔</button>
+            <span class="ttp-bubble" role="tooltip">本番では参照LPの配色・コピーから候補を出す想定。ここはデモ用の固定チップです。お任せのときは、抽出結果＋業種で補完する想定です。</span>
+          </span>
+        </span>
+        <div class="chips" id="wv_chips">
+          <div class="chip-wrap"><input type="radio" name="worldview_chip" value="" id="wv0" checked /><label for="wv0">お任せ</label></div>
+          <div class="chip-wrap"><input type="radio" name="worldview_chip" value="落ち着き" id="wv1" /><label for="wv1">落ち着き</label></div>
+          <div class="chip-wrap"><input type="radio" name="worldview_chip" value="上質" id="wv2" /><label for="wv2">上質</label></div>
+          <div class="chip-wrap"><input type="radio" name="worldview_chip" value="明るい・親しみ" id="wv3" /><label for="wv3">明るい・親しみ</label></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-panel" id="step-5" data-step="5" hidden>
+      <p class="step-num">Step 5 / 5</p>
+      <h2 class="heading-ttp">詳細・メモ
+        <span class="ttp-wrap">
+          <button type="button" class="ttp" aria-label="詳細・メモの説明">❔</button>
+          <span class="ttp-bubble" role="tooltip">価格表の出し方、表現上の注意、色の参考。最後のメモは会議の決定事項など。すべて任意です（ない場合はデフォルトやお任せで進みます）。</span>
+        </span>
+      </h2>
+      <div class="row">
+        <span class="lbl-row lbl" style="font-size:0.84rem">価格の打ち出し
+          <span class="ttp-wrap" style="margin-left:0.2rem;vertical-align:middle">
+            <button type="button" class="ttp" aria-label="価格打ち出しの説明">❔</button>
+            <span class="ttp-bubble" role="tooltip">要お問い合わせ、料金帯の記載、お任せ。お任せは業種のよくある出し方に合わせる想定です。</span>
+          </span>
+        </span>
+        <div class="chips" role="radiogroup" aria-label="価格">
+          <div class="chip-wrap"><input type="radio" name="price_display" value="omakase" id="pr0" checked /><label for="pr0">お任せ</label></div>
+          <div class="chip-wrap"><input type="radio" name="price_display" value="inquiry" id="pr1" /><label for="pr1">要お問合せ</label></div>
+          <div class="chip-wrap"><input type="radio" name="price_display" value="range" id="pr2" /><label for="pr2">帯を出す</label></div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field-float">
+          <textarea name="compliance_note" id="compliance_note" rows="2" placeholder=" " title="同業の禁句、避けたい表現…"></textarea>
+          <label for="compliance_note">禁句・注意</label>
+          <div class="field-float__hint">
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="禁句の説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">同業の表現制限、断定を避けたい文、景表法など配慮したい点。空なら汎用の注意レベルにとどめる想定です。</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field-float">
+          <input type="url" name="palette_ref_url" id="palette_ref_url" placeholder=" " title="https://…" />
+          <label for="palette_ref_url">色調の参考URL</label>
+          <div class="field-float__hint">
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="色の参考の説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">トーン・配色の参考にするページ。任意。未入力なら、参照LPや世界観チップから補完する想定です。</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field-float">
+          <textarea name="free_note" id="free_note" maxlength="200" rows="2" placeholder=" " title="会議の決定事項など（200字目安）"></textarea>
+          <label for="free_note">追加メモ（200字）</label>
+          <div class="field-float__hint">
+            <span class="ttp-wrap">
+              <button type="button" class="ttp" aria-label="追加メモの説明">❔</button>
+              <span class="ttp-bubble" role="tooltip">会議の決定事項、紹介割の有無、差別化の一言。200字目安。</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="out-section out-section--in-step hero-brief-out" id="hero_brief_block">
+        <h2 class="heading-ttp">ヒーロー画像の選出
+          <span class="ttp-wrap">
+            <button type="button" class="ttp" aria-label="ヒーロー選出の説明">❔</button>
+            <span class="ttp-bubble" role="tooltip">先頭の要約は<strong>抽出条件</strong>、下の「案」は<strong>実画像ではなく</strong>画像生成用の<strong>テキストプロンプト</strong>です。参照LP上の JPG/PNG のリストは <a href="lp_layout_images.html">レイアウト画像リスト</a> を参照。入力の<strong>業種・立地・世界観・地域</strong>から3案を組み立て（静的ルール）、JSON の <code>hero_image</code> にも入ります。</span>
+          </span>
+        </h2>
+        <p class="hint" style="margin:0 0 0.5rem">上の要約は<strong>抽出条件</strong>です。下の「案」は<strong>プロンプト文のみ</strong>（画像ファイルの一覧ではありません）。解析LPの<strong>画像サムネ一覧</strong>は <a href="lp_layout_images.html">lp_layout_images.html（レイアウト画像リスト）</a> です。</p>
+        <div id="hero_brief_content" class="hero-brief-content" aria-live="polite"></div>
+      </div>
+      <div class="out-section out-section--in-step" id="json-block">
+        <h2>出力（JSON）
+          <span class="ttp-wrap">
+            <button type="button" class="ttp" aria-label="JSON出力の説明">❔</button>
+            <span class="ttp-bubble" role="tooltip">スキーマ <code>prompt_context_v2</code>（<code>hero_image</code> 含む）。<strong>AI画像レビューへ</strong>＝同じブラウザでレビュー画面に文脈だけ渡す（コピー不要）。インポート・端末保存の挙動は従来どおり。</span>
+          </span>
+        </h2>
+        <p id="js-dt-hint" class="hint" style="margin:0 0 0.5rem" aria-live="polite" hidden></p>
+        <pre id="out" aria-live="polite"></pre>
+        <div class="btns">
+          <button type="button" class="ctl primary" id="btn_copy">JSON をコピー</button>
+          <button type="button" class="ctl" id="btn_dl">ダウンロード</button>
+          <button type="button" class="ctl" id="btn_save">端末に保存</button>
+          <button type="button" class="ctl" id="btn_load">保存を読み込み</button>
+          <button type="button" class="ctl" id="btn_import_json" title="ダウンロード・コピーした prompt_context_v2 形式の .json">JSONファイルを読込</button>
+          <input type="file" id="import_json_file" accept=".json,application/json" hidden="" aria-hidden="true" />
+          <button type="button" class="ctl primary" id="btn_open_ai_review" title="レビュー画面へ文脈を渡して遷移">AI画像レビューへ</button>
+          <button type="button" class="ctl" id="btn_reset">クリア</button>
+        </div>
+        <p class="okbanner" id="copied" role="status">コピーしました</p>
+      </div>
+    </div>
+  </form>
+
+  <script>
+    (function () {
+      document.querySelectorAll("button.ttp").forEach(function (btn) { btn.setAttribute("tabindex", "-1"); });
+      const LS = "lp-next-prompt-context-demo-v2";
+      const CONTEXT_HANDOFF_SS = "lp-next-prompt-context-handoff-v1";
+      const PREF = ["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
+      const PREF_TO_REGION = {
+        "北海道": "北海道",
+        "青森県": "東北", "岩手県": "東北", "宮城県": "東北", "秋田県": "東北", "山形県": "東北", "福島県": "東北",
+        "茨城県": "関東（首都圏以外）", "栃木県": "関東（首都圏以外）", "群馬県": "関東（首都圏以外）", "埼玉県": "首都圏", "千葉県": "首都圏", "東京都": "首都圏", "神奈川県": "首都圏",
+        "新潟県": "北陸・甲信越", "富山県": "北陸・甲信越", "石川県": "北陸・甲信越", "福井県": "北陸・甲信越", "山梨県": "北陸・甲信越", "長野県": "北陸・甲信越",
+        "岐阜県": "東海", "静岡県": "東海", "愛知県": "東海", "三重県": "東海",
+        "滋賀県": "関西", "京都府": "関西", "大阪府": "関西", "兵庫県": "関西", "奈良県": "関西", "和歌山県": "関西",
+        "鳥取県": "中国", "島根県": "中国", "岡山県": "中国", "広島県": "中国", "山口県": "中国",
+        "徳島県": "四国", "香川県": "四国", "愛媛県": "四国", "高知県": "四国",
+        "福岡県": "九州・沖縄", "佐賀県": "九州・沖縄", "長崎県": "九州・沖縄", "熊本県": "九州・沖縄", "大分県": "九州・沖縄", "宮崎県": "九州・沖縄", "鹿児島県": "九州・沖縄", "沖縄県": "九州・沖縄"
+      };
+
+      const PRESET_HTML = [
+        { v: "omakase", id: "p_oma", t: "未選択（お任せ）", s: "業種＋参照LP" },
+        { v: "station", id: "p_st", t: "駅前・好アクセス", s: "利便重視" },
+        { v: "hideaway", id: "p_hd", t: "隠れ家・静か", s: "特別感" },
+        { v: "street", id: "p_stt", t: "路面・一見", s: "看板" },
+        { v: "mall", id: "p_ml", t: "商業施設内", s: "ついで" },
+        { v: "office", id: "p_of", t: "オフィス・フロア", s: "BtoB" },
+        { v: "detached", id: "p_dt", t: "戸建て", s: "非日常" },
+        { v: "studio", id: "p_sc", t: "スタジオ", s: "体験" },
+        { v: "online", id: "p_on", t: "オンライン/訪問", s: "店舗非必須" }
+      ];
+
+      const f = document.getElementById("f");
+      const INDUSTRY_CUSTOM_LS = "lp-next-industry-custom-v1";
+      var INDUSTRY_COMBO_ADD = "__add__";
+      var INDUSTRY_BUILTIN_LIST = [
+        "理美容室",
+        "リラクゼーション・マッサージ",
+        "歯科・矯正",
+        "整体・鍼灸",
+        "治療院・美容皮膚",
+        "学習塾・習い事",
+        "飲食店",
+        "不動産",
+        "EC・通販",
+        "フィットネス・ジム",
+        "ペット・動物",
+        "士業・コンサル",
+        "製造・ものづくり"
+      ];
+      function normalizeIndustryText(s) {
+        var t = (s || "").toString();
+        try { t = t.normalize("NFKC"); } catch (e) {}
+        return t.replace(/\s+/g, " ").trim();
+      }
+      function industryCompareKey(s) {
+        return normalizeIndustryText(s).toLowerCase();
+      }
+      function loadIndustryCustomDeduped() {
+        try {
+          var s = localStorage.getItem(INDUSTRY_CUSTOM_LS);
+          if (!s) return [];
+          var a = JSON.parse(s);
+          if (!Array.isArray(a)) return [];
+          var seen = Object.create(null);
+          var out = [];
+          a.forEach(function (v) {
+            var n = normalizeIndustryText(v);
+            var k = industryCompareKey(n);
+            if (!k || seen[k]) return;
+            seen[k] = true;
+            out.push(n);
+          });
+          return out;
+        } catch (e) {
+          return [];
+        }
+      }
+      function saveIndustryCustom(arr) {
+        try { localStorage.setItem(INDUSTRY_CUSTOM_LS, JSON.stringify(arr)); } catch (e) {}
+      }
+      function mergeIndustryOptions(builtin, custom) {
+        var seen = Object.create(null);
+        var out = [];
+        function pushUnique(display) {
+          var n = normalizeIndustryText(display);
+          var k = industryCompareKey(n);
+          if (!k || seen[k]) return;
+          seen[k] = true;
+          out.push(n);
+        }
+        builtin.forEach(pushUnique);
+        custom.forEach(pushUnique);
+        return out;
+      }
+      function industrySetCustomVisible(on) {
+        var cust = document.getElementById("industry_custom");
+        var row = document.getElementById("industry_save_row");
+        if (cust) cust.classList.toggle("hidden", !on);
+        if (row) row.classList.toggle("hidden", !on);
+      }
+      function setIndustryValueHid(display, skipRender) {
+        var hid = document.getElementById("industry");
+        var sel = document.getElementById("industry_combo");
+        var cust = document.getElementById("industry_custom");
+        if (!hid || !sel) return;
+        var v = normalizeIndustryText(display);
+        hid.value = v;
+        if (!v) {
+          sel.value = INDUSTRY_COMBO_ADD;
+          industrySetCustomVisible(true);
+          if (cust) cust.value = "";
+          if (!skipRender) render();
+          return;
+        }
+        var matchedIdx = -1;
+        for (var i = 0; i < sel.options.length; i++) {
+          var op = sel.options[i];
+          if (op.disabled || op.value === INDUSTRY_COMBO_ADD) continue;
+          if (industryCompareKey(op.value) === industryCompareKey(v)) {
+            matchedIdx = i;
+            break;
+          }
+        }
+        if (matchedIdx >= 0) {
+          sel.selectedIndex = matchedIdx;
+          industrySetCustomVisible(false);
+          if (cust) cust.value = "";
+        } else {
+          sel.value = INDUSTRY_COMBO_ADD;
+          industrySetCustomVisible(true);
+          if (cust) cust.value = v;
+        }
+        if (!skipRender) render();
+      }
+      function rebuildIndustryCombo() {
+        var sel = document.getElementById("industry_combo");
+        if (!sel) return;
+        var hid = document.getElementById("industry");
+        var prevHid = hid ? hid.value : "";
+        var custom = loadIndustryCustomDeduped();
+        var merged = mergeIndustryOptions(INDUSTRY_BUILTIN_LIST, custom);
+        sel.innerHTML = "";
+        var oAdd = document.createElement("option");
+        oAdd.value = INDUSTRY_COMBO_ADD;
+        oAdd.textContent = "+ 追加";
+        sel.appendChild(oAdd);
+        var oSep = document.createElement("option");
+        oSep.disabled = true;
+        oSep.value = "";
+        oSep.textContent = "────────────";
+        sel.appendChild(oSep);
+        merged.forEach(function (v) {
+          var o = document.createElement("option");
+          o.value = v;
+          o.textContent = v;
+          sel.appendChild(o);
+        });
+        setIndustryValueHid(prevHid, true);
+      }
+      function initIndustryCombo() {
+        rebuildIndustryCombo();
+      }
+      function onIndustryComboChange() {
+        var sel = document.getElementById("industry_combo");
+        var hid = document.getElementById("industry");
+        var cust = document.getElementById("industry_custom");
+        if (!sel || !hid) return;
+        if (sel.value === INDUSTRY_COMBO_ADD) {
+          industrySetCustomVisible(true);
+          hid.value = cust ? normalizeIndustryText(cust.value) : "";
+        } else {
+          industrySetCustomVisible(false);
+          hid.value = sel.value;
+          if (cust) cust.value = "";
+        }
+        render();
+      }
+      function onIndustryCustomInput() {
+        var hid = document.getElementById("industry");
+        var cust = document.getElementById("industry_custom");
+        var sel = document.getElementById("industry_combo");
+        if (sel) sel.value = INDUSTRY_COMBO_ADD;
+        if (hid && cust) hid.value = normalizeIndustryText(cust.value);
+        industrySetCustomVisible(true);
+        render();
+      }
+      function addIndustryCustomToList() {
+        var cust = document.getElementById("industry_custom");
+        var norm = normalizeIndustryText(cust && cust.value);
+        if (!norm) {
+          alert("業種を入力してから一覧に追加してください");
+          if (cust) cust.focus();
+          return;
+        }
+        var custom = loadIndustryCustomDeduped();
+        var existing = mergeIndustryOptions(INDUSTRY_BUILTIN_LIST, custom);
+        if (existing.some(function (x) { return industryCompareKey(x) === industryCompareKey(norm); })) {
+          alert("この業種は既に候補にあります");
+          return;
+        }
+        custom.push(norm);
+        saveIndustryCustom(custom);
+        rebuildIndustryCombo();
+        setIndustryValueHid(norm, false);
+      }
+      const prefSelect = document.getElementById("pref");
+      const regionSel = document.getElementById("region");
+      const ol = document.getElementById("ol_nw");
+      const addrBlock = document.getElementById("addr_block");
+      const sumEl = document.getElementById("addr_summary");
+      const regLock = document.getElementById("reg_lock");
+      const out = document.getElementById("out");
+      const jsDtHint = document.getElementById("js-dt-hint");
+      function makeJsDateTime() {
+        var d = new Date();
+        return {
+          iso: d.toISOString(),
+          local_ja: d.toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "medium" }),
+          unix_ms: d.getTime(),
+          time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || null
+        };
+      }
+      function escapeHtmlHero(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+      function presetLocationLabel(v) {
+        for (var i = 0; i < PRESET_HTML.length; i++) {
+          if (PRESET_HTML[i].v === v) return PRESET_HTML[i].t;
+        }
+        return "未選択（お任せ）";
+      }
+      var HERO_PRESET_SCENE = {
+        omakase: "店舗の雰囲気は業種と参照LPのトーンに合わせる。",
+        station: "駅からアクセスしやすい明るい街角・入口付近。利便性が伝わるが雑然としすぎない。",
+        hideaway: "静かな佇まい・路地や奥まった位置の連想。看板はさりげなく、内観の垣間見せで特別感。",
+        street: "路面店の看板と入口が分かるアングル。お店の存在が一目で伝わる。",
+        mall: "商業施設内の清潔なフロアと店舗前。安心感とついで利用のしやすさ。",
+        office: "オフィスビル内の落ち着いた玄関・受付・通路。プロフェッショナルで誠実。",
+        detached: "戸建て・一軒家型の外観。住宅街に馴染むプライベート感、過度な看板強調は避ける。",
+        studio: "作業台・手元・道具・素材。職人・スタッフの所作が伝わるクローズアップ（顔は判読しにくい構図）。",
+        online: "実店舗に依存しないサービス・ブランドイメージ。ライフスタイルや抽象モチーフも可。"
+      };
+      var HERO_NEGATIVE_DEFAULT = "混雑無秩序な街並みの主役化、過剰な文字だらけ看板、実在ブランドロゴ・固有名、特定有名人の顔、低解像度・ボケ過ぎ、不自然な人体の変形";
+      function industryHeroSubject(industry) {
+        var i = normalizeIndustryText(industry);
+        var map = {
+          "理美容室": "洗練された美容室の内観、鏡と椅子、清潔感とモダンさ",
+          "リラクゼーション・マッサージ": "リラクゼーション空間、温かみのある間接照明と落ち着いた施術室",
+          "歯科・矯正": "清潔感のあるクリニック受付〜診療室イメージ、信頼と安心",
+          "整体・鍼灸": "施術ベッドと静かな治療室、ほっとする木質とリネン",
+          "治療院・美容皮膚": "ホスピタリティのある受付・個室施術イメージ、清潔で上質",
+          "学習塾・習い事": "明るい教室・学習机・教材が整った前向きな学習空間",
+          "飲食店": "料理の魅力と温かみのある店内またはダイニングの雰囲気",
+          "不動産": "明るく誠実な相談スペースまたはモデルルームの上品さ",
+          "EC・通販": "商品が映えるシンプルなスタイリング、ライフスタイルショット",
+          "フィットネス・ジム": "明るく活力のあるトレーニング空間、器具と動きの連想",
+          "ペット・動物": "清潔で安心感のあるペットサービス空間、動物との穏やかな触れ合いのイメージ",
+          "士業・コンサル": "きちんとした執務・相談空間、信頼感と知的な落ち着き",
+          "製造・ものづくり": "工房・ライン・職人の手元、品質と技術が伝わる現場感"
+        };
+        for (var k in map) {
+          if (Object.prototype.hasOwnProperty.call(map, k) && industryCompareKey(k) === industryCompareKey(i)) return map[k];
+        }
+        return i + " の業態に合う店舗・サービスシーン（具体的人物は避け、空間・モノ中心）";
+      }
+      function heroWorldviewPhrase(chip) {
+        if (!chip) return "全体として自然で誠実なトーン";
+        if (chip === "落ち着き") return "落ち着いた低彩度、柔らかい自然光、余白多め";
+        if (chip === "上質") return "上質な素材感（木・布・石）、品のある照明、過度な装飾は避ける";
+        if (chip === "明るい・親しみ") return "明るい自然光、親しみやすい暖色系アクセント";
+        return "全体として自然で誠実なトーン";
+      }
+      function heroAudiencePhrase(aud) {
+        if (aud === "affluent") return "ターゲットは余裕のある層：安っぽさを避け、品位を感じさせる";
+        if (aud === "general") return "幅広い世帯に安心感：派手すぎず親しみやすさ優先";
+        return "";
+      }
+      function heroRegionPhrase(region, onlineNw) {
+        if (onlineNw) return "オンライン全国想定：地域固有名所は避け汎用的な日本の文脈";
+        if (region === "オンライン全国") return "地域ランドマークは避け、汎用的な日本の文脈";
+        if (region) return "空気感は「" + region + "」想定（名所の固有名は入れない）";
+        return "";
+      }
+      function buildHeroPromptTriplet(company, context) {
+        var subj = industryHeroSubject(context.industry);
+        var preset = context.preset_location || "omakase";
+        var scene = HERO_PRESET_SCENE[preset] || HERO_PRESET_SCENE.omakase;
+        var light = heroWorldviewPhrase(context.worldview_chip);
+        var aud = heroAudiencePhrase(context.audience);
+        var reg = heroRegionPhrase(context.region, !!company.online_nationwide);
+        var ref = (context.reference_url || "").trim()
+          ? "参照LPの世界観・配色に近いクリーンな構図。"
+          : "";
+        var free = (context.free_note || "").trim();
+        var freebit = free ? " メモ（反映）: " + free.slice(0, 100) : "";
+        var commonTail = light + "。" + reg + (aud ? "。" + aud : "") + (ref ? " " + ref : "") + freebit + " 日本人向けサービスLP。テキスト（見出し）を載せやすい余白。実在の特定建物・チェーンロゴ・固有名は含めない。";
+        var balanced = "【LPヒーロー・バランス案】 " + subj + " " + scene + " " + commonTail;
+        var interior = "【LPヒーロー・内観主体】 店内・サービス空間の魅力を広角で。 " + subj + " " + scene + " " + commonTail;
+        var exterior = "【LPヒーロー・外観・入口】 所在地と入りやすさが伝わる構図。 " + scene + " " + light + "。" + reg + (aud ? "。" + aud : "") + " " + subj + "に合う外装・玄関イメージ。テキスト余白あり。";
+        var order;
+        if (preset === "street" || preset === "station" || preset === "mall") order = [exterior, balanced, interior];
+        else if (preset === "studio" || preset === "hideaway" || preset === "office" || preset === "detached") order = [interior, balanced, exterior];
+        else order = [balanced, interior, exterior];
+        var primary_angle = order[0].indexOf("内観") >= 0 ? "interior" : (order[0].indexOf("外観") >= 0 ? "exterior" : "balanced");
+        return { prompt_candidates: order, primary_angle: primary_angle };
+      }
+      function heroPrimaryAngleJa(angle) {
+        if (angle === "interior") return "内観・空間優先";
+        if (angle === "exterior") return "外観・入口優先";
+        return "バランス";
+      }
+      function buildHeroImageBrief(company, context) {
+        var preset = context.preset_location || "omakase";
+        var tri = buildHeroPromptTriplet(company, context);
+        var summary = "業種「" + normalizeIndustryText(context.industry) + "」・立地「" + presetLocationLabel(preset) + "」・世界観「" + (context.worldview_chip || "お任せ") + "」に基づくヒーロー案。";
+        return {
+          version: 1,
+          summary: summary,
+          primary_angle: tri.primary_angle,
+          preset_location: preset,
+          prompt_candidates: tri.prompt_candidates,
+          negative_hints: HERO_NEGATIVE_DEFAULT,
+          axes: {
+            reference_lp_url: (context.reference_url || "").trim() || null,
+            region_hint: context.region || null,
+            audience: context.audience || "omakase"
+          }
+        };
+      }
+      function updateHeroBriefPanel(company, context) {
+        var root = document.getElementById("hero_brief_content");
+        if (!root) return;
+        var hero = buildHeroImageBrief(company, context);
+        var h = "";
+        h += "<p class=\"hero-brief-summary\">" + escapeHtmlHero(hero.summary) + "</p>";
+        h += "<p class=\"hint\" style=\"margin:0 0 0.5rem\">優先角度: <strong>" + escapeHtmlHero(heroPrimaryAngleJa(hero.primary_angle)) + "</strong></p>";
+        hero.prompt_candidates.forEach(function (text, i) {
+          h += "<div class=\"hero-prompt-row\"><div class=\"hero-prompt-label\">案 " + (i + 1) + "</div>";
+          h += "<pre class=\"hero-prompt-pre\">" + escapeHtmlHero(text) + "</pre>";
+          h += "<button type=\"button\" class=\"ctl hero-copy\">コピー</button></div>";
+        });
+        h += "<p class=\"hero-negative\"><span class=\"lbl-row\">ネガティブ候補</span> " + escapeHtmlHero(hero.negative_hints) + "</p>";
+        root.innerHTML = h;
+      }
+      function buildExportPayload(company, context) {
+        return {
+          schema: "prompt_context_v2",
+          js_datetime: makeJsDateTime(),
+          company: company,
+          context: context,
+          hero_image: buildHeroImageBrief(company, context)
+        };
+      }
+      const demoOm = document.getElementById("demo_om");
+      const demoExtra = document.getElementById("demo_extra");
+      const rails = document.getElementById("rail");
+      const stepLabels = ["会社", "事業", "立地/地域", "顧客", "詳細"];
+
+      PREF.forEach(function (p) {
+        const o = document.createElement("option");
+        o.value = p; o.textContent = p;
+        prefSelect.appendChild(o);
+      });
+      const pg = document.getElementById("presets");
+      PRESET_HTML.forEach(function (p) {
+        const d = document.createElement("div");
+        d.className = "preset-item";
+        d.innerHTML = '<input type="radio" name="preset_location" value="' + p.v + '" id="' + p.id + '"' + (p.v === "omakase" ? " checked" : "") + ' /><label for="' + p.id + '"><strong>' + p.t + "</strong> " + p.s + "</label>";
+        pg.appendChild(d);
+      });
+
+      initIndustryCombo();
+      var industryComboEl = document.getElementById("industry_combo");
+      if (industryComboEl) industryComboEl.addEventListener("change", onIndustryComboChange);
+      var industryCustomEl = document.getElementById("industry_custom");
+      if (industryCustomEl) industryCustomEl.addEventListener("input", onIndustryCustomInput);
+      var btnIndustrySaveList = document.getElementById("btn_industry_save_list");
+      if (btnIndustrySaveList) btnIndustrySaveList.addEventListener("click", addIndustryCustomToList);
+
+      var currentStep = 1;
+      const panels = [1, 2, 3, 4, 5].map(function (n) { return document.getElementById("step-" + n); });
+      function buildRail() {
+        rails.innerHTML = "";
+        stepLabels.forEach(function (lbl, i) {
+          const n = i + 1;
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = n + " " + lbl;
+          b.setAttribute("role", "tab");
+          b.setAttribute("aria-current", n === currentStep ? "step" : "false");
+          b.setAttribute("data-step-target", n);
+          b.addEventListener("click", function () {
+            if (n < currentStep) { goTo(n); }
+          });
+          rails.appendChild(b);
+        });
+      }
+      function syncRail() {
+        Array.prototype.forEach.call(rails.querySelectorAll("button"), function (b, i) {
+          var n = i + 1;
+          b.setAttribute("aria-current", n === currentStep ? "step" : "false");
+          b.style.opacity = n > currentStep ? 0.45 : 1;
+          b.title = n < currentStep ? "このステップに戻る" : n > currentStep ? "「次へ」で進めます" : "現在地";
+        });
+      }
+      var navBack = document.getElementById("nav_back");
+      var navNext = document.getElementById("nav_next");
+      function syncStepNav() {
+        if (navBack) navBack.hidden = currentStep <= 1;
+        if (navNext) navNext.hidden = currentStep >= 5;
+      }
+      function tryGoNext() {
+        var t = currentStep + 1;
+        if (t === 2 && !document.getElementById("company_name").value.trim()) { document.getElementById("company_name").focus(); alert("会社名・店舗名を入力してください"); return; }
+        if (t === 2) {
+          var se = step1OptionalFieldErrors();
+          if (se) {
+            var fe = document.getElementById(se.focusId);
+            if (fe) fe.focus();
+            alert("Step1: " + se.msg);
+            return;
+          }
+        }
+        if (t === 3 && !document.getElementById("industry").value.trim()) {
+          var icu = document.getElementById("industry_custom");
+          if (icu && !icu.classList.contains("hidden")) icu.focus();
+          else document.getElementById("industry_combo").focus();
+          alert("業種を入力してください");
+          return;
+        }
+        if (t === 2) { applyRegionFromCompany(); }
+        if (t === 4) { updateSummary(); }
+        goTo(t);
+      }
+      function goTo(n) {
+        currentStep = n;
+        panels.forEach(function (p, i) { p.hidden = i + 1 !== n; });
+        syncRail();
+        syncStepNav();
+        if (n === 3) { updateSummary(); }
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        render();
+      }
+      if (navBack) navBack.addEventListener("click", function () { if (currentStep > 1) goTo(currentStep - 1); });
+      if (navNext) navNext.addEventListener("click", tryGoNext);
+      buildRail();
+      syncRail();
+      syncStepNav();
+
+      var MODE_LS_KEY = "lp-next-run-mode";
+      var isTestMode = false;
+      function updateModeToggleUI() {
+        var bt = document.getElementById("mode_test");
+        var bp = document.getElementById("mode_prod");
+        if (!bt || !bp) return;
+        bt.classList.toggle("is-on", isTestMode);
+        bp.classList.toggle("is-on", !isTestMode);
+        bt.setAttribute("aria-pressed", isTestMode ? "true" : "false");
+        bp.setAttribute("aria-pressed", isTestMode ? "false" : "true");
+      }
+      function applyTestModeFixtures() {
+        if (!f) return;
+        document.getElementById("company_name").value = "【テスト】デモ店舗 LP-NEXT";
+        setIndustryValueHid("リラクゼーション・マッサージ", true);
+        f.elements.org_type.value = "法人";
+        ol.checked = false;
+        addrBlock.classList.remove("hidden");
+        var pc = document.getElementById("postal_code");
+        if (pc) pc.value = "1000001";
+        prefSelect.value = "東京都";
+        f.elements.city_address.value = "千代田区千代田1-1";
+        f.elements.building.value = "テストビル 2F";
+        f.elements.company_phone.value = "";
+        f.elements.company_url.value = "";
+        if (f.elements.sns_x) f.elements.sns_x.value = "";
+        if (f.elements.sns_instagram) f.elements.sns_instagram.value = "";
+        if (f.elements.sns_other) f.elements.sns_other.value = "";
+        f.elements.reference_url.value = "";
+        regLock.checked = false;
+        var pOma = document.getElementById("p_oma");
+        if (pOma) pOma.checked = true;
+        demoOm.checked = true;
+        demoExtra.classList.add("hidden");
+        var aOm = document.getElementById("a_om");
+        if (aOm) aOm.checked = true;
+        var pr0 = document.getElementById("pr0");
+        if (pr0) pr0.checked = true;
+        var wv0 = document.getElementById("wv0");
+        if (wv0) wv0.checked = true;
+        applyRegionFromCompany();
+        updateSummary();
+        syncFloatFields(f);
+        render();
+      }
+      function setRunMode(test) {
+        isTestMode = !!test;
+        try { localStorage.setItem(MODE_LS_KEY, isTestMode ? "test" : "prod"); } catch (e) {}
+        updateModeToggleUI();
+        if (isTestMode) applyTestModeFixtures();
+        else { updateSummary(); render(); }
+      }
+      function syncModeFromStorage() {
+        try { isTestMode = localStorage.getItem(MODE_LS_KEY) === "test"; } catch (e) { isTestMode = false; }
+        updateModeToggleUI();
+      }
+      var modeTestBtn = document.getElementById("mode_test");
+      var modeProdBtn = document.getElementById("mode_prod");
+      if (modeTestBtn) modeTestBtn.addEventListener("click", function () { if (!isTestMode) setRunMode(true); });
+      if (modeProdBtn) modeProdBtn.addEventListener("click", function () { if (isTestMode) setRunMode(false); });
+
+      function mapPrefToRegion(pref) {
+        return PREF_TO_REGION[pref] || "";
+      }
+      function applyRegionFromCompany() {
+        if (ol.checked) { if (!regLock.checked) { regionSel.value = "オンライン全国"; } return; }
+        var pr = prefSelect.value;
+        if (!pr || regLock.checked) { return; }
+        var m = mapPrefToRegion(pr);
+        if (m) { regionSel.value = m; }
+      }
+      function updateSummary() {
+        var on = ol.checked; var pr = prefSelect.value; var c = f.elements.city_address.value; var b = f.elements.building.value; var n = document.getElementById("company_name").value;
+        if (on) { sumEl.innerHTML = "<strong>" + (n || "（未入力）") + "</strong> — <strong>オンライン全国</strong> 前提。下の <strong>LP 用の地域</strong> は " + (regionSel.value || "オンライン全国") + " です。住所は補足程度。"; return; }
+        var line = (pr || c || b) ? (pr + " " + c + " " + b).replace(/\s+/g, " ").trim() : "（住所未入力：地域は手で選べます）";
+        var m = mapPrefToRegion(pr) || "（都道府県を選ぶと自動）";
+        sumEl.innerHTML = "<strong>" + (n || "（社名未入力）") + "</strong> の所在地：<br>" + line + "<br><strong>LP 向けざっくり地域</strong>（流用）: " + (regionSel.value || m || "未設定") + (regLock.checked ? " <em>（自動上書きオフ）</em>" : " <em>（都道府県に連動。変更可）</em>");
+      }
+      ol.addEventListener("change", function () {
+        addrBlock.classList.toggle("hidden", ol.checked);
+        if (ol.checked) { if (!regLock.checked) { regionSel.value = "オンライン全国"; } } else { updateSummary(); }
+        render();
+      });
+      if (ol.checked) { addrBlock.classList.add("hidden"); }
+      prefSelect.addEventListener("change", function () { if (!regLock.checked) { var m = mapPrefToRegion(prefSelect.value); if (m) { regionSel.value = m; } } updateSummary(); render(); });
+      regionSel.addEventListener("change", function () { updateSummary(); render(); });
+      regLock.addEventListener("change", function () { if (!this.checked) { applyRegionFromCompany(); } updateSummary(); render(); });
+
+      demoOm.addEventListener("change", function () { demoExtra.classList.toggle("hidden", demoOm.checked); render(); });
+
+      var zipLookupMsg = document.getElementById("zip_lookup_msg");
+      var btnZipLookup = document.getElementById("btn_zip_lookup");
+      var postalInput = document.getElementById("postal_code");
+      function normalizeZipDigits(s) {
+        return (s || "").replace(/[０-９]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); }).replace(/[^0-9]/g, "");
+      }
+      function showZipMsg(text, isErr) {
+        if (!zipLookupMsg) return;
+        zipLookupMsg.textContent = text || "";
+        zipLookupMsg.classList.toggle("err", !!isErr);
+        zipLookupMsg.hidden = !text;
+      }
+      /** 返値: 都道府県が画面の PREF 一覧に無い（要手直し）とき true */
+      function applyZipResult(r) {
+        var pref = (r.address1 || "").trim();
+        var inList = PREF.indexOf(pref) !== -1;
+        if (inList) {
+          prefSelect.value = pref;
+        }
+        var line = ((r.address2 || "") + (r.address3 || "")).replace(/\s+/g, " ").trim();
+        f.elements.city_address.value = line;
+        if (!regLock.checked && inList) {
+          var m = mapPrefToRegion(pref);
+          if (m) { regionSel.value = m; }
+        }
+        updateSummary();
+        render();
+        return pref.length > 0 && !inList;
+      }
+      function lookupPostal() {
+        if (ol.checked) {
+          showZipMsg("オンライン全国のときは住所補完しません", true);
+          return;
+        }
+        var z = normalizeZipDigits(postalInput && postalInput.value);
+        showZipMsg("", false);
+        if (z.length !== 7) {
+          showZipMsg("7桁の郵便番号を入力してください", true);
+          return;
+        }
+        if (btnZipLookup) btnZipLookup.disabled = true;
+        fetch("https://zipcloud.ibsnet.co.jp/api/search?zipcode=" + encodeURIComponent(z), { method: "GET", cache: "no-store" })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (data.status !== 200) {
+              throw new Error((data.message && String(data.message)) || "検索に失敗しました");
+            }
+            if (!data.results || !data.results.length) {
+              showZipMsg("該当する住所が見つかりませんでした", true);
+              return;
+            }
+            var needPrefFix = applyZipResult(data.results[0]);
+            if (needPrefFix) {
+              showZipMsg("市区町村は補完しました。都道府県をプルダウンで合わせてください", true);
+            } else {
+              showZipMsg("住所を補完しました", false);
+              window.setTimeout(function () { if (zipLookupMsg && zipLookupMsg.textContent === "住所を補完しました") { zipLookupMsg.hidden = true; } }, 2200);
+            }
+          })
+          .catch(function (e) {
+            showZipMsg((e && e.message) ? e.message : "通信に失敗しました", true);
+          })
+          .then(function () {
+            if (btnZipLookup) btnZipLookup.disabled = false;
+          });
+      }
+      if (btnZipLookup) btnZipLookup.addEventListener("click", lookupPostal);
+      if (postalInput) {
+        postalInput.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            lookupPostal();
+          }
+        });
+      }
+
+      function bool(el) { return Boolean(el && el.checked); }
+      function val(el) { return (el && el.value) || ""; }
+      function normalizePhoneDigits(s) {
+        return (s || "").replace(/[０-９]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); }).replace(/[^\d]/g, "");
+      }
+      /** +81… を 0 始まりに寄せる（桁数はその後の検証で扱う） */
+      function digitsInternationalToJapanPhone(d) {
+        if (!d || d.length < 11 || d.indexOf("81") !== 0) return d;
+        return "0" + d.slice(2);
+      }
+      /** 空は OK。入力時は 7 桁（数字のみカウント） */
+      function validatePostalFormat(raw) {
+        var t = (raw || "").toString().trim();
+        if (!t) return "";
+        var z = normalizeZipDigits(t);
+        if (z.length !== 7) return "郵便番号は7桁の数字で入力してください（ハイフン可）";
+        return "";
+      }
+      /** 空は OK。携帯（090/080/070）、050、固定の国内 10〜11 桁などを想定した緩やかな桁・先頭チェック */
+      function validatePhoneField(raw) {
+        var t = (raw || "").toString().trim();
+        if (!t) return "";
+        var d = digitsInternationalToJapanPhone(normalizePhoneDigits(t));
+        if (d[0] !== "0") return "電話番号は 0 から始まる国内番号、または +81 から国際形式で入力してください";
+        if (d.length < 10 || d.length > 11) return "電話番号は国内で 10 桁または 11 桁の数字です（スペース・記号は除いて数えます）";
+        if (!/^0\d{9,10}$/.test(d)) return "電話番号の桁数が一致しません";
+        if (/^(\d)\1{9,10}$/.test(d)) return "電話番号の形式が正しくありません";
+        return "";
+      }
+      function absolutizeUrl(raw) {
+        var t = (raw || "").toString().trim();
+        if (!t) return null;
+        try {
+          return new URL(t.indexOf("://") === -1 ? "https://" + t : t);
+        } catch (e) {
+          return null;
+        }
+      }
+      function isReasonableHostname(h) {
+        if (!h) return false;
+        if (h === "localhost") return true;
+        if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return true;
+        return h.indexOf(".") !== -1;
+      }
+      /** 空は OK */
+      function validateUrlSyntax(raw) {
+        var t = (raw || "").toString().trim();
+        if (!t) return "";
+        var u = absolutizeUrl(t);
+        if (!u) return "自社HPのURLの形式が正しくありません";
+        if (u.protocol !== "http:" && u.protocol !== "https:") return "自社HPは http または https のURLにしてください";
+        if (!isReasonableHostname(u.hostname)) return "自社HPのホスト名が不正です";
+        return "";
+      }
+      function setFieldValidationSpan(spanId, inputId, message) {
+        var sp = document.getElementById(spanId);
+        var inp = inputId ? document.getElementById(inputId) : null;
+        if (!sp) return;
+        if (message) {
+          sp.textContent = message;
+          sp.hidden = false;
+          if (inp) inp.setAttribute("aria-invalid", "true");
+        } else {
+          sp.textContent = "";
+          sp.hidden = true;
+          if (inp) inp.removeAttribute("aria-invalid");
+        }
+      }
+      function hideUrlProbeIfInvalid(inputId, probeId) {
+        var probe = document.getElementById(probeId);
+        var inp = document.getElementById(inputId);
+        if (!probe || !inp) return;
+        if (validateUrlSyntax(inp.value)) {
+          probe.hidden = true;
+          probe.textContent = "";
+          probe.classList.remove("is-ok");
+        }
+      }
+      function updateStep1ValidationUI() {
+        setFieldValidationSpan("val_postal", "postal_code", validatePostalFormat(postalInput && postalInput.value));
+        setFieldValidationSpan("val_phone", "company_phone", validatePhoneField(f.elements.company_phone && f.elements.company_phone.value));
+        setFieldValidationSpan("val_url", "company_url", validateUrlSyntax(f.elements.company_url && f.elements.company_url.value));
+        setFieldValidationSpan("val_sns_x", "sns_x", validateUrlSyntax(document.getElementById("sns_x") && document.getElementById("sns_x").value));
+        setFieldValidationSpan("val_sns_instagram", "sns_instagram", validateUrlSyntax(document.getElementById("sns_instagram") && document.getElementById("sns_instagram").value));
+        setFieldValidationSpan("val_sns_other", "sns_other", validateUrlSyntax(document.getElementById("sns_other") && document.getElementById("sns_other").value));
+        hideUrlProbeIfInvalid("company_url", "url_probe_msg");
+        hideUrlProbeIfInvalid("sns_x", "sns_x_probe");
+        hideUrlProbeIfInvalid("sns_instagram", "sns_instagram_probe");
+        hideUrlProbeIfInvalid("sns_other", "sns_other_probe");
+      }
+      function step1OptionalFieldErrors() {
+        var a = validatePostalFormat(postalInput && postalInput.value);
+        if (a) return { msg: a, focusId: "postal_code" };
+        a = validatePhoneField(f.elements.company_phone && f.elements.company_phone.value);
+        if (a) return { msg: a, focusId: "company_phone" };
+        a = validateUrlSyntax(f.elements.company_url && f.elements.company_url.value);
+        if (a) return { msg: a, focusId: "company_url" };
+        a = validateUrlSyntax(document.getElementById("sns_x") && document.getElementById("sns_x").value);
+        if (a) return { msg: "X（SNS）: " + a, focusId: "sns_x" };
+        a = validateUrlSyntax(document.getElementById("sns_instagram") && document.getElementById("sns_instagram").value);
+        if (a) return { msg: "Instagram: " + a, focusId: "sns_instagram" };
+        a = validateUrlSyntax(document.getElementById("sns_other") && document.getElementById("sns_other").value);
+        if (a) return { msg: "その他 SNS: " + a, focusId: "sns_other" };
+        return null;
+      }
+      var urlProbeTimers = {};
+      function scheduleUrlReachabilityProbe(inputId, probeId) {
+        var el = document.getElementById(probeId);
+        var inp = document.getElementById(inputId);
+        if (!el || !inp) return;
+        if (urlProbeTimers[inputId]) clearTimeout(urlProbeTimers[inputId]);
+        if (validateUrlSyntax(inp.value) || !inp.value.trim()) {
+          el.hidden = true;
+          el.textContent = "";
+          el.classList.remove("is-ok");
+          return;
+        }
+        urlProbeTimers[inputId] = setTimeout(function () { runUrlReachabilityProbe(inputId, probeId); }, 450);
+      }
+      function runUrlReachabilityProbe(inputId, probeId) {
+        var el = document.getElementById(probeId);
+        var inp = document.getElementById(inputId);
+        if (!el || !inp) return;
+        if (validateUrlSyntax(inp.value) || !inp.value.trim()) {
+          el.hidden = true;
+          return;
+        }
+        var u = absolutizeUrl(inp.value.trim());
+        if (!u) return;
+        var urlStr = u.href;
+        el.hidden = false;
+        el.classList.remove("is-ok");
+        el.textContent = "リンク確認中…";
+        var ac = new AbortController();
+        var tid = setTimeout(function () { ac.abort(); }, 10000);
+        fetch(urlStr, { method: "HEAD", mode: "cors", redirect: "follow", cache: "no-store", signal: ac.signal })
+          .then(function (res) {
+            clearTimeout(tid);
+            if (res.ok) {
+              el.textContent = "HEAD で応答あり（リンク先は応答しています）。本文は閲覧中のブラウザからは読めません。";
+              el.classList.add("is-ok");
+            } else {
+              el.textContent = "HTTP " + res.status + " — 無効・ブロックの可能性があります。";
+              el.classList.remove("is-ok");
+            }
+          })
+          .catch(function () {
+            clearTimeout(tid);
+            el.textContent = "閲覧中のブラウザから応答を確認できません（CORS 等で遮断されることがあります）。形式の検証のみ行います。";
+            el.classList.remove("is-ok");
+          });
+      }
+      function wireUrlReachabilityProbe(inputId, probeId) {
+        var inp = document.getElementById(inputId);
+        if (!inp) return;
+        inp.addEventListener("input", function () { scheduleUrlReachabilityProbe(inputId, probeId); });
+        inp.addEventListener("blur", function () {
+          if (urlProbeTimers[inputId]) clearTimeout(urlProbeTimers[inputId]);
+          runUrlReachabilityProbe(inputId, probeId);
+        });
+      }
+      wireUrlReachabilityProbe("company_url", "url_probe_msg");
+      wireUrlReachabilityProbe("sns_x", "sns_x_probe");
+      wireUrlReachabilityProbe("sns_instagram", "sns_instagram_probe");
+      wireUrlReachabilityProbe("sns_other", "sns_other_probe");
+      function syncFloatFields(root) {
+        var scope = root && root.querySelectorAll ? root : document;
+        scope.querySelectorAll(".field-float").forEach(function (w) {
+          if (w.classList.contains("industry-field")) {
+            var ih = w.querySelector('input[name="industry"]');
+            w.classList.toggle("is-filled", !!(ih && ih.value && String(ih.value).trim() !== ""));
+            return;
+          }
+          var el = w.querySelector("input, select, textarea");
+          if (!el) return;
+          if (el.tagName === "SELECT") {
+            w.classList.toggle("is-filled", el.value !== "");
+          } else {
+            w.classList.toggle("is-filled", el.value != null && String(el.value).trim() !== "");
+          }
+        });
+      }
+      function gather() {
+        const fd = new FormData(f);
+        const pre = f.querySelector('input[name="preset_location"]:checked');
+        const pr = f.querySelector('input[name="price_display"]:checked');
+        const wv = f.querySelector('input[name="worldview_chip"]:checked');
+        const company = {
+          name: (fd.get("company_name") || "").toString().trim(),
+          org_type: (fd.get("org_type") || "").toString().trim() || null,
+          online_nationwide: bool(ol),
+          postal_code: (fd.get("postal_code") || "").toString().trim() || null,
+          prefecture: (fd.get("prefecture") || "").toString().trim() || null,
+          city_address: (fd.get("city_address") || "").toString().trim() || null,
+          building: (fd.get("building") || "").toString().trim() || null,
+          phone: (fd.get("company_phone") || "").toString().trim() || null,
+          company_url: (fd.get("company_url") || "").toString().trim() || null,
+          sns_x: (fd.get("sns_x") || "").toString().trim() || null,
+          sns_instagram: (fd.get("sns_instagram") || "").toString().trim() || null,
+          sns_other: (fd.get("sns_other") || "").toString().trim() || null
+        };
+        const context = {
+          reference_url: (fd.get("reference_url") || "").toString().trim() || null,
+          industry: (fd.get("industry") || "").toString().trim(),
+          preset_location: pre ? pre.value : "omakase",
+          region: (fd.get("region") || "").toString().trim() || null,
+          region_lock_autofill: bool(regLock),
+          audience: (fd.get("audience") || "omakase").toString(),
+          demographics_omakase: bool(demoOm),
+          female_pct: bool(demoOm) ? null : parseInt(f.querySelector('input[name="female_pct"]').value, 10) || null,
+          age_band: bool(demoOm) ? null : val(f.querySelector('select[name="age_band"]')),
+          worldview_chip: wv && wv.value ? wv.value : null,
+          price_display: pr ? pr.value : "omakase",
+          compliance_note: (fd.get("compliance_note") || "").toString().trim() || null,
+          palette_ref_url: (fd.get("palette_ref_url") || "").toString().trim() || null,
+          free_note: (fd.get("free_note") || "").toString().trim() || null
+        };
+        if (!company.name) { return { _error: "Step1: 会社名・店舗名を入力してください" }; }
+        var errZip = validatePostalFormat((fd.get("postal_code") || "").toString());
+        if (errZip) { return { _error: "Step1: " + errZip }; }
+        var errPhone = validatePhoneField((fd.get("company_phone") || "").toString());
+        if (errPhone) { return { _error: "Step1: " + errPhone }; }
+        var errUrl = validateUrlSyntax((fd.get("company_url") || "").toString());
+        if (errUrl) { return { _error: "Step1: " + errUrl }; }
+        var errSnsX = validateUrlSyntax((fd.get("sns_x") || "").toString());
+        if (errSnsX) { return { _error: "Step1: SNS（X）: " + errSnsX }; }
+        var errSnsIg = validateUrlSyntax((fd.get("sns_instagram") || "").toString());
+        if (errSnsIg) { return { _error: "Step1: SNS（Instagram）: " + errSnsIg }; }
+        var errSnsO = validateUrlSyntax((fd.get("sns_other") || "").toString());
+        if (errSnsO) { return { _error: "Step1: SNS（その他）: " + errSnsO }; }
+        if (!context.industry) { return { _error: "Step2: 業種を入力してください" }; }
+        return { company: company, context: context };
+      }
+      function render() {
+        syncFloatFields(f);
+        updateStep1ValidationUI();
+        const o = gather();
+        if (o._error) {
+          out.textContent = "// " + o._error;
+          if (jsDtHint) { jsDtHint.textContent = ""; jsDtHint.hidden = true; }
+          var hbErr = document.getElementById("hero_brief_content");
+          if (hbErr) hbErr.innerHTML = "<p class=\"hint\">フォームが揃うと、ヒーロー用プロンプト案がここに表示されます。</p>";
+          return;
+        }
+        updateHeroBriefPanel(o.company, o.context);
+        const payload = buildExportPayload(o.company, o.context);
+        out.textContent = JSON.stringify(payload, null, 2);
+        if (jsDtHint) {
+          var dt = payload.js_datetime;
+          jsDtHint.textContent = "JSON 更新（端末）: " + (dt && dt.local_ja ? dt.local_ja : "") + " ・ " + (dt && dt.iso ? dt.iso : "");
+          jsDtHint.hidden = false;
+        }
+      }
+      f.addEventListener("input", render);
+      f.addEventListener("change", render);
+      var heroBriefBlock = document.getElementById("hero_brief_block");
+      if (heroBriefBlock) {
+        heroBriefBlock.addEventListener("click", function (ev) {
+          var btn = ev.target.closest && ev.target.closest("button.hero-copy");
+          if (!btn) return;
+          var row = btn.closest(".hero-prompt-row");
+          var pre = row && row.querySelector(".hero-prompt-pre");
+          if (!pre) return;
+          var text = pre.textContent;
+          navigator.clipboard.writeText(text).then(function () {
+            var prev = btn.textContent;
+            btn.textContent = "コピー済";
+            setTimeout(function () { btn.textContent = prev; }, 1200);
+          });
+        });
+      }
+      document.getElementById("btn_open_ai_review").addEventListener("click", function () {
+        const o = gather();
+        if (o._error) { alert(o._error); return; }
+        try {
+          sessionStorage.setItem(CONTEXT_HANDOFF_SS, JSON.stringify(buildExportPayload(o.company, o.context)));
+        } catch (e) {
+          alert("引き継ぎ用の一時保存に失敗しました（ストレージ拒否など）");
+          return;
+        }
+        window.location.href = "lp_ai_image_review.html";
+      });
+      document.getElementById("btn_copy").addEventListener("click", function () {
+        const o = gather();
+        if (o._error) { alert(o._error); return; }
+        navigator.clipboard.writeText(JSON.stringify(buildExportPayload(o.company, o.context), null, 2)).then(function () {
+          var b = document.getElementById("copied");
+          b.classList.add("on");
+          setTimeout(function () { b.classList.remove("on"); }, 2000);
+        });
+      });
+      document.getElementById("btn_dl").addEventListener("click", function () {
+        const o = gather();
+        if (o._error) { alert(o._error); return; }
+        const blob = new Blob([JSON.stringify(buildExportPayload(o.company, o.context), null, 2)], { type: "application/json" });
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "prompt-context.json";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+      document.getElementById("btn_save").addEventListener("click", function () {
+        const o = gather();
+        if (o._error) { alert(o._error); return; }
+        try { localStorage.setItem(LS, JSON.stringify(o)); } catch (e) { alert("保存に失敗"); return; }
+        alert("閲覧中のブラウザに保存しました（Web サーバーには送っていません）");
+      });
+      function applyPayloadFromObject(p) {
+        if (!p || typeof p !== "object") { alert("JSON が空です"); return; }
+        var c = p.company, x = p.context;
+        if (!c || !x) { alert("company / context がある prompt_context 形式のJSONが必要です。"); return; }
+        document.getElementById("company_name").value = c.name || "";
+        f.elements.org_type.value = c.org_type || "";
+        ol.checked = !!c.online_nationwide;
+        addrBlock.classList.toggle("hidden", ol.checked);
+        f.elements.postal_code.value = c.postal_code || "";
+        prefSelect.value = c.prefecture || "";
+        f.elements.city_address.value = c.city_address || "";
+        f.elements.building.value = c.building || "";
+        f.elements.company_phone.value = c.phone || "";
+        f.elements.company_url.value = c.company_url || "";
+        if (f.elements.sns_x) f.elements.sns_x.value = c.sns_x || "";
+        if (f.elements.sns_instagram) f.elements.sns_instagram.value = c.sns_instagram || "";
+        if (f.elements.sns_other) f.elements.sns_other.value = c.sns_other || "";
+        f.elements.reference_url.value = x.reference_url || "";
+        setIndustryValueHid(x.industry || "", true);
+        regionSel.value = x.region || "";
+        regLock.checked = !!x.region_lock_autofill;
+        f.elements.compliance_note.value = x.compliance_note || "";
+        document.getElementById("palette_ref_url").value = x.palette_ref_url || "";
+        f.elements.free_note.value = x.free_note || "";
+        if (x.female_pct != null) f.querySelector('input[name="female_pct"]').value = x.female_pct;
+        if (x.age_band) f.querySelector('select[name="age_band"]').value = x.age_band;
+        demoOm.checked = x.demographics_omakase !== false;
+        demoExtra.classList.toggle("hidden", demoOm.checked);
+        function setRadio(n, v) {
+          f.querySelectorAll('input[name="' + n + '"]').forEach(function (el) { el.checked = (el.value === (v == null ? "" : String(v))); });
+        }
+        setRadio("preset_location", x.preset_location || "omakase");
+        setRadio("audience", x.audience || "omakase");
+        setRadio("worldview_chip", (x.worldview_chip != null && x.worldview_chip !== "") ? x.worldview_chip : "");
+        setRadio("price_display", x.price_display || "omakase");
+        goTo(1);
+        updateSummary();
+        render();
+      }
+      document.getElementById("btn_load").addEventListener("click", function () {
+        var s; try { s = localStorage.getItem(LS); } catch (e) { return; }
+        if (!s) { alert("保存が見つかりません"); return; }
+        var p; try { p = JSON.parse(s); } catch (e) { alert("保存データの解析に失敗しました"); return; }
+        applyPayloadFromObject(p);
+      });
+      document.getElementById("btn_import_json").addEventListener("click", function () {
+        document.getElementById("import_json_file").click();
+      });
+      document.getElementById("import_json_file").addEventListener("change", function (ev) {
+        var file = ev.target.files && ev.target.files[0];
+        ev.target.value = "";
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          try {
+            var p = JSON.parse(reader.result);
+            applyPayloadFromObject(p);
+          } catch (err) {
+            alert("JSON の解析に失敗しました");
+          }
+        };
+        reader.onerror = function () { alert("ファイルの読み込みに失敗しました"); };
+        reader.readAsText(file, "UTF-8");
+      });
+      document.getElementById("btn_reset").addEventListener("click", function (e) {
+        e.preventDefault();
+        f.reset();
+        document.getElementById("p_oma").checked = true; document.getElementById("a_om").checked = true; document.getElementById("pr0").checked = true; document.getElementById("wv0").checked = true;
+        ol.checked = false; addrBlock.classList.remove("hidden"); regLock.checked = false; demoOm.checked = true; demoExtra.classList.add("hidden");
+        goTo(1);
+        updateSummary();
+        render();
+      });
+      function ttpMeasure(wrap) {
+        var bubble = wrap.querySelector(".ttp-bubble");
+        if (!bubble) return { w: 200, h: 48 };
+        var c = bubble.cloneNode(true);
+        c.removeAttribute("id");
+        c.setAttribute("aria-hidden", "true");
+        c.style.cssText = "position:fixed;left:0;top:0;visibility:hidden;display:block;z-index:0;min-width:11.5rem;max-width:min(19rem, calc(100vw - 1.25rem));padding:0.5rem 0.65rem;font-size:0.78rem;line-height:1.45;box-sizing:border-box;width:max-content;max-width:min(19rem, calc(100vw - 1.25rem));";
+        document.body.appendChild(c);
+        var w = c.offsetWidth, h = c.offsetHeight;
+        document.body.removeChild(c);
+        if (!w) w = 200;
+        if (!h) h = 40;
+        return { w: w, h: h };
+      }
+      function ttpViewport() {
+        var vv = window.visualViewport;
+        if (vv) {
+          return { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: vv.height };
+        }
+        return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+      }
+      function ttpClearFixed(wrap) {
+        var bubble = wrap && wrap.querySelector(".ttp-bubble");
+        if (!bubble) return;
+        bubble.classList.remove("ttp-bubble--fixed", "ttp-scroll");
+        bubble.style.removeProperty("left");
+        bubble.style.removeProperty("top");
+        bubble.style.removeProperty("max-height");
+        if (wrap) {
+          wrap.classList.remove("ttp-below");
+          wrap.style.setProperty("--ttp-shift", "0px");
+        }
+      }
+      function positionTtp(wrap) {
+        if (!wrap) return;
+        var btn = wrap.querySelector(".ttp");
+        var bubble = wrap.querySelector(".ttp-bubble");
+        if (!btn || !bubble) return;
+        ttpClearFixed(wrap);
+        var dim = ttpMeasure(wrap);
+        var w = dim.w, h0 = dim.h;
+        var b = btn.getBoundingClientRect();
+        if (b.width < 0.1 && b.height < 0.1) return;
+        var gap = 6, m = 8;
+        var vp = ttpViewport();
+        var vLeft = vp.left, vTop = vp.top, vW = vp.width, vH = vp.height;
+        var vRight = vLeft + vW, vBottom = vTop + vH;
+        var capAbove = b.top - vTop - m - gap;
+        var capBelow = vBottom - b.bottom - m - gap;
+        if (capAbove < 0) capAbove = 0;
+        if (capBelow < 0) capBelow = 0;
+        var placeBelow;
+        if (h0 <= capAbove) {
+          placeBelow = false;
+        } else if (h0 <= capBelow) {
+          placeBelow = true;
+        } else {
+          placeBelow = capBelow > capAbove;
+        }
+        if (placeBelow) wrap.classList.add("ttp-below");
+        var hBox = h0;
+        if (h0 > (placeBelow ? capBelow : capAbove)) {
+          hBox = Math.max(48, placeBelow ? capBelow : capAbove);
+        }
+        var useScroll = hBox < h0;
+        var cx = b.left + b.width * 0.5;
+        var left = Math.round(cx - w * 0.5);
+        if (left < vLeft + m) left = Math.round(vLeft + m);
+        if (left + w > vRight - m) left = Math.round(vRight - m - w);
+        var top;
+        if (placeBelow) {
+          top = Math.round(b.bottom + gap);
+          if (top + hBox > vBottom - m) {
+            hBox = Math.max(48, vBottom - m - top);
+            useScroll = hBox < h0;
+          }
+        } else {
+          top = Math.round(b.top - gap - hBox);
+          if (top < vTop + m) {
+            top = Math.round(vTop + m);
+            hBox = Math.max(48, b.top - gap - top);
+            useScroll = hBox < h0;
+          }
+        }
+        if (vBottom - m - (top + hBox) < 0) {
+          hBox = Math.max(48, vBottom - m - top);
+          useScroll = hBox < h0;
+        }
+        bubble.classList.add("ttp-bubble--fixed");
+        bubble.style.setProperty("left", left + "px");
+        bubble.style.setProperty("top", top + "px");
+        if (useScroll) {
+          bubble.classList.add("ttp-scroll");
+          bubble.style.setProperty("max-height", Math.round(hBox) + "px");
+        }
+      }
+      function ttpVvRefresh() {
+        document.querySelectorAll(".ttp-wrap").forEach(function (w) {
+          if (w.classList.contains("is-open") || w.matches(":hover")) positionTtp(w);
+        });
+      }
+      document.querySelectorAll(".ttp-wrap").forEach(function (wrap) {
+        var b = wrap.querySelector(".ttp");
+        if (!b) return;
+        wrap.addEventListener("mouseenter", function () { positionTtp(wrap); });
+        wrap.addEventListener("focusin", function () { positionTtp(wrap); });
+        wrap.addEventListener("mouseleave", function () {
+          if (!wrap.classList.contains("is-open")) ttpClearFixed(wrap);
+        });
+        wrap.addEventListener("focusout", function () {
+          setTimeout(function () {
+            if (wrap.classList.contains("is-open")) return;
+            if (wrap.contains(document.activeElement)) return;
+            ttpClearFixed(wrap);
+          }, 0);
+        });
+        b.addEventListener("click", function (e) {
+          e.stopPropagation();
+          e.preventDefault();
+          document.querySelectorAll(".ttp-wrap.is-open").forEach(function (o) {
+            if (o === wrap) return;
+            o.classList.remove("is-open");
+            var t2 = o.querySelector(".ttp");
+            if (t2) t2.setAttribute("aria-expanded", "false");
+            ttpClearFixed(o);
+          });
+          var on = !wrap.classList.contains("is-open");
+          wrap.classList.toggle("is-open", on);
+          b.setAttribute("aria-expanded", on ? "true" : "false");
+          if (on) { positionTtp(wrap); } else { ttpClearFixed(wrap); }
+        });
+        b.setAttribute("aria-expanded", "false");
+        b.setAttribute("aria-controls", b.nextElementSibling && b.nextElementSibling.id ? b.nextElementSibling.id : "");
+      });
+      var ttpRz;
+      window.addEventListener("resize", function () {
+        clearTimeout(ttpRz);
+        ttpRz = setTimeout(ttpVvRefresh, 80);
+      });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", function () {
+          clearTimeout(ttpRz);
+          ttpRz = setTimeout(ttpVvRefresh, 40);
+        });
+        window.visualViewport.addEventListener("scroll", function () {
+          clearTimeout(ttpRz);
+          ttpRz = setTimeout(ttpVvRefresh, 40);
+        });
+      }
+      var ttpSt;
+      window.addEventListener("scroll", function () { clearTimeout(ttpSt); ttpSt = setTimeout(ttpVvRefresh, 32); }, true);
+      document.addEventListener("click", function (ev) {
+        if (!ev.target.closest(".ttp-wrap")) {
+          document.querySelectorAll(".ttp-wrap.is-open").forEach(function (o) {
+            o.classList.remove("is-open");
+            var t = o.querySelector(".ttp");
+            if (t) t.setAttribute("aria-expanded", "false");
+            ttpClearFixed(o);
+          });
+        }
+      });
+      document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape") {
+          document.querySelectorAll(".ttp-wrap.is-open").forEach(function (o) {
+            o.classList.remove("is-open");
+            var t = o.querySelector(".ttp");
+            if (t) t.setAttribute("aria-expanded", "false");
+            ttpClearFixed(o);
+          });
+        }
+      });
+      syncModeFromStorage();
+      if (isTestMode) applyTestModeFixtures();
+      else { updateSummary(); render(); }
+    })();
+  </script>
+</body>
+</html>

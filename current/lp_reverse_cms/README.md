@@ -9,6 +9,8 @@
 
 **公式リポジトリ:** [BinaryTraffic/lp-next](https://github.com/BinaryTraffic/lp-next)（クローン URL は末尾 `.git` 可）
 
+**v1.2.0 以降（S2 先立ち）:** AI 画像候補出し（スプリント S2）の前に、**プロンプトコレクション管理**（プロンプト文の蓄積・版管理・意図・業種との紐づけ）を補う方針。理由と全体像は [プロジェクトジャーナル（JOURNAL.md）](../JOURNAL.md) を参照。
+
 ---
 
 ## Git
@@ -72,13 +74,17 @@ lp_reverse_cms/
 │   ├── LpOutputAudit.php  # 生成 HTML の未置換 URL スキャン
 │   ├── LpAnalyzer.php     # セクション・要素抽出、data-lp-id 付与
 │   ├── LpMapper.php       # セクション分類・UI メタデータ
-│   └── LpGenerator.php    # 構造 + 顧客データ → HTML、asset_map 適用
+│   ├── LpGenerator.php    # 構造 + 顧客データ → HTML、asset_map 適用
+│   └── env_load.php       # `.env` 読込（OpenAI 中継などで使用）
 │
 ├── store/
 │   ├── fetch_lp.php       # POST: URL → HTML 取得 + アセット DL
 │   ├── analyze_lp.php     # POST: fetched.html → lp_structure.json
 │   ├── save_client.php    # POST: client_data.json 保存
 │   ├── generate_lp.php    # POST: output/index.html 生成 + output_unreplaced.json
+│   ├── get_lp_structure.php # GET: data/lp_structure.json をそのまま返す（data/ 直リンク 403 回避用）
+│   ├── openai_image_proxy.php # POST: OpenAI Images API 中継（lp_ai_image_review.html 用）
+│   ├── ai_image_proxy_status.php # GET: サーバー側キー有無・クライアントキー許可（UI 用 JSON）
 │   └── debug.php          # GET: 未取得・未置換・fetch 失敗などの JSON
 │
 ├── template/
@@ -89,7 +95,7 @@ lp_reverse_cms/
 │   ├── css/index.css
 │   └── js/index.js
 │
-├── data/                  # 作業データ（.htaccess で直アクセス制限）
+├── data/                  # 作業データ（.htaccess で *.json 直アクセス制限 → 403。参照は get_lp_structure.php）
 │   ├── source.html        # 取得直後の HTML
 │   ├── fetched.html       # 解析入力（通常は source と同一）
 │   ├── source_url.txt     # 最終リダイレクト後 URL
@@ -107,6 +113,8 @@ lp_reverse_cms/
         ├── js/
         └── fonts/
 ```
+
+**OpenAI 中継:** `store/openai_image_proxy.php` は `OPENAI_API_KEY` をサーバー側（`.env` または Web サーバーの環境変数）から優先します。手順はリポジトリ内の `.env.example` を参照。`OPENAI_DENY_CLIENT_KEY=1` にすると本文の `api_key` を拒否します。
 
 ---
 
