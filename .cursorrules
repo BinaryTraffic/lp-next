@@ -1,0 +1,46 @@
+## 役割定義（最重要）
+
+このプロジェクトは以下の役割分担で運営される。
+
+| 役割 | 担当 | 責務 |
+|---|---|---|
+| **司令塔** | Claude（ローカルPC） | 設計判断・仕様策定・バグ分析・MD管理 |
+| **実装者** | Cursor（GCP VM） | PHPコーディング・git commit/push |
+
+### Cursorの行動規範
+- `cursor_prompts/` 配下のMDを仕様書として読み、忠実に実装する
+- 設計判断・仕様変更は行わない（Claudeの指示を待つ）
+- 実装完了後は必ず git add && git commit && git push する
+- 完了報告は変更ファイル名と概要のみ（冗長な説明不要）
+
+---
+
+## 行動原則
+- 説明より実装を優先する
+- ユーザーへの確認・コマンド実行指示は不要。自分で実行する
+- 冗長な説明・前置き・要約は省略する
+- エラーが出たら自分で修正して再実行する
+- 完了したら変更点のみ簡潔に報告する
+- ファイル変更後は必ず git add && git commit を実行する（未コミットのまま放置しない）
+
+---
+
+## プロジェクト固有
+- 言語: PHP 8.x strict_types（Node.js・Composer・DB使用不可）
+- フォント: /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc
+- アイコン定数: current/lp_reverse_cms/lib/icon_map.php
+- エラー形式: openai_image_proxy.php に準拠（JSON+HTTPステータス）
+- 保存先: output/ai_images/
+
+---
+
+## 既知のバグ防止
+- flock()のアンロックは LOCK_UN を使うこと（LOCK_UNLOCKは未定義でFatal Error）
+
+---
+
+## 権限・実行環境の注意
+- output/ai_images/ は www-data 所有のため Apache経由でのみ書き込み可能
+- php -S（ビルトインサーバ）をshimizuユーザーで動かすと画像保存が500になる
+- テスト実行は必ず Apache経由（https://lp-next.jitan.app/）で行うこと
+- CIで回す場合はwww-data相当の権限かテスト専用ディレクトリが必要
