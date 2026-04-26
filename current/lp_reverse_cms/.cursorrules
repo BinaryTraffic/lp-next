@@ -14,3 +14,8 @@
 ## 既知のバグ防止
 - flock()のアンロックは LOCK_UN を使うこと（LOCK_UNLOCKは未定義でFatal Error）
 - ファイル変更後は必ず git add && git commit を実行する
+## 権限・実行環境の注意
+- output/ai_images/ は www-data 所有のため Apache経由でのみ書き込み可能
+- php -S（ビルトインサーバ）をshimizuユーザーで動かすと画像保存が500になる
+- テスト実行は必ず Apache経由（https://lp-next.jitan.app/）で行うこと
+- CIで回す場合はwww-data相当の権限かテスト専用ディレクトリが必要
