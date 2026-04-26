@@ -42,9 +42,13 @@ function composite_is_padding_pixel_gd(GdImage $im, int $x, int $y): bool
     return $r >= 245 && $g >= 245 && $b >= 245;
 }
 
+/** 行・列は中央50%ストリップのみ走査（JPEG 端のリンギングを無視） */
 function composite_row_has_content_gd(GdImage $im, int $w, int $y): bool
 {
-    for ($x = 0; $x < $w; $x++) {
+    $x0 = (int) ($w * 0.25);
+    $x1 = (int) ($w * 0.75);
+    $x1 = max($x1, $x0 + 1);
+    for ($x = $x0; $x < $x1; $x++) {
         if (!composite_is_padding_pixel_gd($im, $x, $y)) {
             return true;
         }
@@ -55,7 +59,17 @@ function composite_row_has_content_gd(GdImage $im, int $w, int $y): bool
 
 function composite_col_has_content_gd(GdImage $im, int $x, int $y0, int $y1): bool
 {
-    for ($y = $y0; $y <= $y1; $y++) {
+    $h = $y1 - $y0 + 1;
+    $ys = $y0 + (int) ($h * 0.25);
+    $ye = $y0 + (int) ($h * 0.75);
+    $ye = max($ye, $ys + 1);
+    $ys = max($y0, $ys);
+    $ye = min($y1, $ye);
+    if ($ys > $ye) {
+        $ys = $y0;
+        $ye = $y1;
+    }
+    for ($y = $ys; $y <= $ye; $y++) {
         if (!composite_is_padding_pixel_gd($im, $x, $y)) {
             return true;
         }
@@ -209,7 +223,10 @@ function composite_pixel_is_rgb_light_margin_gd(GdImage $im, int $x, int $y, int
 
 function composite_row_has_non_margin_rgb_gd(GdImage $im, int $w, int $y, int $minRgb): bool
 {
-    for ($x = 0; $x < $w; $x++) {
+    $x0 = (int) ($w * 0.25);
+    $x1 = (int) ($w * 0.75);
+    $x1 = max($x1, $x0 + 1);
+    for ($x = $x0; $x < $x1; $x++) {
         if (!composite_pixel_is_rgb_light_margin_gd($im, $x, $y, $minRgb)) {
             return true;
         }
@@ -220,7 +237,17 @@ function composite_row_has_non_margin_rgb_gd(GdImage $im, int $w, int $y, int $m
 
 function composite_col_has_non_margin_rgb_gd(GdImage $im, int $x, int $y0, int $y1, int $minRgb): bool
 {
-    for ($y = $y0; $y <= $y1; $y++) {
+    $h = $y1 - $y0 + 1;
+    $ys = $y0 + (int) ($h * 0.25);
+    $ye = $y0 + (int) ($h * 0.75);
+    $ye = max($ye, $ys + 1);
+    $ys = max($y0, $ys);
+    $ye = min($y1, $ye);
+    if ($ys > $ye) {
+        $ys = $y0;
+        $ye = $y1;
+    }
+    for ($y = $ys; $y <= $ye; $y++) {
         if (!composite_pixel_is_rgb_light_margin_gd($im, $x, $y, $minRgb)) {
             return true;
         }
