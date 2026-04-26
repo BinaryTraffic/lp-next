@@ -1,6 +1,6 @@
 # lp-next プロジェクトジャーナル
 
-最終更新：2026-04-26
+最終更新：2026-04-27
 
 ---
 
@@ -50,7 +50,7 @@
 |---|---|---|
 | 画像タイプ自動判定（Vision） | `claude_image_analyze.php` | ✅ 完成・icons検出対応済 |
 | HF FLUX画像生成（任意px） | `hf_image_proxy.php` | ✅ 完成・動作確認済 |
-| ボタン等UI画像のテキスト合成 | `image_composite.php` | 🔄 余白反映テスト中 |
+| ボタン等UI画像のテキスト合成 | `image_composite.php` | ✅ 余白検出・内側合成・アイコン対応 完成 |
 | 写真系画像の自動生成 | — | 🔲 未着手 |
 | イラスト系画像の自動生成 | — | 🔲 未着手 |
 | composite画像の分解・再合成 | — | 🔲 未着手 |
@@ -81,9 +81,23 @@
 
 ---
 
+## 既知の制限・注意事項（実装メモ）
+
+### image_composite.php 余白検出の精度限界
+
+`composite_pixel_is_rgb_light_margin_gd` は以下の2条件を「余白」と判定する：
+- 各チャンネル ≥ `minRgb`（既定 200）かつ `min(R,G,B) < nearWhiteMin`（既定 250）
+- 透過ピクセル
+
+**問題：** 余白グレーが淡い（各チャンネル ≥ 250 付近）場合、「ほぼ白」除外条件に引っかかり非余白扱いになる。  
+**回避案（未実装）：** `near_white_min` を JSON パラメータ化するか、余白色を `source_url` 四隅のサンプリングで自動決定する方式に切り替える。  
+→ 実際のLPで問題が出た時点で対処する。
+
+---
+
 ## 次のアクション
 
-- [ ] `image_composite.php` ボタンUI合成テスト完了（Cursor）
+- [ ] `claude_image_analyze.php` にパターン5〜7を追加（グラデーション/ボーダー/バッジ検出）
 - [ ] photo / illustration / composite パターンの実装
 - [ ] テスト要員の確定 → S2以降の日程設定
 
