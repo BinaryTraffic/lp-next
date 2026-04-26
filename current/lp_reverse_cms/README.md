@@ -84,6 +84,9 @@ lp_reverse_cms/
 │   ├── generate_lp.php    # POST: output/index.html 生成 + output_unreplaced.json
 │   ├── get_lp_structure.php # GET: data/lp_structure.json をそのまま返す（data/ 直リンク 403 回避用）
 │   ├── openai_image_proxy.php # POST: OpenAI Images API 中継（lp_ai_image_review.html 用）
+│   ├── image_composite.php    # POST: 背景＋テキスト座標（%）合成 JPEG → output/ai_images/
+│   ├── hf_image_proxy.php     # POST: HF Inference 画像生成 → output/ai_images/hf_*（Claude type 連携）
+│   ├── env_keys_status.php    # GET: lp_reverse_cms/.env 読込可否・主要キー有無（秘密は返さない）
 │   ├── ai_image_proxy_status.php # GET: サーバー側キー有無・クライアントキー許可（UI 用 JSON）
 │   └── debug.php          # GET: 未取得・未置換・fetch 失敗などの JSON
 │
@@ -114,7 +117,28 @@ lp_reverse_cms/
         └── fonts/
 ```
 
-**OpenAI 中継:** `store/openai_image_proxy.php` は `OPENAI_API_KEY` をサーバー側（`.env` または Web サーバーの環境変数）から優先します。手順はリポジトリ内の `.env.example` を参照。`OPENAI_DENY_CLIENT_KEY=1` にすると本文の `api_key` を拒否します。
+**OpenAI 中継:** `store/openai_image_proxy.php` は `OPENAI_API_KEY` をサーバー側から優先します。既定の定義場所は **`lp_reverse_cms/.env`**（例: `/home/lp-next/current/lp_reverse_cms/.env`）。`lib/env_load.php` が読み込みます。手順は `.env.example` を参照。`OPENAI_DENY_CLIENT_KEY=1` にすると本文の `api_key` を拒否します。**鍵の有無だけ**は `store/env_keys_status.php`（GET・秘密は返さない）で確認できます。
+
+**画像合成:** `store/image_composite.php` は `background_url`（`/output/...` のみ）と `texts`（0〜1 の `x_pct` 等）を受け取り、`output/ai_images/composed_<uniqid>.jpg` を書き出します。描画は **GD + FreeType** を優先し、不可時は **Imagick**。フォントは既定で `/usr/share/fonts/opentype/noto/NotoSansCJK-{Regular,Bold}.ttc`（GD では `.ttc:index` を自動解決）または `.env` の `IMAGE_COMPOSITE_FONT*`。
+
+**HF 画像生成:** `store/hf_image_proxy.php` は `HUGGINGFACE_API_TOKEN`（または `HF_TOKEN`）で [Inference API](https://huggingface.co/docs/api-inference) に接続し、`HF_IMAGE_MODEL`（既定 `black-forest-labs/FLUX.1-schnell`）で text-to-image します。POST の `mode`（`photo` / `illustration` / `composite` / `ui`）に応じてプロンプト接頭辞を切り替え、`prompt` と Claude の `background_description` を合成します。成功時 `{ "url": "/output/ai_images/hf_….png|jpg" }`。
+
+**Claude Vision → 置換パイプライン（想定フロー）:**
+
+```mermaid
+flowchart TD
+  CV[claude_image_analyze.php]
+  CV --> T{type}
+  T -->|ui| GC[image_composite.php]
+  T -->|photo| HF[hf_image_proxy.php]
+  T -->|illustration| HF
+  T -->|composite| HF2[hf_image_proxy.php]
+  HF2 --> GC2[image_composite.php]
+```
+
+- **ui** … 元がボタン等・テキスト座標のみ再現 → 背景はユーザー指定または単色扱いで `image_composite.php` のみでも可。
+- **photo / illustration** … `hf_image_proxy.php`（`mode` 一致、`illustration_style` は illustration 時に反映）。
+- **composite** … まず `hf_image_proxy.php` で**文字なし背景**、続けて Claude の `texts` を `image_composite.php` に渡す。
 
 ---
 

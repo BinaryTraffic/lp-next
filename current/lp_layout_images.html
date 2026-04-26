@@ -152,7 +152,7 @@
   </style>
 </head>
 <body>
-  <p class="topnav"><a href="index.html">← LP-NEXT 入口</a> · <a href="prompt_context_demo.html">店舗文脈デモ</a></p>
+  <p class="topnav"><a href="index.html">← LP-NEXT 入口</a> · <a href="lp_button_asset_tool.html">ボタン画像ツール</a> · <a href="prompt_context_demo.html">店舗文脈デモ</a></p>
   <div class="topbar">
     <h1>LP レイアウト画像リスト</h1>
     <div class="toolbar">
@@ -161,7 +161,7 @@
       <button type="button" class="ctl" id="btn_refresh_all" title="表示中のサムネイルをすべてキャッシュバイパスで再読み込み">サムネ一括更新</button>
     </div>
   </div>
-  <p class="hint"><code>lp_reverse_cms/data/lp_structure.json</code> 内の <code>type: image</code> をセクション順に一覧します。本番では <code>data/*.json</code> は <strong>.htaccess で直リンク禁止</strong>（403）のため、既定は <strong><code>store/get_lp_structure.php</code></strong> 経由で取得します。各カード右上 <strong>⟳</strong> でそのサムネのみキャッシュバイパスします。<a href="lp_ai_image_review.html">店舗文脈JSONでプロンプト付き検証（AIモード確認）</a>はこちら。</p>
+  <p class="hint"><code>lp_structure.json</code> 内の <code>type: image</code> をセクション順に一覧します（サムネ・再読込のみ）。<strong>ボタン画像の候補抽出・形状差し替え・テキスト埋め込み</strong>は <a href="lp_button_asset_tool.html">lp_button_asset_tool.html</a> で別フローとして行います。本番では <code>data/*.json</code> は .htaccess で直リンク禁止のため、既定は <code>store/get_lp_structure.php</code> 経由です。<a href="lp_ai_image_review.html">AI画像レビュー</a></p>
   <div id="meta" class="meta" hidden></div>
   <div id="err" class="err" hidden></div>
   <div id="grid" class="grid" aria-live="polite"></div>

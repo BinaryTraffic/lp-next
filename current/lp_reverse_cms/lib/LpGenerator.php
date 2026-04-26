@@ -277,6 +277,21 @@ HTML;
                     $node->setAttribute('src', $newSrc);
                 }
                 $node->setAttribute('alt', $newAlt);
+
+                $anchor = $node->parentNode;
+                while ($anchor !== null
+                    && (!($anchor instanceof DOMElement) || strtolower($anchor->tagName) !== 'a')
+                ) {
+                    $anchor = $anchor->parentNode;
+                }
+                if ($anchor instanceof DOMElement) {
+                    if (is_array($override) && isset($override['href']) && $override['href'] !== '') {
+                        $anchor->setAttribute('href', $override['href']);
+                    }
+                    if (is_array($override) && isset($override['target']) && $override['target'] !== '') {
+                        $anchor->setAttribute('target', $override['target']);
+                    }
+                }
             } else {
                 $newText = ($override !== null && isset($override['text']) && $override['text'] !== '')
                     ? $override['text']

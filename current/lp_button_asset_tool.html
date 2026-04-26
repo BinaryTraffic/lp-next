@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ボタン差し替え — LP-NEXT</title>
+  <link rel="stylesheet" href="lp_reverse_cms/store/lp_theme.css.php" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      margin: 0;
+      padding: 0 1rem 2rem;
+      color: var(--text);
+      line-height: 1.5;
+      background: var(--bg);
+      max-width: min(52rem, 100%);
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .topnav { font-size: 0.88rem; margin: 0.75rem 0 0.35rem; }
+    .topnav a { color: var(--accent); }
+    h1 { font-size: 1.15rem; margin: 0 0 0.35rem; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: flex-end; margin-bottom: 0.75rem; }
+    .toolbar label { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 0.35rem; }
+    .toolbar .float-field--toolbar { flex: 0 1 auto; width: min(20rem, 65vw); margin-bottom: 0; }
+    .toolbar .float-field--toolbar-key { width: min(11rem, 38vw); margin-bottom: 0; }
+    button.ctl {
+      font: inherit; font-size: 0.82rem; padding: 0.42rem 0.75rem; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--card); cursor: pointer; min-height: 40px;
+    }
+    button.ctl.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.ctl:disabled { opacity: 0.55; cursor: not-allowed; }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(12rem, 1fr) minmax(16rem, 1.25fr);
+      gap: 1rem;
+      align-items: start;
+    }
+    @media (max-width: 720px) { .layout { grid-template-columns: 1fr; } }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.65rem 0.75rem;
+      font-size: 0.8rem;
+    }
+    .panel h2 { font-size: 0.88rem; margin: 0 0 0.4rem; }
+    .btn-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: min(52vh, 420px); overflow: auto; }
+    .btn-row {
+      display: flex; gap: 0.5rem; align-items: center;
+      padding: 0.35rem; border-radius: 8px; border: 1px solid #dadce0; cursor: pointer;
+      text-align: left; font: inherit; background: #fafafa; width: 100%;
+    }
+    .btn-row:hover { background: #e8f0fe; border-color: var(--accent); }
+    .btn-row.is-active { outline: 2px solid var(--accent); background: #e8f0fe; }
+    .btn-row img { width: 4.5rem; height: 2.5rem; object-fit: contain; background: #eee; border-radius: 4px; flex-shrink: 0; }
+    .btn-row .meta { flex: 1; min-width: 0; font-size: 0.72rem; color: var(--muted); }
+    .btn-row .meta b { display: block; color: var(--text); font-size: 0.78rem; }
+    .tag { font-size: 0.62rem; background: #e8f0fe; color: var(--lp-accent, var(--accent)); padding: 0.08rem 0.3rem; border-radius: 4px; width: fit-content; }
+    .float-field {
+      position: relative;
+      display: block;
+      max-width: 28rem;
+      margin-bottom: 0.42rem;
+      overflow: visible;
+    }
+    .float-field--target { max-width: 10rem; }
+    .float-field input[type="text"],
+    .float-field input[type="number"],
+    .float-field input[type="url"],
+    .float-field input[type="password"],
+    .float-field textarea {
+      width: 100%;
+      font: inherit;
+      padding: 0.62rem 0.5rem 0.36rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+    }
+    .float-field textarea {
+      min-height: 5.25rem;
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      resize: vertical;
+      line-height: 1.35;
+    }
+    .float-field > label {
+      position: absolute;
+      left: 0.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.76rem;
+      color: var(--muted);
+      pointer-events: none;
+      transition: top 0.14s ease, transform 0.14s ease, color 0.14s ease, font-size 0.14s ease, padding 0.14s ease;
+      transform-origin: left center;
+      line-height: 1.2;
+      max-width: calc(100% - 1.25rem);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      z-index: 1;
+    }
+    .float-field .help-tip { pointer-events: auto; }
+    .float-field input:focus + label,
+    .float-field input:not(:placeholder-shown) + label,
+    .float-field textarea:focus + label,
+    .float-field textarea:not(:placeholder-shown) + label {
+      top: 0;
+      left: 0.42rem;
+      transform: translateY(-50%);
+      font-size: 0.62rem;
+      padding: 0 0.28rem;
+      margin-left: 0;
+      background: var(--card);
+      color: var(--accent);
+      max-width: calc(100% - 0.85rem);
+    }
+    .float-field input:focus,
+    .float-field textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .float-field input:read-only {
+      background: #f1f3f4;
+      background: color-mix(in srgb, var(--card) 88%, var(--muted));
+      cursor: default;
+    }
+    .float-field input:read-only:focus {
+      box-shadow: none;
+      border-color: var(--border);
+    }
+    .float-field--select > label {
+      top: 0;
+      left: 0.42rem;
+      transform: translateY(-50%);
+      font-size: 0.62rem;
+      padding: 0 0.28rem;
+      background: var(--card);
+      color: var(--muted);
+    }
+    .float-field--select:focus-within > label { color: var(--accent); }
+    .float-field--select select {
+      width: 100%;
+      font: inherit;
+      padding: 1rem 0.4rem 0.28rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+    }
+    .float-field--select select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .float-field--range { max-width: none; margin-bottom: 0; }
+    .float-field--range > label {
+      position: static;
+      transform: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.35rem;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 0.15rem;
+      pointer-events: auto;
+      max-width: none;
+    }
+    .float-field--range .plate-pct { color: var(--text); font-weight: 600; font-size: 0.74rem; }
+    .float-field--range input[type="range"] {
+      width: 100%;
+      padding: 0;
+      margin: 0;
+      min-height: 1.5rem;
+    }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; max-width: 16rem; align-items: start; }
+    .row2 .float-field { max-width: none; margin-bottom: 0; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
+    .status { font-size: 0.74rem; color: var(--muted); margin: 0.35rem 0; min-height: 1.2em; }
+    .preview-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-start; margin-top: 0.5rem; }
+    .preview-row figure { margin: 0; font-size: 0.7rem; color: var(--muted); }
+    .preview-row img { max-width: min(100%, 240px); max-height: 100px; object-fit: contain; border: 1px solid #dadce0; border-radius: 6px; background: #eee; }
+    .preview-row--compare {
+      flex-wrap: nowrap;
+      gap: 0.45rem 0.6rem;
+      align-items: stretch;
+      justify-content: flex-start;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.45rem 0.5rem;
+      background: color-mix(in srgb, var(--card) 90%, var(--muted));
+    }
+    @media (max-width: 640px) {
+      .preview-row--compare { flex-wrap: wrap; }
+    }
+    .preview-row--compare .preview-cell {
+      flex: 1 1 0;
+      min-width: min(100%, 6.5rem);
+      max-width: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .preview-row--compare .preview-cell figcaption {
+      font-size: 0.68rem;
+      margin-bottom: 0.2rem;
+      width: 100%;
+      flex-shrink: 0;
+    }
+    .preview-row--compare .preview-slot {
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 4.25rem;
+      max-height: 6.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      /* 明るいチェッカーだと透過が「白枠」に見える。板PNGの角外は透明なので中性グレーで区別しやすくする */
+      background: #aeb4bd;
+      overflow: hidden;
+    }
+    .preview-row--compare .preview-slot img {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .compare-foot {
+      font-size: 0.66rem;
+      color: var(--muted);
+      margin: 0.25rem 0 0;
+      line-height: 1.35;
+    }
+    .compare-foot-sub {
+      display: block;
+      margin-top: 0.2rem;
+      font-size: 0.64rem;
+      opacity: 0.95;
+    }
+    .err { background: #fce8e6; border: 1px solid #c5221f; color: #611016; padding: 0.55rem 0.65rem; border-radius: 8px; font-size: 0.82rem; margin-bottom: 0.75rem; }
+    .meta-bar { font-size: 0.78rem; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem 0.55rem; margin-bottom: 0.75rem; }
+    .filter-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.78rem; }
+    .plate-panel {
+      border: 1px dashed #dadce0;
+      border-radius: 8px;
+      padding: 0.55rem 0.65rem;
+      margin-bottom: 0.65rem;
+      background: #fafbfc;
+    }
+    .plate-panel h3 { font-size: 0.82rem; margin: 0 0 0.45rem; font-weight: 600; }
+    .color-tool-wrap { width: 100%; max-width: 28rem; margin-bottom: 0.35rem; }
+    .color-tool-row {
+      display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.4rem;
+      margin-bottom: 0.35rem;
+    }
+    .color-tool-select { flex: 1; min-width: 8.5rem; max-width: 15rem; margin-bottom: 0 !important; }
+    .color-tool-hex { width: 5.85rem; max-width: 5.85rem; margin-bottom: 0 !important; }
+    .color-tool-hex.float-field--plate input { font-size: 0.76rem; }
+    input.color-native {
+      width: 2.35rem; height: 2.35rem; padding: 0; border: 1px solid var(--border); border-radius: 8px;
+      cursor: pointer; background: var(--card); flex-shrink: 0; box-sizing: border-box;
+    }
+    .plate-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+      gap: 0.35rem 0.5rem;
+      align-items: start;
+      font-size: 0.76rem;
+    }
+    .plate-grid .float-field--plate { max-width: none; margin-bottom: 0; }
+    .plate-grid .float-field--plate input[type="text"],
+    .plate-grid .float-field--plate input[type="number"] { font-size: 0.76rem; }
+    .flow-rail {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.45rem;
+      font-size: 0.72rem; font-weight: 600; color: var(--text);
+      margin-bottom: 0.65rem; padding: 0.35rem 0.5rem; background: var(--card);
+      border: 1px solid var(--border); border-radius: 8px; width: fit-content; max-width: 100%;
+    }
+    .flow-rail span.sep { color: var(--muted); font-weight: 400; }
+    .meta-bar.warn { border-color: #c5221f; background: #fce8e6; color: #611016; }
+    .toolbar-compact label { font-size: 0.76rem; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+    .panel h2, .plate-panel h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 0.2rem 0.35rem; }
+    .lbl-hint { display: inline-flex; align-items: center; gap: 0.15rem; }
+    .help-tip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+    }
+    .help-tip__btn {
+      width: 1rem;
+      height: 1rem;
+      min-width: 1rem;
+      padding: 0;
+      margin: 0;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: var(--card);
+      color: var(--muted);
+      font-size: 0.62rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: help;
+      flex-shrink: 0;
+    }
+    .help-tip__btn:hover,
+    .help-tip__btn:focus-visible {
+      border-color: var(--accent);
+      color: var(--accent);
+      outline: none;
+    }
+    .help-tip__txt {
+      position: absolute;
+      z-index: 100;
+      left: 50%;
+      bottom: 100%;
+      margin-bottom: 6px;
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: min(17rem, 78vw);
+      padding: 0.35rem 0.5rem;
+      font-size: 0.68rem;
+      font-weight: 400;
+      line-height: 1.4;
+      color: var(--text);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.1);
+      visibility: hidden;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s ease;
+    }
+    .help-tip:hover .help-tip__txt,
+    .help-tip:focus-within .help-tip__txt {
+      visibility: visible;
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <p class="topnav"><a href="index.html">← 入口</a> · <a href="lp_layout_images.html">画像一覧</a></p>
+  <h1>ボタン差し替え</h1>
+  <div class="flow-rail" aria-label="流れ">
+    <span>① 左で選択</span><span class="sep">→</span><span>② 板</span><span class="sep">→</span><span>③ 書き出し</span>
+    <span class="help-tip">
+      <button type="button" class="help-tip__btn" aria-label="この画面の流れ">?</button>
+      <span class="help-tip__txt" role="tooltip">左でボタン画像を選ぶ → 「板」で下地PNGを作る → 文字を整えて「書き出し」で合成・保存。</span>
+    </span>
+  </div>
+
+  <div class="toolbar toolbar-compact">
+    <div class="float-field float-field--toolbar">
+      <input type="url" id="json_url" spellcheck="false" placeholder=" " autocomplete="off" />
+      <label for="json_url">データ
+        <span class="help-tip">
+          <button type="button" class="help-tip__btn" aria-label="データURL">?</button>
+          <span class="help-tip__txt" role="tooltip">既定URLのままでOK。別の構造JSON（get_lp_structure 相当）を指定することもできます。</span>
+        </span>
+      </label>
+    </div>
+    <button type="button" class="ctl primary" id="btn_reload">再読込</button>
+    <div class="float-field float-field--toolbar float-field--toolbar-key">
+      <input type="password" id="anthropic_token" autocomplete="off" placeholder=" " spellcheck="false" />
+      <label for="anthropic_token"><span class="sr-only">Claude キー</span>Claude
+        <span class="help-tip">
+          <button type="button" class="help-tip__btn" aria-label="Claudeキー">?</button>
+          <span class="help-tip__txt" role="tooltip">AI位置に使います。下の欄に保存するか、サーバの .env にキーがあればそちらも利用されます。</span>
+        </span>
+      </label>
+    </div>
+    <button type="button" class="ctl" id="btn_key_save">保存</button>
+  </div>
+  <p id="env_keys_note" class="meta-bar warn" style="margin-top:0" hidden></p>
+  <p id="composite_env" class="meta-bar" style="margin-top:0.35rem"></p>
+  <div id="err" class="err" hidden></div>
+  <div id="meta_bar" class="meta-bar" hidden></div>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>候補
+        <span class="help-tip">
+          <button type="button" class="help-tip__btn" aria-label="候補について">?</button>
+          <span class="help-tip__txt" role="tooltip">LP内のボタン画像の一覧です。表示されないときはフィルタを外すか、構造JSONを再読込してください。</span>
+        </span>
+      </h2>
+      <div class="filter-row">
+        <label><input type="checkbox" id="filter_strict" checked /> 本命のみ
+          <span class="help-tip">
+            <button type="button" class="help-tip__btn" aria-label="本命のみ">?</button>
+            <span class="help-tip__txt" role="tooltip">解析で信頼度の高いボタンだけに絞り込みます。</span>
+          </span>
+        </label>
+      </div>
+      <div id="btn_list" class="btn-list" aria-live="polite"></div>
+    </div>
+    <div class="panel">
+      <h2>編集
+        <span class="help-tip">
+          <button type="button" class="help-tip__btn" aria-label="編集パネル">?</button>
+          <span class="help-tip__txt" role="tooltip">リンク・サイズ・板・文字を変え、最後に書き出しで画像を更新します。</span>
+        </span>
+      </h2>
+      <p id="ws_empty" class="status">← 左から選ぶ</p>
+      <div id="ws_form" hidden>
+        <div class="preview-row preview-row--compare" role="region" aria-label="比較プレビュー">
+          <figure class="preview-cell">
+            <figcaption>元</figcaption>
+            <div class="preview-slot"><img id="orig_preview" alt="元のボタン画像" /></div>
+          </figure>
+          <figure id="fig_plate" class="preview-cell" hidden>
+            <figcaption>板</figcaption>
+            <div class="preview-slot"><img id="plate_preview" alt="生成した板" /></div>
+          </figure>
+          <figure id="fig_out" class="preview-cell" hidden>
+            <figcaption>書き出し</figcaption>
+            <div class="preview-slot"><img id="out_preview" alt="合成結果" /></div>
+          </figure>
+        </div>
+        <p id="compare_px_lbl" class="compare-foot" hidden></p>
+        <div class="float-field">
+          <input type="text" id="f_elem_id" readonly placeholder=" " spellcheck="false" />
+          <label for="f_elem_id">ID</label>
+        </div>
+        <div class="float-field">
+          <input type="text" id="f_href" placeholder=" " spellcheck="false" />
+          <label for="f_href">リンク先</label>
+        </div>
+        <div class="float-field float-field--target">
+          <input type="text" id="f_target" placeholder=" " spellcheck="false" />
+          <label for="f_target">別タブ</label>
+        </div>
+        <div class="actions">
+          <button type="button" class="ctl" id="act_copy_link">URLコピー</button>
+        </div>
+        <div class="row2">
+          <div class="float-field">
+            <input type="number" id="f_w" min="16" max="8192" placeholder=" " />
+            <label for="f_w">W</label>
+          </div>
+          <div class="float-field">
+            <input type="number" id="f_h" min="16" max="8192" placeholder=" " />
+            <label for="f_h">H</label>
+          </div>
+        </div>
+
+        <div class="plate-panel" id="plate_panel">
+          <h3>新しい板
+            <span class="help-tip">
+              <button type="button" class="help-tip__btn" aria-label="板とは">?</button>
+              <span class="help-tip__txt" role="tooltip">ボタンの下地となるPNGです。色・形・スタイルを決めてから「板を作る」を押します。</span>
+            </span>
+          </h3>
+          <div class="color-tool-wrap">
+            <div class="color-tool-row" role="group" aria-label="板の色">
+              <div class="float-field float-field--plate float-field--select color-tool-select">
+                <select id="plate_color_combo"></select>
+                <label for="plate_color_combo">色</label>
+              </div>
+              <input type="color" id="plate_color_picker" class="color-native" value="#0b57d0" title="スポイト" aria-label="板の色をスポイトで選ぶ" />
+              <div class="float-field float-field--plate float-field--hex color-tool-hex">
+                <input type="text" id="plate_color" value="#0b57d0" spellcheck="false" placeholder=" " />
+                <label for="plate_color">#</label>
+              </div>
+            </div>
+          </div>
+          <div class="plate-grid">
+            <div class="float-field float-field--plate">
+              <input type="text" id="plate_color2" placeholder=" " spellcheck="false" />
+              <label for="plate_color2"><span class="lbl-hint">影<span class="help-tip">
+                <button type="button" class="help-tip__btn" aria-label="影色">?</button>
+                <span class="help-tip__txt" role="tooltip">2色目やグラデ用。空欄にするとスタイルに合わせて自動になります。</span>
+              </span></span></label>
+            </div>
+            <div class="float-field float-field--plate">
+              <input type="text" id="plate_inner" value="#ffffff" spellcheck="false" placeholder=" " />
+              <label for="plate_inner"><span class="lbl-hint">内側<span class="help-tip">
+                <button type="button" class="help-tip__btn" aria-label="内側色">?</button>
+                <span class="help-tip__txt" role="tooltip">「アウトライン」見た目のときの、線の内側の色です。</span>
+              </span></span></label>
+            </div>
+            <div class="float-field float-field--plate float-field--select">
+              <select id="plate_shape"></select>
+              <label for="plate_shape">形</label>
+            </div>
+            <div class="float-field float-field--plate float-field--select">
+              <select id="plate_style"></select>
+              <label for="plate_style">見た目</label>
+            </div>
+            <div class="float-field float-field--plate float-field--range">
+              <label for="plate_radius_pct"><span class="lbl-hint">角丸</span><span id="plate_radius_lbl" class="plate-pct">18%</span></label>
+              <input type="range" id="plate_radius_pct" min="5" max="45" value="18" />
+            </div>
+            <div class="float-field float-field--plate">
+              <input type="number" id="plate_stroke" min="1" max="8" value="2" placeholder=" " />
+              <label for="plate_stroke"><span class="lbl-hint">枠<span class="help-tip">
+                <button type="button" class="help-tip__btn" aria-label="枠の太さ">?</button>
+                <span class="help-tip__txt" role="tooltip">アウトラインスタイル時の線の太さ（px）です。</span>
+              </span></span></label>
+            </div>
+          </div>
+          <div class="actions" style="margin-top:0.5rem">
+            <button type="button" class="ctl primary" id="act_generate_plate">板を作る</button>
+          </div>
+        </div>
+
+        <div class="float-field">
+          <input type="text" id="f_bg" placeholder=" " spellcheck="false" />
+          <label for="f_bg"><span class="lbl-hint">背景パス<span class="help-tip">
+            <button type="button" class="help-tip__btn" aria-label="背景パス">?</button>
+            <span class="help-tip__txt" role="tooltip">合成に使う背景画像のサーバ上のパスです（例: AI生成画像の保存先）。</span>
+          </span></span></label>
+        </div>
+        <div class="float-field">
+          <input type="text" id="f_label" placeholder=" " spellcheck="false" />
+          <label for="f_label">文字</label>
+        </div>
+        <div class="color-tool-wrap">
+          <div class="color-tool-row" role="group" aria-label="字色">
+            <div class="float-field float-field--select color-tool-select">
+              <select id="f_color_combo"></select>
+              <label for="f_color_combo">字色</label>
+            </div>
+            <input type="color" id="f_color_picker" class="color-native" value="#ffffff" title="スポイト" aria-label="字色をスポイトで選ぶ" />
+            <div class="float-field float-field--hex color-tool-hex">
+              <input type="text" id="f_color" value="#ffffff" placeholder=" " spellcheck="false" />
+              <label for="f_color">#</label>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="ctl" id="act_center">中央</button>
+          <button type="button" class="ctl" id="act_claude">AI位置</button>
+          <span class="help-tip">
+            <button type="button" class="help-tip__btn" aria-label="文字位置">?</button>
+            <span class="help-tip__txt" role="tooltip">「中央」は均等配置のプリセット。「AI位置」はClaudeにレイアウトを任せます（キー要）。</span>
+          </span>
+        </div>
+        <div class="float-field">
+          <textarea id="f_texts" spellcheck="false" placeholder=" "></textarea>
+          <label for="f_texts"><span class="lbl-hint">文字 JSON<span class="help-tip">
+            <button type="button" class="help-tip__btn" aria-label="テキストJSON">?</button>
+            <span class="help-tip__txt" role="tooltip">上級者向け：文字の座標などを直接編集できます。通常は中央／AI位置だけで足ります。</span>
+          </span></span></label>
+        </div>
+        <div class="float-field">
+          <textarea id="f_icons" spellcheck="false" placeholder=" "></textarea>
+          <label for="f_icons"><span class="lbl-hint">アイコン JSON<span class="help-tip">
+            <button type="button" class="help-tip__btn" aria-label="アイコンJSON">?</button>
+            <span class="help-tip__txt" role="tooltip">image_composite の icons[] です。label は store/env_keys_status.php の icon_labels（例: LINE, instagram, twitter, X, facebook, youtube, tiktok …）に合わせます。空の [] でテキストのみ。AI位置で Claude が埋めることもあります（Imagick 必須）。</span>
+          </span></span></label>
+        </div>
+        <div class="actions">
+          <button type="button" class="ctl" id="act_icon_sample">LINE 左 試験</button>
+          <span class="help-tip">
+            <button type="button" class="help-tip__btn" aria-label="試験アイコン">?</button>
+            <span class="help-tip__txt" role="tooltip">左寄せの LINE アイコン1つを入れ、書き出しで合成できるか確認します。</span>
+          </span>
+        </div>
+        <div class="actions">
+          <button type="button" class="ctl primary" id="act_composite">書き出し</button>
+        </div>
+        <p id="f_status" class="status"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var DEFAULT_JSON = "lp_reverse_cms/store/get_lp_structure.php";
+      var CLAUDE_URL = "lp_reverse_cms/store/claude_image_analyze.php";
+      var COMPOSITE_URL = "lp_reverse_cms/store/image_composite.php";
+      var BOUNDS_URL = "lp_reverse_cms/store/image_content_bounds.php";
+      var PLATE_GEN_URL = "lp_reverse_cms/store/button_plate_generate.php";
+      var THEME_URL = "lp_reverse_cms/store/lp_theme.php";
+      var ENV_KEYS_STATUS = "lp_reverse_cms/store/env_keys_status.php";
+      var ANTHROPIC_LS = "lp-next-anthropic-api-token-v1";
+
+      /** /output/... は CMS ルート相対。先頭 / だけで解決するとオリジン直下になり画像 404 になるため lp_reverse_cms を前置する */
+      function resolvePublicOutputUrl(u) {
+        var s = String(u || "");
+        if (!s) return s;
+        if (s.charAt(0) === "/" && s.indexOf("/output/") === 0) {
+          try {
+            return new URL("lp_reverse_cms" + s, window.location.href).href;
+          } catch (e) {
+            return s;
+          }
+        }
+        try {
+          return new URL(s, window.location.href).href;
+        } catch (e) {
+          return s;
+        }
+      }
+
+      var jsonUrl = document.getElementById("json_url");
+      var btnReload = document.getElementById("btn_reload");
+      var anthropicInp = document.getElementById("anthropic_token");
+      var btnKeySave = document.getElementById("btn_key_save");
+      var errEl = document.getElementById("err");
+      var metaBar = document.getElementById("meta_bar");
+      var btnList = document.getElementById("btn_list");
+      var filterStrict = document.getElementById("filter_strict");
+      var wsEmpty = document.getElementById("ws_empty");
+      var wsForm = document.getElementById("ws_form");
+      var origPreview = document.getElementById("orig_preview");
+      var fElemId = document.getElementById("f_elem_id");
+      var fHref = document.getElementById("f_href");
+      var fTarget = document.getElementById("f_target");
+      var actCopyLink = document.getElementById("act_copy_link");
+      var fW = document.getElementById("f_w");
+      var fH = document.getElementById("f_h");
+      var fBg = document.getElementById("f_bg");
+      var fLabel = document.getElementById("f_label");
+      var fColor = document.getElementById("f_color");
+      var fTexts = document.getElementById("f_texts");
+      var fIcons = document.getElementById("f_icons");
+      var fStatus = document.getElementById("f_status");
+      var actCenter = document.getElementById("act_center");
+      var actClaude = document.getElementById("act_claude");
+      var actComposite = document.getElementById("act_composite");
+      var actIconSample = document.getElementById("act_icon_sample");
+      var figOut = document.getElementById("fig_out");
+      var outPreview = document.getElementById("out_preview");
+      var envKeysNote = document.getElementById("env_keys_note");
+      var plateColorCombo = document.getElementById("plate_color_combo");
+      var plateColorPicker = document.getElementById("plate_color_picker");
+      var fColorCombo = document.getElementById("f_color_combo");
+      var fColorPicker = document.getElementById("f_color_picker");
+      var plateColor = document.getElementById("plate_color");
+      var plateColor2 = document.getElementById("plate_color2");
+      var plateInner = document.getElementById("plate_inner");
+      var plateShape = document.getElementById("plate_shape");
+      var plateStyle = document.getElementById("plate_style");
+      var plateRadiusPct = document.getElementById("plate_radius_pct");
+      var plateStroke = document.getElementById("plate_stroke");
+      var actGeneratePlate = document.getElementById("act_generate_plate");
+      var figPlate = document.getElementById("fig_plate");
+      var platePreview = document.getElementById("plate_preview");
+      var comparePxLbl = document.getElementById("compare_px_lbl");
+
+      var allButtonItems = [];
+      var selected = null;
+      var colorUiWired = false;
+      /* 余白除去後の作業サイズにしたときのフル画像と padding（AI 座標変換用） */
+      var probeTrim = null;
+      var boundsProbeSeq = 0;
+
+      function clamp01(x) {
+        var n = parseFloat(x);
+        if (!isFinite(n)) return 0;
+        return Math.max(0, Math.min(1, n));
+      }
+
+      function hex6(s) {
+        var t = String(s || "").trim();
+        if (!/^#[0-9a-f]{3,6}$/i.test(t)) return "#000000";
+        if (t.length === 4) {
+          t = "#" + t[1] + t[1] + t[2] + t[2] + t[3] + t[3];
+        }
+        return t.toLowerCase();
+      }
+
+      function fillColorSelect(sel, palette, leading) {
+        if (!sel) return;
+        sel.innerHTML = "";
+        (leading || []).forEach(function (e) {
+          var o = document.createElement("option");
+          o.value = hex6(e.hex);
+          o.textContent = e.label + " · " + hex6(e.hex);
+          sel.appendChild(o);
+        });
+        (palette || []).forEach(function (p) {
+          var raw = (p.hex || "").trim();
+          if (!raw || !/^#?[0-9a-f]{3,6}$/i.test(raw)) return;
+          var hx = raw.charAt(0) === "#" ? raw : "#" + raw;
+          hx = hex6(hx);
+          var o = document.createElement("option");
+          o.value = hx;
+          o.textContent = (p.label || p.id || hx) + " · " + hx;
+          sel.appendChild(o);
+        });
+        var c = document.createElement("option");
+        c.value = "__custom__";
+        c.textContent = "カスタム…";
+        sel.appendChild(c);
+      }
+
+      function selectComboByHex(sel, hex) {
+        if (!sel) return;
+        var h = hex6(hex);
+        var opts = sel.options;
+        for (var i = 0; i < opts.length; i++) {
+          if (opts[i].value !== "__custom__" && opts[i].value === h) {
+            sel.selectedIndex = i;
+            return;
+          }
+        }
+        sel.value = "__custom__";
+      }
+
+      function wireColorRow(sel, textEl, pickerEl) {
+        if (!sel || !textEl || !pickerEl) return;
+        sel.addEventListener("change", function () {
+          var v = sel.value;
+          if (v === "__custom__") return;
+          textEl.value = v;
+          try { pickerEl.value = hex6(v); } catch (e) {}
+        });
+        function fromText() {
+          var h = hex6(textEl.value);
+          textEl.value = h;
+          try { pickerEl.value = h; } catch (e) {}
+          selectComboByHex(sel, h);
+        }
+        textEl.addEventListener("input", fromText);
+        textEl.addEventListener("change", fromText);
+        pickerEl.addEventListener("input", function () {
+          textEl.value = pickerEl.value.toLowerCase();
+          selectComboByHex(sel, textEl.value);
+        });
+        pickerEl.addEventListener("change", function () {
+          textEl.value = pickerEl.value.toLowerCase();
+          selectComboByHex(sel, textEl.value);
+        });
+      }
+
+      /** lp_theme.php 障害時の最小フォールバック（LpTheme::baseDefinition と整合） */
+      var THEME_FALLBACK = {
+        schema_version: 1,
+        palette: [
+          { id: "blue", label: "ブルー", hex: "#0b57d0", class: "lp-theme-palette lp-theme-palette--blue" },
+          { id: "navy", label: "ネイビー", hex: "#1a237e", class: "lp-theme-palette lp-theme-palette--navy" },
+          { id: "teal", label: "ティール", hex: "#00796b", class: "lp-theme-palette lp-theme-palette--teal" }
+        ],
+        button_plate: {
+          shapes: [
+            { id: "rounded", label: "角丸矩形", class: "lp-plate-shape lp-plate-shape--rounded" },
+            { id: "pill", label: "カプセル", class: "lp-plate-shape lp-plate-shape--pill" },
+            { id: "rect", label: "直角", class: "lp-plate-shape lp-plate-shape--rect" }
+          ],
+          styles: [
+            { id: "flat", label: "フラット", class: "lp-plate-style lp-plate-style--flat" },
+            { id: "gradient_3d", label: "3D（縦グラデ＋ハイライト）", class: "lp-plate-style lp-plate-style--gradient-3d" },
+            { id: "soft_flat", label: "ソフト立体（フラット＋光沢）", class: "lp-plate-style lp-plate-style--soft-flat" },
+            { id: "outline", label: "アウトライン", class: "lp-plate-style lp-plate-style--outline" }
+          ],
+          defaults: { shape: "rounded", style: "flat", color: "#0b57d0", inner_color: "#ffffff", radius_pct: 0.18, stroke_width: 2 }
+        }
+      };
+
+      function loadTheme() {
+        return fetch(THEME_URL, { credentials: "same-origin" }).then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json();
+        });
+      }
+
+      function initPlateFromTheme(theme) {
+        var pal = theme.palette || [];
+        var bp = theme.button_plate || {};
+        var shapes = bp.shapes || [];
+        var styles = bp.styles || [];
+        var def = bp.defaults || {};
+
+        if (plateShape) {
+          plateShape.innerHTML = "";
+          shapes.forEach(function (s) {
+            var o = document.createElement("option");
+            o.value = s.id || "";
+            o.textContent = s.label || s.id || "";
+            plateShape.appendChild(o);
+          });
+          if (def.shape) plateShape.value = def.shape;
+        }
+        if (plateStyle) {
+          plateStyle.innerHTML = "";
+          styles.forEach(function (s) {
+            var o = document.createElement("option");
+            o.value = s.id || "";
+            o.textContent = s.label || s.id || "";
+            plateStyle.appendChild(o);
+          });
+          if (def.style) plateStyle.value = def.style;
+        }
+
+        if (plateColor && def.color) plateColor.value = hex6(def.color);
+        if (plateInner && def.inner_color) plateInner.value = def.inner_color;
+        if (plateStroke && def.stroke_width != null) plateStroke.value = String(def.stroke_width);
+        if (plateRadiusPct && def.radius_pct != null) {
+          plateRadiusPct.value = String(Math.round(Number(def.radius_pct) * 100));
+        }
+
+        if (plateColorCombo && plateColor && plateColorPicker) {
+          fillColorSelect(plateColorCombo, pal, []);
+          selectComboByHex(plateColorCombo, plateColor.value);
+          try { plateColorPicker.value = hex6(plateColor.value); } catch (e) {}
+        }
+        if (fColorCombo && fColor && fColorPicker) {
+          fillColorSelect(fColorCombo, pal, [
+            { hex: "#ffffff", label: "白" },
+            { hex: "#000000", label: "黒" }
+          ]);
+          selectComboByHex(fColorCombo, fColor.value);
+          try { fColorPicker.value = hex6(fColor.value); } catch (e2) {}
+        }
+
+        if (!colorUiWired) {
+          wireColorRow(plateColorCombo, plateColor, plateColorPicker);
+          wireColorRow(fColorCombo, fColor, fColorPicker);
+          colorUiWired = true;
+        }
+
+        var lbl = document.getElementById("plate_radius_lbl");
+        if (lbl && plateRadiusPct) lbl.textContent = plateRadiusPct.value + "%";
+      }
+
+      var compositeEnv = document.getElementById("composite_env");
+
+      function refreshEnvKeysNote() {
+        if (!envKeysNote) return;
+        fetch(ENV_KEYS_STATUS, { credentials: "same-origin" })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (compositeEnv && j.php_gd !== undefined) {
+              var imOk = !!j.php_imagick;
+              compositeEnv.textContent =
+                "書き出し環境: GD " + (j.php_gd ? "OK" : "未検出") +
+                " · FreeType " + (j.php_gd_freetype ? "OK" : "未検出") +
+                " · Imagick " + (imOk ? "OK" : "未検出") +
+                (imOk ? "（アイコン合成可）" : "（アイコン合成は Imagick が必要）");
+              compositeEnv.classList.toggle("warn", !j.php_gd);
+            }
+            envKeysNote.hidden = true;
+            envKeysNote.classList.remove("warn");
+            if (!j.env_readable) {
+              envKeysNote.textContent = "要 .env";
+              envKeysNote.hidden = false;
+              envKeysNote.classList.add("warn");
+              return;
+            }
+            if (!j.ANTHROPIC_API_KEY) {
+              envKeysNote.textContent = "Claude は下のキー欄か .env";
+              envKeysNote.hidden = false;
+            }
+          })
+          .catch(function () {
+            envKeysNote.textContent = "状態取得エラー";
+            envKeysNote.hidden = false;
+            envKeysNote.classList.add("warn");
+            if (compositeEnv) {
+              compositeEnv.textContent = "書き出し環境: 取得できませんでした";
+              compositeEnv.classList.add("warn");
+            }
+          });
+      }
+
+      function showErr(msg) {
+        errEl.hidden = !msg;
+        errEl.textContent = msg || "";
+      }
+
+      function classifyButton(el, secType) {
+        var src = String(el.original_src || "").toLowerCase();
+        var label = String(el.label || "").toLowerCase();
+        var alt = String(el.original_text || "").trim();
+        var score = 0;
+        var reasons = [];
+        if (/\/btn[^/]*\.(jpg|jpeg|png|webp)/i.test(src)) { score += 3; reasons.push("ファイル名btn"); }
+        if (/btn\d|ボタン|\bbutton\b/i.test(label)) { score += 2; reasons.push("ラベル"); }
+        if (secType === "cta") { score += 1; reasons.push("CTA節"); }
+        if (alt.length > 0 && alt.length <= 72 && !/^https?:\/\//i.test(alt)) { score += 1; reasons.push("短いalt"); }
+        return { score: score, reasons: reasons };
+      }
+
+      function collectButtonImagesFromObjects(structure) {
+        var bos = structure.button_objects;
+        if (!Array.isArray(bos) || !bos.length) return null;
+        return bos.map(function (bo) {
+          return {
+            id: bo.element_id || "",
+            label: bo.label || "（ラベルなし）",
+            alt: bo.alt || "",
+            src: String(bo.image_src || ""),
+            section_type: bo.section_type || "general",
+            section_label: bo.section_label || "",
+            button_score: typeof bo.button_score === "number" ? bo.button_score : 0,
+            button_reasons: Array.isArray(bo.button_reasons) ? bo.button_reasons : [],
+            href: bo.href ? String(bo.href) : "",
+            target: bo.target ? String(bo.target) : "",
+            icons: Array.isArray(bo.icons) ? bo.icons : null
+          };
+        });
+      }
+
+      function collectButtonImagesLegacy(structure) {
+        var out = [];
+        var sections = structure.sections || [];
+        sections.forEach(function (sec) {
+          var secType = sec.type || "general";
+          (sec.elements || []).forEach(function (el) {
+            if (el.type !== "image" || !el.original_src) return;
+            var u = String(el.original_src);
+            if (/favicon\.ico/i.test(u)) return;
+            var c = classifyButton(el, secType);
+            var href = el.original_href ? String(el.original_href) : "";
+            if (c.score < 1 && !href) return;
+            var score = c.score + (href ? 1 : 0);
+            var reasons = c.reasons.slice();
+            if (href) reasons.push("囲みa要素");
+            out.push({
+              id: el.id || "",
+              label: el.label || "（ラベルなし）",
+              alt: el.original_text || "",
+              src: u,
+              section_type: secType,
+              section_label: sec.label || sec.id || "",
+              button_score: score,
+              button_reasons: reasons,
+              href: href,
+              target: el.wrap_target ? String(el.wrap_target) : "",
+              icons: Array.isArray(el.icons) ? el.icons : null
+            });
+          });
+        });
+        out.sort(function (a, b) { return b.button_score - a.button_score; });
+        return out;
+      }
+
+      function collectButtonImages(structure) {
+        var fromObj = collectButtonImagesFromObjects(structure);
+        if (fromObj) return fromObj;
+        return collectButtonImagesLegacy(structure);
+      }
+
+      function renderList() {
+        var strict = filterStrict.checked;
+        var items = allButtonItems.filter(function (x) { return !strict || x.button_score >= 2; });
+        btnList.innerHTML = "";
+        if (!items.length) {
+          btnList.innerHTML = "<p class=\"status\">候補なし</p>";
+          return;
+        }
+        items.forEach(function (it) {
+          var row = document.createElement("button");
+          row.type = "button";
+          row.className = "btn-row" + (selected && selected.id === it.id ? " is-active" : "");
+          row.setAttribute("data-id", it.id);
+          var im = document.createElement("img");
+          im.alt = "";
+          im.src = it.src;
+          var meta = document.createElement("div");
+          meta.className = "meta";
+          var hrefHint = it.href ? "<br><span style=\"font-size:0.68rem;word-break:break-all\">" + escapeHtml(it.href) + "</span>" : "";
+          meta.innerHTML = "<b>" + escapeHtml(it.label) + "</b>" +
+            "<span class=\"tag\">スコア " + it.button_score + "</span> · " + escapeHtml(it.button_reasons.join("・")) +
+            "<br><code style=\"font-size:0.65rem\">" + escapeHtml(it.id) + "</code>" + hrefHint;
+          row.appendChild(im);
+          row.appendChild(meta);
+          btnList.appendChild(row);
+        });
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+
+      /** W×H（フォーム値）に合わせた同一アスペクトの枠で並べ、板・書き出しと見比べやすくする */
+      function syncComparePreviewFrames() {
+        var w = parseInt(fW && fW.value, 10);
+        var h = parseInt(fH && fH.value, 10);
+        if (!w || !h || w < 16 || h < 16) {
+          w = 200;
+          h = 48;
+        }
+        var ar = w + " / " + h;
+        document.querySelectorAll(".preview-row--compare .preview-slot").forEach(function (el) {
+          el.style.aspectRatio = ar;
+        });
+        if (comparePxLbl) {
+          comparePxLbl.hidden = false;
+          var trimNote = probeTrim
+            ? "「元」はフル画像のまま表示しています。下の W×H は <strong>余白を除いた内容領域</strong>（板・書き出しの作業サイズ）です。"
+            : "";
+          comparePxLbl.innerHTML =
+            "比較枠は " + w + "×" + h + " px の比率です。板と書き出しはこのサイズで生成されます。" +
+            (trimNote ? "<span class=\"compare-foot-sub\">" + trimNote + "</span>" : "") +
+            "<span class=\"compare-foot-sub\">" +
+            "板PNGは角丸の外側が透明です（上の灰色は透過の見え方）。元画像の白い帯は、多くの場合キャンバスに含まれる余白です。" +
+            "色が付いた領域と地を自動で切り分けるのは、単色に近い背景なら比較的やりやすい一方、影・グラデ・写真では誤検出しやすく、完璧には難しいです。" +
+            "</span>";
+        }
+      }
+
+      /** output 配下のパスへ（プローブ API 用）。外部 URL 等は null */
+      function probePathFromImgSrc(src) {
+        var s = String(src || "");
+        var i = s.indexOf("/output/");
+        if (i >= 0) return s.slice(i);
+        if (s.indexOf("output/") === 0) return "/" + s;
+        return null;
+      }
+
+      function tryApplyContentBoundsFromSrc(src, nw, nh, seq) {
+        var path = probePathFromImgSrc(src);
+        probeTrim = null;
+        if (!path || nw < 16 || nh < 16) return;
+        fetch(BOUNDS_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ image_url: path })
+        })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            if (seq !== boundsProbeSeq) return;
+            if (!x.ok || x.j.error || !x.j.content_bounds) return;
+            if (!x.j.trimmed) return;
+            var cb = x.j.content_bounds;
+            probeTrim = {
+              fullW: x.j.full_width || nw,
+              fullH: x.j.full_height || nh,
+              cb: cb
+            };
+            fW.value = String(cb.button_w);
+            fH.value = String(cb.button_h);
+            syncComparePreviewFrames();
+            var p = x.j.content_bounds;
+            fStatus.textContent =
+              "内容サイズ " + cb.button_w + "×" + cb.button_h + " px（余白 T" + p.padding_top + " R" + p.padding_right +
+              " B" + p.padding_bottom + " L" + p.padding_left + "）に合わせました";
+          })
+          .catch(function () {
+            if (seq === boundsProbeSeq) probeTrim = null;
+          });
+      }
+
+      /** Claude はフル画像比率で返す前提。作業サイズが内容領域だけのとき座標を変換 */
+      function remapPctBoxFromFull(layer, fullW, fullH, cb) {
+        var pl = cb.padding_left;
+        var pt = cb.padding_top;
+        var cw = cb.button_w;
+        var ch = cb.button_h;
+        if (cw < 1 || ch < 1 || fullW < 1 || fullH < 1) return layer;
+        var xp = clamp01(layer.x_pct);
+        var yp = clamp01(layer.y_pct);
+        var wp = clamp01(layer.w_pct);
+        var hp = clamp01(layer.h_pct);
+        var x0 = xp * fullW;
+        var x1 = (xp + wp) * fullW;
+        var y0 = yp * fullH;
+        var y1 = (yp + hp) * fullH;
+        var nx0 = (x0 - pl) / cw;
+        var nx1 = (x1 - pl) / cw;
+        var ny0 = (y0 - pt) / ch;
+        var ny1 = (y1 - pt) / ch;
+        var out = Object.assign({}, layer);
+        out.x_pct = clamp01(nx0);
+        out.y_pct = clamp01(ny0);
+        out.w_pct = clamp01(nx1 - nx0);
+        out.h_pct = clamp01(ny1 - ny0);
+        return out;
+      }
+
+      function selectItem(it) {
+        selected = it;
+        probeTrim = null;
+        boundsProbeSeq++;
+        var probeId = boundsProbeSeq;
+        wsEmpty.hidden = true;
+        wsForm.hidden = false;
+        fElemId.value = it.id;
+        if (fHref) fHref.value = it.href || "";
+        if (fTarget) fTarget.value = it.target || "";
+        fLabel.value = (it.alt || "").replace(/\s+/g, " ").trim() || it.label;
+        fTexts.value = "";
+        if (fIcons) fIcons.value = it.icons && it.icons.length ? JSON.stringify(it.icons, null, 2) : "[]";
+        fStatus.textContent = "";
+        figOut.hidden = true;
+        if (figPlate) figPlate.hidden = true;
+        function onOrigDimsReady() {
+          if (probeId !== boundsProbeSeq) return;
+          var nw = origPreview.naturalWidth;
+          var nh = origPreview.naturalHeight;
+          if (nw > 0) {
+            fW.value = String(nw);
+            fH.value = String(nh);
+          }
+          syncComparePreviewFrames();
+          tryApplyContentBoundsFromSrc(it.src, nw, nh, probeId);
+        }
+        origPreview.onload = onOrigDimsReady;
+        origPreview.src = it.src;
+        if (origPreview.complete && origPreview.naturalWidth > 0) {
+          onOrigDimsReady();
+        } else {
+          syncComparePreviewFrames();
+        }
+        renderList();
+      }
+
+      function getAnthropicKey() {
+        var v = (anthropicInp.value || "").trim();
+        if (v) return v;
+        try { return localStorage.getItem(ANTHROPIC_LS) || ""; } catch (e) { return ""; }
+      }
+
+      function normalizeTexts(arr) {
+        if (!Array.isArray(arr)) return [];
+        var colInp = (fColor.value || "#ffffff").trim();
+        if (!/^#[0-9a-f]{3,6}$/i.test(colInp)) colInp = "#ffffff";
+        return arr.map(function (t) {
+          var c = String(t.content || "").trim();
+          if (!c) return null;
+          var col = typeof t.color === "string" && /^#[0-9a-f]{3,6}$/i.test(t.color.trim()) ? t.color.trim() : colInp;
+          return {
+            content: c,
+            x_pct: clamp01(t.x_pct),
+            y_pct: clamp01(t.y_pct),
+            w_pct: clamp01(t.w_pct == null ? 0.84 : t.w_pct),
+            h_pct: clamp01(t.h_pct == null ? 0.7 : t.h_pct),
+            font_size_pct: clamp01(t.font_size_pct == null ? 0.30 : t.font_size_pct),
+            bold: t.bold === true,
+            color: col
+          };
+        }).filter(Boolean);
+      }
+
+      function normalizeIcons(arr) {
+        if (!Array.isArray(arr)) return [];
+        return arr.map(function (ic) {
+          if (!ic || typeof ic !== "object") return null;
+          var label = String(ic.label || "").trim();
+          if (!label) return null;
+          return {
+            label: label,
+            x_pct: clamp01(ic.x_pct),
+            y_pct: clamp01(ic.y_pct),
+            w_pct: clamp01(ic.w_pct == null ? 0.15 : ic.w_pct),
+            h_pct: clamp01(ic.h_pct == null ? 0.65 : ic.h_pct)
+          };
+        }).filter(Boolean);
+      }
+
+      function iconsForExport() {
+        if (!fIcons) return { err: null, icons: [] };
+        var raw = String(fIcons.value || "").trim();
+        if (!raw) return { err: null, icons: [] };
+        var parsed;
+        try {
+          parsed = JSON.parse(raw);
+        } catch (e) {
+          return { err: "アイコン JSON が壊れています", icons: null };
+        }
+        if (!Array.isArray(parsed)) {
+          return { err: "アイコンは JSON 配列で指定してください", icons: null };
+        }
+        return { err: null, icons: normalizeIcons(parsed) };
+      }
+
+      function formatContentBoundsStatus(cb) {
+        if (!cb || typeof cb !== "object") return "";
+        var bw = cb.button_w;
+        var bh = cb.button_h;
+        if (typeof bw !== "number" || typeof bh !== "number") return "";
+        var pt = cb.padding_top;
+        var pr = cb.padding_right;
+        var pb = cb.padding_bottom;
+        var pl = cb.padding_left;
+        return " · 検出領域 " + bw + "×" + bh + "px · 余白 T" + pt + " R" + pr + " B" + pb + " L" + pl;
+      }
+
+      function platePayloadFromForm() {
+        var w = parseInt(fW.value, 10) || 0;
+        var h = parseInt(fH.value, 10) || 0;
+        if (w < 16 || h < 16) return null;
+        var c1 = (plateColor && plateColor.value || "#0b57d0").trim();
+        var c2 = (plateColor2 && plateColor2.value || "").trim();
+        var payload = {
+          width: w,
+          height: h,
+          shape: plateShape ? plateShape.value : "rounded",
+          style: plateStyle ? plateStyle.value : "flat",
+          color: c1,
+          radius_pct: plateRadiusPct ? parseInt(plateRadiusPct.value, 10) / 100 : 0.18,
+          stroke_width: plateStroke ? parseInt(plateStroke.value, 10) || 2 : 2,
+          inner_color: (plateInner && plateInner.value || "#ffffff").trim()
+        };
+        if (c2) payload.color2 = c2;
+        return payload;
+      }
+
+      function fetchPlatePng(payload) {
+        return fetch(PLATE_GEN_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(payload)
+        })
+          .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t }; }); })
+          .then(function (x) {
+            var j = {};
+            try { j = JSON.parse(x.t); } catch (e) {}
+            if (!x.ok || j.error) throw new Error(j.error || x.t.slice(0, 200));
+            if (!j.url) throw new Error("url なし");
+            return j.url;
+          });
+      }
+
+      function applyPlatePreviewUrl(url) {
+        fBg.value = url;
+        if (platePreview && figPlate) {
+          var abs = resolvePublicOutputUrl(url);
+          platePreview.src = abs + (abs.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
+          figPlate.hidden = false;
+        }
+      }
+
+      function textsForExport() {
+        var raw;
+        try { raw = JSON.parse(fTexts.value || "[]"); } catch (e) {
+          return { err: "JSON 壊れてる", texts: null };
+        }
+        var texts = normalizeTexts(raw);
+        if (texts.length) return { err: null, texts: texts };
+        var text = (fLabel.value || "").trim();
+        if (!text) return { err: "文字を入力するか「中央」で JSON を作ってください", texts: null };
+        var col = (fColor.value || "#ffffff").trim();
+        if (!/^#[0-9a-f]{3,6}$/i.test(col)) col = "#ffffff";
+        texts = normalizeTexts([{
+          content: text,
+          x_pct: 0.08,
+          y_pct: 0.12,
+          w_pct: 0.84,
+          h_pct: 0.76,
+          font_size_pct: 0.30,
+          bold: false,
+          color: col
+        }]);
+        if (texts.length && fTexts) fTexts.value = JSON.stringify(texts, null, 2);
+        return { err: texts.length ? null : "文字を確認", texts: texts };
+      }
+
+      btnList.addEventListener("click", function (ev) {
+        var row = ev.target.closest(".btn-row");
+        if (!row) return;
+        var id = row.getAttribute("data-id");
+        var it = allButtonItems.filter(function (x) { return x.id === id; })[0];
+        if (it) selectItem(it);
+      });
+
+      filterStrict.addEventListener("change", renderList);
+
+      if (actGeneratePlate) {
+        actGeneratePlate.addEventListener("click", function () {
+          var payload = platePayloadFromForm();
+          if (!payload) {
+            fStatus.textContent = "W/H を確認";
+            return;
+          }
+          actGeneratePlate.disabled = true;
+          fStatus.textContent = "生成中…";
+          fetchPlatePng(payload)
+            .then(function (url) {
+              applyPlatePreviewUrl(url);
+              fStatus.textContent = "OK · 文字→書き出し";
+            })
+            .catch(function (e) {
+              fStatus.textContent = "失敗: " + (e.message || String(e));
+            })
+            .finally(function () { actGeneratePlate.disabled = false; });
+        });
+      }
+
+      if (actCopyLink && fHref) {
+        actCopyLink.addEventListener("click", function () {
+          var u = (fHref.value || "").trim();
+          if (!u) {
+            fStatus.textContent = "URL なし";
+            return;
+          }
+          navigator.clipboard.writeText(u).then(function () {
+            fStatus.textContent = "コピーした";
+          }).catch(function () {
+            fStatus.textContent = "コピー失敗";
+          });
+        });
+      }
+
+      actCenter.addEventListener("click", function () {
+        var text = (fLabel.value || "").trim();
+        if (!text) {
+          fStatus.textContent = "文字を入力";
+          return;
+        }
+        var col = (fColor.value || "#ffffff").trim();
+        if (!/^#[0-9a-f]{3,6}$/i.test(col)) col = "#ffffff";
+        var one = [{
+          content: text,
+          x_pct: 0.08,
+          y_pct: 0.12,
+          w_pct: 0.84,
+          h_pct: 0.76,
+          font_size_pct: 0.30,
+          bold: false,
+          color: col
+        }];
+        fTexts.value = JSON.stringify(one, null, 2);
+        fStatus.textContent = "中央プリセット済み";
+      });
+
+      actClaude.addEventListener("click", function () {
+        if (!selected) return;
+        var key = getAnthropicKey();
+        var fw = origPreview.naturalWidth || 0;
+        var fh = origPreview.naturalHeight || 0;
+        if (fw < 16) fw = parseInt(fW.value, 10) || 0;
+        if (fh < 16) fh = parseInt(fH.value, 10) || 0;
+        actClaude.disabled = true;
+        fStatus.textContent = "送信中…";
+        fetch(CLAUDE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ image_url: selected.src, width: fw, height: fh, api_key: key || undefined })
+        })
+          .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t }; }); })
+          .then(function (x) {
+            var j = {};
+            try { j = JSON.parse(x.t); } catch (e) {}
+            if (!x.ok) throw new Error(j.error || x.t.slice(0, 200));
+            if (j.error) throw new Error(j.error);
+            if (!Array.isArray(j.texts) || !j.texts.length) throw new Error("texts が空です");
+            var textsOut = j.texts;
+            var iconsRaw = Array.isArray(j.icons) ? j.icons : [];
+            if (probeTrim && probeTrim.cb && probeTrim.fullW > 0 && probeTrim.fullH > 0) {
+              textsOut = j.texts.map(function (t) {
+                return remapPctBoxFromFull(t, probeTrim.fullW, probeTrim.fullH, probeTrim.cb);
+              });
+              iconsRaw = iconsRaw.map(function (ic) {
+                return remapPctBoxFromFull(ic, probeTrim.fullW, probeTrim.fullH, probeTrim.cb);
+              });
+            }
+            fTexts.value = JSON.stringify(textsOut, null, 2);
+            if (fIcons) fIcons.value = JSON.stringify(iconsRaw, null, 2);
+            fStatus.textContent = "AI 反映済み（テキスト" + textsOut.length + " · アイコン" + iconsRaw.length + "）";
+          })
+          .catch(function (e) {
+            fStatus.textContent = "AI: " + (e.message || String(e));
+          })
+          .finally(function () { actClaude.disabled = false; });
+      });
+
+      if (actIconSample && fIcons) {
+        actIconSample.addEventListener("click", function () {
+          fIcons.value = JSON.stringify([
+            { label: "LINE", x_pct: 0.06, y_pct: 0.18, w_pct: 0.14, h_pct: 0.64 }
+          ], null, 2);
+          fStatus.textContent = "試験用アイコンをセットしました → 中央 or AI位置 で文字を用意して書き出し";
+        });
+      }
+
+      actComposite.addEventListener("click", function () {
+        var w = parseInt(fW.value, 10);
+        var h = parseInt(fH.value, 10);
+        if (w < 16 || h < 16) {
+          fStatus.textContent = "W/H 不正";
+          return;
+        }
+        var got = textsForExport();
+        if (got.err) {
+          fStatus.textContent = got.err;
+          return;
+        }
+        var gotIc = iconsForExport();
+        if (gotIc.err) {
+          fStatus.textContent = gotIc.err;
+          return;
+        }
+        var texts = got.texts;
+        var icons = gotIc.icons;
+        var bg = (fBg.value || "").trim();
+
+        function runComposite(bgUrl) {
+          fStatus.textContent = "書き出し中…";
+          var payload = { background_url: bgUrl, width: w, height: h, texts: texts };
+          if (icons.length) payload.icons = icons;
+          return fetch(COMPOSITE_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify(payload)
+          })
+            .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t }; }); })
+            .then(function (x) {
+              var j = {};
+              try { j = JSON.parse(x.t); } catch (e) {}
+              if (!x.ok || j.error) throw new Error(j.error || x.t.slice(0, 220));
+              if (!j.url) throw new Error("url なし");
+              var abs = resolvePublicOutputUrl(j.url);
+              outPreview.src = abs + (abs.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
+              figOut.hidden = false;
+              var cbMsg = formatContentBoundsStatus(j.content_bounds);
+              fStatus.textContent = "完了" + (icons.length ? " · アイコン" + icons.length + "件" : "") + cbMsg;
+            });
+        }
+
+        actComposite.disabled = true;
+        if (bg) {
+          runComposite(bg)
+            .catch(function (e) {
+              fStatus.textContent = "エラー: " + (e.message || String(e));
+            })
+            .finally(function () { actComposite.disabled = false; });
+          return;
+        }
+        var payload = platePayloadFromForm();
+        if (!payload) {
+          actComposite.disabled = false;
+          fStatus.textContent = "W/H を確認";
+          return;
+        }
+        fStatus.textContent = "板を生成中…";
+        fetchPlatePng(payload)
+          .then(function (url) {
+            applyPlatePreviewUrl(url);
+            return runComposite(url);
+          })
+          .catch(function (e) {
+            fStatus.textContent = "エラー: " + (e.message || String(e));
+          })
+          .finally(function () { actComposite.disabled = false; });
+      });
+
+      btnKeySave.addEventListener("click", function () {
+        var v = anthropicInp.value.trim();
+        try {
+          if (v) localStorage.setItem(ANTHROPIC_LS, v);
+          else localStorage.removeItem(ANTHROPIC_LS);
+        } catch (e) {}
+        fStatus.textContent = v ? "キー保存" : "キー消した";
+      });
+
+      try {
+        if (localStorage.getItem(ANTHROPIC_LS)) anthropicInp.value = localStorage.getItem(ANTHROPIC_LS);
+      } catch (e) {}
+
+      function loadJson() {
+        var url = jsonUrl.value.trim() || DEFAULT_JSON;
+        try { url = new URL(url, window.location.href).toString(); } catch (e) { url = DEFAULT_JSON; }
+        jsonUrl.value = url;
+        showErr("");
+        var bust = url + (url.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
+        fetch(bust, { credentials: "same-origin" })
+          .then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+          })
+          .then(function (data) {
+            if (!data || !Array.isArray(data.sections)) throw new Error("sections がありません");
+            allButtonItems = collectButtonImages(data);
+            metaBar.hidden = false;
+            metaBar.textContent = "候補 " + allButtonItems.length + " · " + (data.analyzed_at || "");
+            selected = null;
+            wsEmpty.hidden = false;
+            wsForm.hidden = true;
+            renderList();
+          })
+          .catch(function (e) {
+            allButtonItems = [];
+            metaBar.hidden = true;
+            showErr(String(e.message || e));
+            btnList.innerHTML = "";
+          });
+      }
+
+      btnReload.addEventListener("click", loadJson);
+      jsonUrl.placeholder = DEFAULT_JSON;
+      if (!jsonUrl.value) jsonUrl.value = DEFAULT_JSON;
+
+      if (plateRadiusPct) {
+        var lblRad = document.getElementById("plate_radius_lbl");
+        function syncRadiusLbl() {
+          if (lblRad) lblRad.textContent = plateRadiusPct.value + "%";
+        }
+        plateRadiusPct.addEventListener("input", syncRadiusLbl);
+      }
+
+      if (fW && fH) {
+        function onWhCompare() {
+          syncComparePreviewFrames();
+        }
+        fW.addEventListener("input", onWhCompare);
+        fW.addEventListener("change", onWhCompare);
+        fH.addEventListener("input", onWhCompare);
+        fH.addEventListener("change", onWhCompare);
+      }
+
+      loadTheme()
+        .then(initPlateFromTheme)
+        .catch(function () {
+          initPlateFromTheme(THEME_FALLBACK);
+        })
+        .then(function () {
+          var lblRad = document.getElementById("plate_radius_lbl");
+          if (lblRad && plateRadiusPct) lblRad.textContent = plateRadiusPct.value + "%";
+        });
+
+      refreshEnvKeysNote();
+      loadJson();
+    })();
+  </script>
+</body>
+</html>

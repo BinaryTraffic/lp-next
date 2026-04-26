@@ -298,15 +298,37 @@ class LpAnalyzer
                     $label    = $isBg
                         ? '背景画像：' . $baseName
                         : '画像：' . $baseName;
-                    $elements[] = [
+
+                    $wrapAnchor = $this->findWrapAnchor($child);
+                    $wrapHref   = null;
+                    $wrapTarget = null;
+                    $wrapRel    = null;
+                    if ($wrapAnchor !== null) {
+                        $rawHref = $wrapAnchor->getAttribute('href') ?: '';
+                        $norm    = $this->normalizeHrefForStorage($rawHref);
+                        $wrapHref = $norm !== '' ? $norm : null;
+                        $t = $wrapAnchor->getAttribute('target');
+                        $wrapTarget = ($t !== '') ? $t : null;
+                        $r = $wrapAnchor->getAttribute('rel');
+                        $wrapRel = ($r !== '') ? $r : null;
+                    }
+
+                    $row = [
                         'id'            => $id,
                         'type'          => 'image',
                         'tag'           => 'img',
                         'label'         => $label,
                         'original_text' => $alt,
                         'original_src'  => $src,
-                        'original_href' => null,
+                        'original_href' => $wrapHref,
                     ];
+                    if ($wrapTarget !== null) {
+                        $row['wrap_target'] = $wrapTarget;
+                    }
+                    if ($wrapRel !== null) {
+                        $row['wrap_rel'] = $wrapRel;
+                    }
+                    $elements[] = $row;
                 }
             } elseif ($tag === 'a') {
                 $text = trim($child->textContent);
@@ -478,6 +500,40 @@ class LpAnalyzer
     {
         $classes = strtolower($el->getAttribute('class'));
         return str_contains($classes, 'btn') || str_contains($classes, 'button') || str_contains($classes, 'cta');
+    }
+
+    /**
+     * 画像が &lt;a&gt; でラップされているとき、その要素（href の所在）を返す。
+     */
+    private function findWrapAnchor(DOMElement $img): ?DOMElement
+    {
+        $p = $img->parentNode;
+        while ($p !== null) {
+            if ($p instanceof DOMElement && strtolower($p->tagName) === 'a') {
+                return $p;
+            }
+            $p = $p->parentNode;
+        }
+
+        return null;
+    }
+
+    /**
+     * 構造 JSON に保存する href（mailto/tel/#/javascript はそのまま、それ以外は absolutize）。
+     */
+    private function normalizeHrefForStorage(string $href): string
+    {
+        if ($href === '') {
+            return '';
+        }
+        if (str_starts_with($href, '#') || str_starts_with($href, 'javascript:')) {
+            return $href;
+        }
+        if (str_starts_with($href, 'mailto:') || str_starts_with($href, 'tel:')) {
+            return $href;
+        }
+
+        return $this->absolutizeUrl($href);
     }
 
     // -----------------------------------------------------------------------

@@ -10,6 +10,7 @@ declare(strict_types=1);
  * - サーバーにキーが無く、OPENAI_DENY_CLIENT_KEY が 1 でない限り、従来どおり POST の api_key を許可（開発用）。
  */
 require_once __DIR__ . '/../lib/env_load.php';
+require_once __DIR__ . '/../lib/api_usage_log.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -106,6 +107,21 @@ $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
 if ($response === false) {
+    lp_reverse_api_usage_record([
+        'env_var' => 'OPENAI_API_KEY',
+        'provider' => 'openai',
+        'operation' => 'images/generations',
+        'ok' => false,
+        'http_code' => 502,
+        'meta' => [
+            'model' => $model,
+            'size' => $size,
+            'key_source' => $serverKey !== '' ? 'server_env' : 'client_body',
+            'curl_error' => $curlErr,
+        ],
+        'usage' => [],
+        'estimated_usd' => 0.0,
+    ]);
     http_response_code(502);
     echo json_encode(['error' => 'OpenAI 接続エラー: ' . $curlErr], JSON_UNESCAPED_UNICODE);
     exit;
@@ -116,15 +132,65 @@ if ($code !== 200) {
     $msg = is_array($data) && isset($data['error']['message'])
         ? (string) $data['error']['message']
         : mb_substr($response, 0, 800);
+    lp_reverse_api_usage_record([
+        'env_var' => 'OPENAI_API_KEY',
+        'provider' => 'openai',
+        'operation' => 'images/generations',
+        'ok' => false,
+        'http_code' => $code,
+        'meta' => [
+            'model' => $model,
+            'size' => $size,
+            'key_source' => $serverKey !== '' ? 'server_env' : 'client_body',
+            'error_message' => $msg,
+        ],
+        'usage' => [],
+        'estimated_usd' => 0.0,
+    ]);
     http_response_code($code >= 400 && $code < 600 ? $code : 502);
     echo json_encode(['error' => $msg], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 if (!is_array($data) || empty($data['data'][0]['url'])) {
+    lp_reverse_api_usage_record([
+        'env_var' => 'OPENAI_API_KEY',
+        'provider' => 'openai',
+        'operation' => 'images/generations',
+        'ok' => false,
+        'http_code' => $code,
+        'meta' => [
+            'model' => $model,
+            'size' => $size,
+            'key_source' => $serverKey !== '' ? 'server_env' : 'client_body',
+            'reason' => 'no_image_url_in_response',
+        ],
+        'usage' => [],
+        'estimated_usd' => 0.0,
+    ]);
     http_response_code(502);
     echo json_encode(['error' => '応答に画像 URL がありません'], JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+$est = lp_reverse_api_usage_estimate_openai_image($model, $size);
+$metaOk = [
+    'model' => $model,
+    'size' => $size,
+    'key_source' => $serverKey !== '' ? 'server_env' : 'client_body',
+];
+if (is_array($data) && isset($data['usage']) && is_array($data['usage'])) {
+    $metaOk['response_usage'] = $data['usage'];
+}
+lp_reverse_api_usage_record([
+    'env_var' => 'OPENAI_API_KEY',
+    'provider' => 'openai',
+    'operation' => 'images/generations',
+    'ok' => true,
+    'http_code' => $code,
+    'meta' => $metaOk,
+    'usage' => ['images' => 1],
+    'estimated_usd' => $est,
+]);
 
 echo json_encode(['url' => (string) $data['data'][0]['url']], JSON_UNESCAPED_UNICODE);

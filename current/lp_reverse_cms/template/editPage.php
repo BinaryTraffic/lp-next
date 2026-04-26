@@ -162,11 +162,30 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                              placeholder="<?= htmlspecialchars($origSrc, ENT_QUOTES) ?>"
                              value="<?= htmlspecialchars($currentSrc, ENT_QUOTES) ?>">
                       <label class="form-label small">alt テキスト</label>
-                      <input type="text" class="form-control form-control-sm"
+                      <input type="text" class="form-control form-control-sm mb-2"
                              data-lp-id="<?= $elemId ?>"
                              data-lp-field="text"
                              placeholder="<?= htmlspecialchars($origText, ENT_QUOTES) ?>"
                              value="<?= htmlspecialchars($currentText, ENT_QUOTES) ?>">
+                      <?php
+                        $wrapHref = (string) ($elem['original_href'] ?? '');
+                        $wrapTargetOrig = (string) ($elem['wrap_target'] ?? '');
+                        $currentTarget = (string) ($clientElem['target'] ?? '');
+                      ?>
+                      <?php if ($wrapHref !== '' || $wrapTargetOrig !== ''): ?>
+                        <label class="form-label small">囲みリンク先（親の &lt;a href&gt;）</label>
+                        <input type="text" class="form-control form-control-sm mb-2"
+                               data-lp-id="<?= $elemId ?>"
+                               data-lp-field="href"
+                               placeholder="<?= htmlspecialchars($wrapHref, ENT_QUOTES) ?>"
+                               value="<?= htmlspecialchars($currentHref, ENT_QUOTES) ?>">
+                        <label class="form-label small">target（例: _blank）</label>
+                        <input type="text" class="form-control form-control-sm"
+                               data-lp-id="<?= $elemId ?>"
+                               data-lp-field="target"
+                               placeholder="<?= htmlspecialchars($wrapTargetOrig, ENT_QUOTES) ?>"
+                               value="<?= htmlspecialchars($currentTarget, ENT_QUOTES) ?>">
+                      <?php endif; ?>
 
                     <?php elseif ($elemType === 'paragraph'): ?>
                       <!-- Paragraph: textarea -->

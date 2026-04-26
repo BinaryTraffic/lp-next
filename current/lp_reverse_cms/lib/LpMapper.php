@@ -43,7 +43,7 @@ class LpMapper
             $section['type_label'] = $meta['label'];
 
             foreach ($section['elements'] as &$element) {
-                $element['type_label'] = self::ELEMENT_TYPE_LABELS[$element['type']] ?? $element['type'];
+                $element['type_label'] = self::elementTypeLabel($element);
                 $element['editable']   = true;
             }
             unset($element);
@@ -53,6 +53,101 @@ class LpMapper
         }
         unset($section);
 
+        $structure['button_objects'] = self::collectButtonObjects($structure);
+
         return $structure;
+    }
+
+    /**
+     * @param array{type?: string, original_href?: ?string, label?: string, original_text?: string, original_src?: string} $element
+     */
+    private static function elementTypeLabel(array $element): string
+    {
+        $t = $element['type'] ?? '';
+        if ($t === 'image' && !empty($element['original_href'])) {
+            return '画像（リンク付き）';
+        }
+
+        return self::ELEMENT_TYPE_LABELS[$t] ?? $t;
+    }
+
+    /**
+     * クローン LP 上の「ボタン扱い」オブジェクト一覧（ラスタ＋囲みリンク等）。
+     * ツール・API がセクションを走査せずに参照できる。
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function collectButtonObjects(array $structure): array
+    {
+        $out = [];
+        foreach ($structure['sections'] ?? [] as $sec) {
+            $secType = $sec['type'] ?? 'general';
+            foreach ($sec['elements'] ?? [] as $el) {
+                if (($el['type'] ?? '') !== 'image') {
+                    continue;
+                }
+                $src = (string) ($el['original_src'] ?? '');
+                if ($src === '' || preg_match('#favicon\\.ico#i', $src)) {
+                    continue;
+                }
+                $href = isset($el['original_href']) && is_string($el['original_href']) ? $el['original_href'] : '';
+                $scoreInfo = self::scoreRasterButton($el, $secType);
+                if ($href === '' && $scoreInfo['score'] < 1) {
+                    continue;
+                }
+                $out[] = [
+                    'element_id'     => $el['id'] ?? '',
+                    'section_id'     => $sec['id'] ?? '',
+                    'section_type'   => $secType,
+                    'section_label'  => $sec['label'] ?? ($sec['id'] ?? ''),
+                    'label'          => $el['label'] ?? '',
+                    'image_src'      => $src,
+                    'href'           => $href !== '' ? $href : null,
+                    'target'         => $el['wrap_target'] ?? null,
+                    'rel'            => $el['wrap_rel'] ?? null,
+                    'alt'            => (string) ($el['original_text'] ?? ''),
+                    'button_score'   => $scoreInfo['score'] + ($href !== '' ? 1 : 0),
+                    'button_reasons' => array_merge(
+                        $scoreInfo['reasons'],
+                        $href !== '' ? ['囲みa要素'] : []
+                    ),
+                ];
+            }
+        }
+
+        usort($out, static fn (array $a, array $b): int => ($b['button_score'] ?? 0) <=> ($a['button_score'] ?? 0));
+
+        return $out;
+    }
+
+    /**
+     * @return array{score: int, reasons: list<string>}
+     */
+    private static function scoreRasterButton(array $el, string $secType): array
+    {
+        $src   = strtolower((string) ($el['original_src'] ?? ''));
+        $label = strtolower((string) ($el['label'] ?? ''));
+        $alt   = trim((string) ($el['original_text'] ?? ''));
+
+        $score   = 0;
+        $reasons = [];
+        if (preg_match('#/btn[^/]*\\.(jpg|jpeg|png|webp)#i', $src)) {
+            $score += 3;
+            $reasons[] = 'ファイル名btn';
+        }
+        if (preg_match('/btn\d|ボタン|\bbutton\b/u', $label)) {
+            $score += 2;
+            $reasons[] = 'ラベル';
+        }
+        if ($secType === 'cta') {
+            $score += 1;
+            $reasons[] = 'CTA節';
+        }
+        if ($alt !== '' && mb_strlen($alt) <= 72 && !preg_match('#^https?://#i', $alt)) {
+            $score += 1;
+            $reasons[] = '短いalt';
+        }
+
+        return ['score' => $score, 'reasons' => $reasons];
     }
 }

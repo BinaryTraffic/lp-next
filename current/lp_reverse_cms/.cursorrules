@@ -1,0 +1,15 @@
+## 行動原則
+- 説明より実装を優先する
+- ユーザーへの確認・コマンド実行指示は不要。自分で実行する
+- 冗長な説明・前置き・要約は省略する
+- エラーが出たら自分で修正して再実行する
+- 完了したら変更点のみ簡潔に報告する
+
+## プロジェクト固有
+- 言語: PHP 8.x strict_types（Node.js・Composer・DB使用不可）
+- フォント: /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc
+- アイコン定数: current/lp_reverse_cms/lib/icon_map.php
+- エラー形式: openai_image_proxy.php に準拠（JSON+HTTPステータス）
+- 保存先: output/ai_images/
+## 既知のバグ防止
+- flock()のアンロックは LOCK_UN を使うこと（LOCK_UNLOCKは未定義でFatal Error）

@@ -29,6 +29,11 @@ Thumbs.db
 # シークレット（VM 上のみ配置）
 current/lp_reverse_cms/.env
 
+# フォント（.gitkeep のみ管理。実体は VM に配置またはパッケージからコピー）
+current/lp_reverse_cms/fonts/*.ttc
+current/lp_reverse_cms/fonts/*.ttf
+current/lp_reverse_cms/fonts/*.otf
+
 # ログ・一時ファイル
 *.log
 php_errors.log

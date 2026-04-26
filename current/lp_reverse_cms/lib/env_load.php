@@ -4,7 +4,24 @@ declare(strict_types=1);
 
 /**
  * Minimal .env loader (no Composer). Does not overwrite existing getenv() / $_ENV.
+ *
+ * 既定のキー置き場（このリポジトリ）:
+ *   lp_reverse_cms/.env
+ * 例（GCP VM 等）:
+ *   /home/lp-next/current/lp_reverse_cms/.env
+ *
+ * 別パスを使う場合のみ、プロセス環境変数 LP_REVERSE_ENV_PATH に .env の絶対パスを設定。
  */
+function lp_reverse_env_file_path(): string
+{
+    $override = getenv('LP_REVERSE_ENV_PATH');
+    if (is_string($override) && $override !== '') {
+        return $override;
+    }
+
+    return dirname(__DIR__) . DIRECTORY_SEPARATOR . '.env';
+}
+
 function lp_reverse_load_env(?string $path = null): void
 {
     static $loaded = false;
@@ -14,7 +31,7 @@ function lp_reverse_load_env(?string $path = null): void
     $loaded = true;
 
     if ($path === null) {
-        $path = dirname(__DIR__) . DIRECTORY_SEPARATOR . '.env';
+        $path = lp_reverse_env_file_path();
     }
     if (!is_readable($path)) {
         return;
