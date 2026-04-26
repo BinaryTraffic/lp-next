@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>プロジェクトジャーナル — LP-NEXT（v1.2.0 起点）</title>
+  <title>LP-NEXT 開発状況</title>
   <style>
     :root {
       --text: #1a1a1a;
@@ -43,7 +43,7 @@
       text-decoration: none;
       display: inline-block;
       padding: 0.35rem 0.15rem;
-      margin-right: 0.25rem;
+      margin-right: 0.75rem;
       min-height: 44px;
       line-height: 1.3;
     }
@@ -51,7 +51,6 @@
       .nav a { min-height: unset; display: inline; padding: 0; }
     }
     .nav a:hover { text-decoration: underline; }
-    .js-dt { font-size: 0.8rem; color: var(--muted); margin: 0.45rem 0 0; line-height: 1.45; }
 
     .phase-hero {
       background: #f4f6f8;
@@ -60,7 +59,6 @@
       padding: 0.9rem 1rem 1rem;
       margin: 0 0 1.1rem;
     }
-    .phase-hero[hidden] { display: none !important; }
     .phase-hero h2 {
       font-size: 1.05rem;
       margin: 0 0 0.5rem;
@@ -68,74 +66,23 @@
       border: 0;
       padding: 0;
     }
-    .phase-hero blockquote { margin: 0.5rem 0 0; font-size: 0.88rem; }
     .phase-hero .table-wrap { margin: 0.5rem 0 0.35rem; }
 
-    .collab {
+    .s1-card {
       background: #fff;
-      border: 1px solid #c3d4ee;
+      border: 1px solid var(--border);
       border-radius: 10px;
       padding: 0.9rem 1rem 1rem;
-      margin: 0 0 1.15rem;
+      margin: 0 0 1.1rem;
     }
-    .collab h2 { font-size: 1.02rem; margin: 0 0 0.35rem; font-weight: 600; }
-    .collab__lead { font-size: 0.88rem; color: var(--muted); margin: 0 0 0.75rem; }
-    .collab__grid { display: grid; gap: 0.6rem; margin-bottom: 0.6rem; }
-    .collab label { display: block; font-size: 0.85rem; }
-    .collab input[type="text"],
-    .collab select,
-    .collab textarea {
-      width: 100%;
-      max-width: 100%;
-      margin-top: 0.2rem;
-      padding: 0.45rem 0.5rem;
-      font: inherit;
-      font-size: 0.95rem;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-    }
-    .collab textarea { min-height: 3.2rem; resize: vertical; }
-    .collab__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
-    .collab button {
-      font: inherit;
-      font-size: 0.9rem;
-      padding: 0.45rem 0.9rem;
-      border-radius: 6px;
-      border: 1px solid var(--link);
-      background: #0b57d0;
-      color: #fff;
-      min-height: 44px;
-      cursor: pointer;
-    }
-    .collab button[type="button"].collab__secondary {
-      background: #fff;
-      color: var(--text);
-      border-color: var(--border);
-    }
-    .collab__tools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; font-size: 0.85rem; margin-top: 0.4rem; }
-    .collab__tools input[type="file"] { font-size: 0.85rem; max-width: 100%; }
-    .collab__log { max-height: 14rem; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.45rem; margin: 0.4rem 0; background: #fafbfc; -webkit-overflow-scrolling: touch; }
-    .collab__log:empty { display: none; }
-    .collab__log:not(:empty) { display: block; }
-    .collab__msg { padding: 0.45rem 0.4rem; border-bottom: 1px solid #eee; font-size: 0.88rem; }
-    .collab__msg:last-child { border-bottom: 0; }
-    .collab__msg-meta { color: #666; font-size: 0.8rem; margin-bottom: 0.2rem; }
-    .collab__msg-body { margin: 0; white-space: pre-wrap; word-break: break-word; }
-    .collab__badge { display: inline-block; background: #e3ecf8; color: #145; padding: 0.1em 0.45em; border-radius: 4px; font-size: 0.8rem; }
+    .s1-card h2 { font-size: 1.02rem; margin: 0 0 0.5rem; font-weight: 600; }
+    .s1-list { list-style: none; padding: 0; margin: 0; }
+    .s1-list li { padding: 0.35rem 0; border-bottom: 1px solid #eee; font-size: 0.92rem; }
+    .s1-list li:last-child { border-bottom: none; }
+    .s1-list li.done { color: #0d3d1f; }
+    .s1-list li.todo { color: #555; }
 
-    #md { font-size: 0.97rem; }
-    @media (max-width: 599px) { #md { font-size: 0.95rem; } }
-    #md h1, #md h2, #md h3 { line-height: 1.3; font-weight: 600; }
-    #md h1 { font-size: 1.2rem; margin: 1.5rem 0 0.65rem; }
-    #md h1:first-of-type { margin-top: 0; }
-    #md h2 { font-size: 1.05rem; margin: 1.35rem 0 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.2rem; }
-    #md h3 { font-size: 0.98rem; margin: 1rem 0 0.4rem; }
-    #md p { margin: 0.55rem 0; }
-    #md ul, #md ol { margin: 0.45rem 0; padding-left: 1.25rem; }
-    #md li { margin: 0.2rem 0; }
-    #md li::marker { color: #888; }
-    #md hr { border: 0; border-top: 1px solid var(--border); margin: 1.15rem 0; }
-    .table-wrap, .phase-hero .table-wrap {
+    .table-wrap {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
       margin: 0.6rem 0 1.1rem;
@@ -143,299 +90,146 @@
       border: 1px solid var(--border);
       background: #fff;
     }
-    .table-wrap + p { margin-top: 0.75rem; }
-    #md .table-wrap table, .phase-hero .table-wrap table {
+    .phase-hero .table-wrap table {
       width: 100%;
-      min-width: min(100%, 22rem);
+      min-width: 18rem;
       border-collapse: collapse;
       font-size: 0.86rem;
       margin: 0;
     }
-    @media (min-width: 480px) { #md .table-wrap table, .phase-hero .table-wrap table { font-size: 0.88rem; } }
-    #md .table-wrap.table-wide table { min-width: 32rem; }
-    .phase-hero .table-wrap table { min-width: 18rem; }
-    #md .table-wrap.table-phase table { min-width: 20rem; }
-    #md th, #md td, .phase-hero th, .phase-hero td {
+    @media (min-width: 480px) { .phase-hero .table-wrap table { font-size: 0.88rem; } }
+    .phase-hero th, .phase-hero td {
       border: 1px solid var(--border);
       padding: 0.45rem 0.55rem;
       text-align: left;
       vertical-align: top;
     }
-    @media (min-width: 600px) { #md th, #md td, .phase-hero th, .phase-hero td { padding: 0.5rem 0.65rem; } }
-    #md thead th, .phase-hero thead th { background: var(--thead); font-weight: 600; }
-    #md tbody tr:nth-child(even) td, .phase-hero tbody tr:nth-child(even) td { background: #fafbfc; }
-    #md td.st-done, .phase-hero td.st-done { background: #e6f4ea !important; color: #0d3d1f; font-weight: 600; }
-    #md td.st-todo, .phase-hero td.st-todo { background: #fff8e5 !important; color: #5a4500; }
-    #md blockquote {
-      margin: 0.65rem 0;
-      padding: 0.35rem 0 0.35rem 0.85rem;
-      border-left: 3px solid #c8d0da;
-      color: var(--muted);
-      font-size: 0.92em;
+    @media (min-width: 600px) { .phase-hero th, .phase-hero td { padding: 0.5rem 0.65rem; } }
+    .phase-hero thead th { background: var(--thead); font-weight: 600; }
+    .phase-hero tbody tr:nth-child(even) td { background: #fafbfc; }
+    .phase-hero tr.st-done td {
+      background: #e6f4ea !important;
+      color: #0d3d1f;
     }
-    #md a { color: var(--link); word-break: break-word; }
-    #md code {
-      background: #f2f4f6;
-      padding: 0.12em 0.4em;
-      border-radius: 4px;
-      font-size: 0.99em;
-      word-break: break-all;
+    .phase-hero tr.st-active td {
+      background: #fff8e5 !important;
+      color: #5a4500;
     }
-    .status { padding: 0.55rem 0.8rem; background: #f6f8fa; border-radius: 6px; font-size: 0.9rem; color: var(--muted); }
-    .status[hidden] { display: none; }
   </style>
 </head>
 <body>
   <header>
-    <h1>プロジェクトジャーナル</h1>
-    <p class="meta">下の <strong>フェーズ進捗</strong>が全体像です。打ち合わせメモはこのブラウザに保存（JSON で受け渡し可）。起点 v1.2.0。</p>
-    <p class="nav">
+    <h1>LP-NEXT 開発状況</h1>
+    <p class="meta">最終更新：2026-04-27</p>
+    <nav class="nav">
       <a href="index.html">LP-NEXT 入口</a>
       <a href="lp_reverse_cms/">管理画面</a>
-      <a href="prompt_context_demo.html">顧客情報・文脈入力（テスト中）</a>
-      <a href="JOURNAL.md">JOURNAL.md</a>（同じ文面）
-    </p>
-    <p class="js-dt" id="js-page-dt" role="status" aria-live="polite"></p>
+    </nav>
   </header>
-  <p id="load-msg" class="status">本文を読み込み中です…</p>
-  <p id="err-msg" class="status" hidden></p>
-  <div id="phase-hero" class="phase-hero" hidden></div>
-  <section id="collab-panel" class="collab" aria-label="打ち合わせメモ">
-    <h2>打ち合わせメモ</h2>
-    <p class="collab__lead">会議中の箇条書き・決定事項のメモ用です。<strong>この端末内</strong>にだけ保存（サーバーに送りません）。同席者と揃えたいときは、書き出した <strong>JSON ファイル</strong>を付け足し読み（マージ）して共有。</p>
-    <div class="collab__grid">
-      <label>名前（任意）<input type="text" id="collab-who" maxlength="64" placeholder="例：佐藤" autocomplete="name" /></label>
-      <label>対象フェーズ
-        <select id="collab-phase">
-          <option value="">（指定なし）</option>
-          <option value="Ph.0">Ph.0</option>
-          <option value="S1">S1</option>
-          <option value="S2 前">S2 前</option>
-          <option value="S2">S2</option>
-          <option value="S3">S3</option>
-          <option value="S4">S4</option>
-          <option value="S5">S5</option>
-        </select>
-      </label>
-      <label>メモ<textarea id="collab-body" rows="3" placeholder="会議用メモ・相談・アノテーション" maxlength="4000"></textarea></label>
-    </div>
-    <div class="collab__actions">
-      <button type="button" id="collab-post">追記</button>
-    </div>
-    <div id="collab-log" class="collab__log" role="log" aria-live="polite" aria-relevant="additions"></div>
-    <div class="collab__tools">
-      <button type="button" class="collab__secondary" id="collab-export">JSON 書き出し</button>
-      <label>JSON 取り込み <input type="file" id="collab-import" accept="application/json,.json" /></label>
-      <button type="button" class="collab__secondary" id="collab-clear">この欄の全消去</button>
-    </div>
-  </section>
+  <div id="phase-hero" class="phase-hero"></div>
+  <div id="s1-card" class="s1-card"></div>
   <noscript>
-    <p>JavaScript を有効にするか、<a href="JOURNAL.md">JOURNAL.md</a> を直接開いてください。</p>
+    <p>JavaScript を有効にしてください。</p>
   </noscript>
-  <div id="md" hidden></div>
-  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
   <script>
-    (function () {
-      const LS = "lp-next-journal-collab-v1";
-      const load = document.getElementById("load-msg");
-      const err = document.getElementById("err-msg");
-      const md = document.getElementById("md");
-      const phaseHero = document.getElementById("phase-hero");
-      const logEl = document.getElementById("collab-log");
-      const who = document.getElementById("collab-who");
-      const phSel = document.getElementById("collab-phase");
-      const body = document.getElementById("collab-body");
-      const pageDt = document.getElementById("js-page-dt");
-      function setPageJsDateTime() {
-        if (!pageDt) return;
-        var d = new Date();
-        var tz = (typeof Intl !== "undefined" && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
-        pageDt.textContent = "表示（JS 時刻）: " + d.toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "medium" })
-          + " ・ " + d.toISOString() + (tz ? " ・ " + tz : "");
-      }
-      setPageJsDateTime();
+    const PHASES = [
+      {
+        label: 'Ph.0',
+        name: 'LP複製エンジン',
+        desc: 'URL入力 → HTML取得・アセット保存・手動編集・スタンドアロン出力',
+        status: 'done',
+      },
+      {
+        label: 'S1',
+        name: 'AI画像分析・自動置換エンジン',
+        desc: 'Claude Vision で画像タイプ判定 → HF FLUX で代替画像生成 → GD でテキスト合成',
+        status: 'active',
+      },
+      {
+        label: 'S2',
+        name: 'AI画像提案エンジン',
+        desc: '業種文脈に合う代替候補をAIが提示',
+        status: 'pending',
+      },
+      {
+        label: 'S3',
+        name: 'テキスト自動生成',
+        desc: '業種・トーンを指定してキャッチコピー・本文を生成',
+        status: 'pending',
+      },
+      {
+        label: 'S4',
+        name: '承認ログと学習ループ',
+        desc: '人間の選択をAIに蓄積し次回提案精度を向上',
+        status: 'pending',
+      },
+      {
+        label: 'S5',
+        name: '精度向上・業種テンプレート化',
+        desc: '自動生成精度の向上と業種別テンプレート整備',
+        status: 'pending',
+      },
+    ];
 
-      function wrapTables(root) {
-        root.querySelectorAll("table").forEach(function (table) {
-          if (table.closest(".table-wrap")) return;
-          var wrap = document.createElement("div");
-          wrap.className = "table-wrap";
-          var heads = table.querySelectorAll("thead th");
-          var firstHead = heads.length ? (heads[0].textContent || "").trim() : "";
-          if (firstHead === "#") wrap.classList.add("table-wide");
-          else if (firstHead === "フェーズ") wrap.classList.add("table-phase");
-          table.parentNode.insertBefore(wrap, table);
-          wrap.appendChild(table);
-        });
-      }
+    const S1_ITEMS = [
+      { text: 'Claude Vision で画像タイプ自動判定', done: true },
+      { text: 'HF FLUX による任意サイズ画像生成', done: true },
+      { text: 'ボタン・UI画像のテキスト合成（余白保持）', done: true },
+      { text: 'グラデーション・バッジ・フレーム付き画像対応', done: true },
+      { text: '写真・イラスト系画像の自動生成', done: false },
+      { text: 'composite（背景＋テキスト混在）画像の再合成', done: false },
+    ];
 
-      function colorStatusCells(root) {
-        root.querySelectorAll("td").forEach(function (td) {
-          var t = (td.textContent || "").replace(/\s+/g, " ").trim();
-          td.classList.remove("st-done", "st-todo");
-          if (t.indexOf("完了") !== -1 || t.indexOf("できている") !== -1) td.classList.add("st-done");
-          else if (t.indexOf("未着手") !== -1 || t.indexOf("着手中") !== -1 || t.indexOf("これから") !== -1) td.classList.add("st-todo");
-        });
-      }
+    function renderPhases() {
+      const rows = PHASES.map(function (p) {
+        const badge = p.status === 'done' ? '✅ 完了'
+          : p.status === 'active' ? '🔄 開発中'
+            : '🔲 予定';
+        const cls = p.status === 'done' ? 'st-done'
+          : p.status === 'active' ? 'st-active'
+            : '';
+        return '<tr class="' + cls + '">' +
+          '<td><strong>' + escapeHtml(p.label) + '</strong></td>' +
+          '<td>' + escapeHtml(p.name) + '</td>' +
+          '<td>' + escapeHtml(p.desc) + '</td>' +
+          '<td>' + badge + '</td>' +
+          '</tr>';
+      }).join('');
 
-      function movePhaseBlock() {
-        var h2s = md.querySelectorAll("h2");
-        var i, phaseH2 = null;
-        for (i = 0; i < h2s.length; i++) {
-          if ((h2s[i].textContent || "").trim() === "フェーズ進捗") {
-            phaseH2 = h2s[i];
-            break;
-          }
-        }
-        if (!phaseH2) return;
-        var n = phaseH2.nextElementSibling;
-        phaseHero.appendChild(phaseH2);
-        while (n && n.tagName !== "H2") {
-          var nx = n.nextElementSibling;
-          phaseHero.appendChild(n);
-          n = nx;
-        }
-        phaseHero.hidden = false;
-        wrapTables(phaseHero);
-        colorStatusCells(phaseHero);
-        phaseH2.setAttribute("id", "status-phase");
-      }
+      document.getElementById('phase-hero').innerHTML =
+        '<h2>フェーズ概要</h2>' +
+        '<div class="table-wrap">' +
+        '<table>' +
+        '<thead><tr><th>フェーズ</th><th>内容</th><th>概要</th><th>状態</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+        '</table>' +
+        '</div>';
+    }
 
-      function loadMsgs() {
-        try {
-          return JSON.parse(localStorage.getItem(LS) || "[]");
-        } catch (e) {
-          return [];
-        }
-      }
-      function saveMsgs(arr) {
-        localStorage.setItem(LS, JSON.stringify(arr));
-      }
-      function renderLog() {
-        var arr = loadMsgs();
-        if (!arr.length) {
-          logEl.innerHTML = "";
-          return;
-        }
-        var html = arr
-          .slice()
-          .reverse()
-          .map(function (e) {
-            var when = (e.t && new Date(e.t)) || new Date();
-            var ds = isNaN(when.getTime()) ? "—" : when.toLocaleString("ja-JP", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-            var whoL = (e.who && String(e.who).trim()) || "（匿名）";
-            var phB = (e.phase && String(e.phase).trim()) ? '<span class="collab__badge">' + escapeHtml(e.phase) + "</span> " : "";
-            return '<div class="collab__msg" data-id="' + escapeHtml(String(e.id)) + '"><div class="collab__msg-meta">' + phB + escapeHtml(ds) + " ・ " + escapeHtml(whoL) + '</div><p class="collab__msg-body">' + escapeHtml((e.body || "").slice(0, 4000)) + "</p></div>";
-          })
-          .join("");
-        logEl.innerHTML = html;
-      }
-      function escapeHtml(s) {
-        return String(s)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;");
-      }
+    function renderS1() {
+      const items = S1_ITEMS.map(function (i) {
+        return '<li class="' + (i.done ? 'done' : 'todo') + '">' +
+          (i.done ? '✅' : '🔲') + ' ' + escapeHtml(i.text) +
+          '</li>';
+      }).join('');
 
-      document.getElementById("collab-post").addEventListener("click", function () {
-        var t = (body.value || "").trim();
-        if (!t) {
-          body.focus();
-          return;
-        }
-        var m = { id: String(Date.now()) + "-" + Math.random().toString(36).slice(2, 7), t: new Date().toISOString(), who: (who.value || "").trim(), phase: (phSel.value || "").trim(), body: t };
-        var arr = loadMsgs();
-        arr.push(m);
-        saveMsgs(arr);
-        body.value = "";
-        renderLog();
-        logEl.scrollTop = 0;
-      });
+      document.getElementById('s1-card').innerHTML =
+        '<h2>S1 直近進捗</h2>' +
+        '<ul class="s1-list">' + items + '</ul>';
+    }
 
-      document.getElementById("collab-export").addEventListener("click", function () {
-        var data = loadMsgs();
-        var blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), messages: data }, null, 2)], { type: "application/json" });
-        var a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "lp-next-journal-memo.json";
-        a.click();
-        URL.revokeObjectURL(a.href);
-      });
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
 
-      document.getElementById("collab-import").addEventListener("change", function (ev) {
-        var f = ev.target.files && ev.target.files[0];
-        if (!f) return;
-        var r = new FileReader();
-        r.onload = function () {
-          try {
-            var o = JSON.parse(r.result);
-            var incoming = Array.isArray(o) ? o : o.messages || [];
-            if (!Array.isArray(incoming) || !incoming.length) {
-              throw new Error("空です");
-            }
-            var have = loadMsgs();
-            var ids = new Set(have.map(function (x) { return String(x.id); }));
-            var add = 0;
-            incoming.forEach(function (m) {
-              if (m && m.id && !ids.has(String(m.id))) {
-                have.push({ id: String(m.id), t: m.t || new Date().toISOString(), who: m.who || "", phase: m.phase || "", body: m.body || "" });
-                ids.add(String(m.id));
-                add++;
-              }
-            });
-            saveMsgs(have);
-            renderLog();
-            alert("取り込み: 新規 " + add + " 件（同じ id はスキップ）");
-          } catch (e) {
-            alert("取り込みに失敗: " + (e && e.message ? e.message : "形式を確認"));
-          }
-          ev.target.value = "";
-        };
-        r.readAsText(f);
-      });
-
-      document.getElementById("collab-clear").addEventListener("click", function () {
-        if (confirm("このブラウザの打ち合わせメモを全部消してよいですか？（戻せません）")) {
-          localStorage.removeItem(LS);
-          renderLog();
-        }
-      });
-
-      renderLog();
-
-      var src = "JOURNAL.md?t=" + Date.now();
-      if (typeof marked === "undefined") {
-        err.hidden = false;
-        err.textContent = "表示用ライブラリの読み込みに失敗しました。JOURNAL.md を直接開いてください。";
-        load.hidden = true;
-        return;
-      }
-      marked.setOptions({ gfm: true, breaks: true });
-      fetch(src, { cache: "no-store" })
-        .then(function (r) {
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          return r.text();
-        })
-        .then(function (text) {
-          var html = marked.parse(text);
-          md.innerHTML = html;
-          var firstH1 = md.querySelector("h1");
-          if (firstH1) firstH1.remove();
-          movePhaseBlock();
-          wrapTables(md);
-          colorStatusCells(md);
-          md.hidden = false;
-          load.hidden = true;
-          setPageJsDateTime();
-        })
-        .catch(function (e) {
-          load.hidden = true;
-          err.hidden = false;
-          setPageJsDateTime();
-          err.innerHTML = "JOURNAL.md を表示できませんでした（" + (e && e.message ? e.message : "エラー") + "）。<a href=\"JOURNAL.md\">JOURNAL.md</a> を直接開いてください。";
-        });
-    })();
+    document.addEventListener('DOMContentLoaded', function () {
+      renderPhases();
+      renderS1();
+    });
   </script>
 </body>
 </html>
