@@ -36,9 +36,10 @@ declare(strict_types=1);
  *
  * icons が空でないときは SVG を Imagick でラスタライズして背景の上・テキストの下に重ねる（Imagick 必須）。
  *
- * 成功: { "url": "/output/ai_images/composed_<uniqid>.jpg", "content_bounds": {
- *   "padding_top", "padding_right", "padding_bottom", "padding_left", "button_w", "button_h"
- * }}
+ * crop_to_button: true かつ source_url 指定時、保存 JPEG を余白の内側矩形（button_w×button_h）だけに切り出す。
+ * ボタン差し替えツールは板サイズと一致する書き出し用に true を送る。
+ *
+ * 成功: { "url": "...", "content_bounds": { ... }, "output_width"?, "output_height"? }
  *
  * 余白検出（白 RGB≥245 または透過）は GD。本エンドポイントは GD 必須。
  * エンジン: テキストは GD + FreeType を優先。不可のとき Imagick。icons は Imagick で SVG ラスタ化。
@@ -84,6 +85,7 @@ if (isset($in['border_fill']) && is_array($in['border_fill'])) {
 }
 $outW = isset($in['width']) ? (int) $in['width'] : 0;
 $outH = isset($in['height']) ? (int) $in['height'] : 0;
+$cropToButton = !empty($in['crop_to_button']);
 /** @var list<array<string, mixed>> $texts */
 $texts = isset($in['texts']) && is_array($in['texts']) ? $in['texts'] : [];
 /** @var list<array<string, mixed>> $icons */
@@ -133,6 +135,11 @@ if ($sourceUrl !== '' && $borderFill === null) {
         echo json_encode(['error' => 'source_url が無効か、output 配下のファイルとして解決できません'], JSON_UNESCAPED_UNICODE);
         exit;
     }
+}
+if ($cropToButton && $sourcePath === null) {
+    http_response_code(400);
+    echo json_encode(['error' => 'crop_to_button は source_url と併用してください'], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 if ($borderFill !== null) {
     $bp = max(0, $borderFill['width_px']);
@@ -190,23 +197,23 @@ $fname = 'composed_' . bin2hex(random_bytes(8)) . '.jpg';
 $destAbs = $aiDir . DIRECTORY_SEPARATOR . $fname;
 $publicUrl = '/output/ai_images/' . $fname;
 
-/** @var array{error: ?string, content_bounds: array<string, int>} $renderResult */
+/** @var array{error: ?string, content_bounds: array<string, int>, output_width?: int, output_height?: int} $renderResult */
 $renderResult = ['error' => '内部エラー', 'content_bounds' => []];
 if ($hasIcons) {
     $fontRegularGdIcons = composite_expand_font_for_gd($fontRegularFile);
     $fontBoldGdIcons = $fontBoldFile !== '' ? composite_expand_font_for_gd($fontBoldFile) : '';
     $gdFontsOkIcons = ($fontRegularGdIcons !== '' || $fontBoldGdIcons !== '');
     if ($gdFontsOkIcons) {
-        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularGdIcons, $fontBoldGdIcons, $sourcePath, $borderFill);
+        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularGdIcons, $fontBoldGdIcons, $sourcePath, $borderFill, $cropToButton);
     } else {
-        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill);
+        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill, $cropToButton);
     }
 } elseif ($engine === 'gd') {
     $fontRegularGd = composite_expand_font_for_gd($fontRegularFile);
     $fontBoldGd = $fontBoldFile !== '' ? composite_expand_font_for_gd($fontBoldFile) : '';
     $gdFontsOk = ($fontRegularGd !== '' || $fontBoldGd !== '');
     if (!$gdFontsOk && composite_imagick_available()) {
-        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill);
+        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill, $cropToButton);
     } elseif (!$gdFontsOk) {
         http_response_code(500);
         echo json_encode([
@@ -214,10 +221,10 @@ if ($hasIcons) {
         ], JSON_UNESCAPED_UNICODE);
         exit;
     } else {
-        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularGd, $fontBoldGd, $sourcePath, $borderFill);
+        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularGd, $fontBoldGd, $sourcePath, $borderFill, $cropToButton);
     }
 } else {
-    $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill);
+    $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill, $cropToButton);
 }
 if ($renderResult['error'] !== null) {
     $err = $renderResult['error'];
@@ -229,10 +236,15 @@ if ($renderResult['error'] !== null) {
     exit;
 }
 
-echo json_encode([
+$outJson = [
     'url'            => $publicUrl,
     'content_bounds' => $renderResult['content_bounds'],
-], JSON_UNESCAPED_UNICODE);
+];
+if (isset($renderResult['output_width'], $renderResult['output_height'])) {
+    $outJson['output_width'] = $renderResult['output_width'];
+    $outJson['output_height'] = $renderResult['output_height'];
+}
+echo json_encode($outJson, JSON_UNESCAPED_UNICODE);
 
 function composite_pick_engine(): string
 {
@@ -387,7 +399,7 @@ function composite_sample_matte_rgb($im): array
 /**
  * @param list<array<string, mixed>> $icons 空なら無視（通常は Imagick 経路で icons を渡す）
  *
- * @return array{error: ?string, content_bounds: array<string, int>}
+ * @return array{error: ?string, content_bounds: array<string, int>, output_width?: int, output_height?: int}
  */
 function composite_render_gd(
     string $bgPath,
@@ -399,7 +411,8 @@ function composite_render_gd(
     string $fontRegularGd,
     string $fontBoldGd,
     ?string $sourcePath = null,
-    ?array $borderFill = null
+    ?array $borderFill = null,
+    bool $cropToButton = false
 ): array {
     if ($borderFill !== null) {
         $borderPx = max(0, (int) ($borderFill['width_px'] ?? 0));
@@ -578,6 +591,23 @@ function composite_render_gd(
     imagecopy($fullBase, $work, $bx, $by, 0, 0, $bw, $bh);
     imagedestroy($work);
 
+    $outWFinal = $outW;
+    $outHFinal = $outH;
+    if ($cropToButton && $sourcePath !== null && $borderFill === null
+        && $bw > 0 && $bh > 0 && $bx >= 0 && $by >= 0
+        && $bx + $bw <= imagesx($fullBase) && $by + $bh <= imagesy($fullBase)) {
+        $cropped = imagecreatetruecolor($bw, $bh);
+        if ($cropped !== false) {
+            imagealphablending($cropped, true);
+            imagesavealpha($cropped, false);
+            imagecopy($cropped, $fullBase, 0, 0, $bx, $by, $bw, $bh);
+            imagedestroy($fullBase);
+            $fullBase = $cropped;
+            $outWFinal = $bw;
+            $outHFinal = $bh;
+        }
+    }
+
     if (!imagejpeg($fullBase, $destAbs, 92)) {
         imagedestroy($fullBase);
 
@@ -585,7 +615,12 @@ function composite_render_gd(
     }
     imagedestroy($fullBase);
 
-    return ['error' => null, 'content_bounds' => $cbJson];
+    return [
+        'error'          => null,
+        'content_bounds' => $cbJson,
+        'output_width'   => $outWFinal,
+        'output_height'  => $outHFinal,
+    ];
 }
 
 /**
@@ -784,7 +819,7 @@ function composite_imagick_layer_icons(
  * @param list<array<string, mixed>> $texts
  * @param list<array<string, mixed>> $icons
  *
- * @return array{error: ?string, content_bounds: array<string, int>}
+ * @return array{error: ?string, content_bounds: array<string, int>, output_width?: int, output_height?: int}
  */
 function composite_render_imagick(
     string $bgPath,
@@ -796,7 +831,8 @@ function composite_render_imagick(
     string $fontRegularFile,
     string $fontBoldFile,
     ?string $sourcePath = null,
-    ?array $borderFill = null
+    ?array $borderFill = null,
+    bool $cropToButton = false
 ): array {
     try {
         if ($borderFill !== null) {
@@ -1025,6 +1061,15 @@ function composite_render_imagick(
         $base->compositeImage($inner, Imagick::COMPOSITE_OVER, $bx, $by);
         $inner->clear();
 
+        $outWFinal = $outW;
+        $outHFinal = $outH;
+        if ($cropToButton && $sourcePath !== null && $borderFill === null
+            && $bw > 0 && $bh > 0 && $bx >= 0 && $by >= 0) {
+            $base->cropImage($bw, $bh, $bx, $by);
+            $outWFinal = $bw;
+            $outHFinal = $bh;
+        }
+
         $base->setImageFormat('jpeg');
         $base->setImageCompressionQuality(92);
         if (!$base->writeImage($destAbs)) {
@@ -1037,42 +1082,11 @@ function composite_render_imagick(
         return ['error' => 'Imagick 処理エラー: ' . mb_substr($e->getMessage(), 0, 400), 'content_bounds' => []];
     }
 
-    return ['error' => null, 'content_bounds' => $cbJson];
-}
-
-/**
- * source 画像から余白を検出する。
- * グレー帯 → 白/透過 の順で試み、どちらも検出できなければ全面ボタンを返す。
- *
- * @return array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int}
- */
-function composite_detect_margin_with_fallback(GdImage $sourceGd, int $outW, int $outH): array
-{
-    $bounds = composite_detect_rgb_light_margin_bounds_gd($sourceGd, 200);
-    $totalPad = $bounds['padding_top'] + $bounds['padding_right']
-        + $bounds['padding_bottom'] + $bounds['padding_left'];
-
-    if ($totalPad > 0) {
-        return $bounds;
-    }
-
-    $bounds = composite_detect_content_bounds_gd($sourceGd);
-    $totalPad = $bounds['padding_top'] + $bounds['padding_right']
-        + $bounds['padding_bottom'] + $bounds['padding_left'];
-
-    if ($totalPad > 0) {
-        return $bounds;
-    }
-
     return [
-        'padding_top'    => 0,
-        'padding_right'  => 0,
-        'padding_bottom' => 0,
-        'padding_left'   => 0,
-        'button_x'       => 0,
-        'button_y'       => 0,
-        'button_w'       => $outW,
-        'button_h'       => $outH,
+        'error'          => null,
+        'content_bounds' => $cbJson,
+        'output_width'   => $outWFinal,
+        'output_height'  => $outHFinal,
     ];
 }
 

@@ -7,7 +7,7 @@ declare(strict_types=1);
  * 成功: {
  *   "full_width", "full_height",
  *   "content_bounds": { padding_*, button_w, button_h },
- *   "trimmed": true | false  // 余白があって W/H を内容に縮めたか
+ *   "trimmed": true | false  // 内容領域がフルサイズより小さいか（image_composite の余白検出と同一）
  * }
  */
 require_once __DIR__ . '/../lib/composite_content_bounds.php';
@@ -67,10 +67,9 @@ if ($fullW < 1 || $fullH < 1) {
     exit;
 }
 
-$bounds = composite_detect_content_bounds_gd($im);
+$bounds = composite_detect_margin_with_fallback($im, $fullW, $fullH);
 imagedestroy($im);
 
-$bounds = composite_expand_content_bounds($bounds, $fullW, $fullH, 1);
 $cb = composite_content_bounds_for_json($bounds);
 $trimmed = ($cb['button_w'] < $fullW - 1) || ($cb['button_h'] < $fullH - 1);
 

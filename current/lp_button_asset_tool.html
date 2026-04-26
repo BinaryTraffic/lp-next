@@ -1001,7 +1001,7 @@
             ? "「元」はフル画像のまま表示しています。下の W×H は <strong>余白を除いた内容領域</strong>（板・書き出しの作業サイズ）です。"
             : "";
           comparePxLbl.innerHTML =
-            "比較枠は " + w + "×" + h + " px の比率です。板と書き出しはこのサイズで生成されます。" +
+            "比較枠は " + w + "×" + h + " px の比率です。板はこのサイズで生成されます。書き出しは元画像に余白がある場合、検出した内側（この比率）に切り出して保存します。" +
             (trimNote ? "<span class=\"compare-foot-sub\">" + trimNote + "</span>" : "") +
             "<span class=\"compare-foot-sub\">" +
             "板PNGは角丸の外側が透明です（上の灰色は透過の見え方）。元画像の白い帯は、多くの場合キャンバスに含まれる余白です。" +
@@ -1414,7 +1414,10 @@
           fStatus.textContent = "書き出し中…";
           var payload = { background_url: bgUrl, width: w, height: h, texts: texts };
           if (icons.length) payload.icons = icons;
-          if (srcPath && fullW >= 16 && fullH >= 16) payload.source_url = srcPath;
+          if (srcPath && fullW >= 16 && fullH >= 16) {
+            payload.source_url = srcPath;
+            payload.crop_to_button = true;
+          }
           return fetch(COMPOSITE_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

@@ -388,6 +388,42 @@ function composite_sample_margin_average_rgb_gd(GdImage $im, array $b): array
  *
  * @return array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int}
  */
+/**
+ * source 画像から余白を検出する（image_composite の source_url 経路と同一）。
+ * グレー帯 → 白/透過 の順で試み、どちらも検出できなければ全面ボタンを返す。
+ *
+ * @return array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int}
+ */
+function composite_detect_margin_with_fallback(GdImage $sourceGd, int $outW, int $outH): array
+{
+    $bounds = composite_detect_rgb_light_margin_bounds_gd($sourceGd, 200);
+    $totalPad = $bounds['padding_top'] + $bounds['padding_right']
+        + $bounds['padding_bottom'] + $bounds['padding_left'];
+
+    if ($totalPad > 0) {
+        return $bounds;
+    }
+
+    $bounds = composite_detect_content_bounds_gd($sourceGd);
+    $totalPad = $bounds['padding_top'] + $bounds['padding_right']
+        + $bounds['padding_bottom'] + $bounds['padding_left'];
+
+    if ($totalPad > 0) {
+        return $bounds;
+    }
+
+    return [
+        'padding_top'    => 0,
+        'padding_right'  => 0,
+        'padding_bottom' => 0,
+        'padding_left'   => 0,
+        'button_x'       => 0,
+        'button_y'       => 0,
+        'button_w'       => $outW,
+        'button_h'       => $outH,
+    ];
+}
+
 function composite_expand_content_bounds(array $b, int $maxW, int $maxH, int $px): array
 {
     if ($px < 1 || $maxW < 1 || $maxH < 1) {
