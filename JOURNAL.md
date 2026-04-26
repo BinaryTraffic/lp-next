@@ -107,7 +107,7 @@
 ## 次のアクション
 
 - [x] パターン5〜7 実装完了（gradient / bordered / badge）
-- [ ] gradient / badge の Apache 経由 curl テスト（Cursor が実施）
+- [x] gradient / badge の Apache 経由 curl テスト → 両エンドポイント 200 確認
 - [ ] photo / illustration / composite パターンの実装
 - [ ] テスト要員の確定 → S2以降の日程設定
 
@@ -120,6 +120,7 @@
 | `output/ai_images/` | www-data所有。Apache経由のみ書き込み可 |
 | PHPビルトインサーバ | shimizuユーザーで起動すると画像保存が500になる |
 | テスト実行 | 必ずApache経由（https://lp-next.jitan.app/）で行う |
+| ストアURLパス | `/current/lp_reverse_cms/store/*.php`（`/current/` 必須。省略すると 404） |
 | 自動テスト | リポジトリに未整備。CI導入時はwww-data権限またはテスト専用ディレクトリが必要 |
 
 ---

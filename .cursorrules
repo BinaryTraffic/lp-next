@@ -53,3 +53,5 @@
 - php -S（ビルトインサーバ）をshimizuユーザーで動かすと画像保存が500になる
 - テスト実行は必ず Apache経由（https://lp-next.jitan.app/）で行うこと
 - CIで回す場合はwww-data相当の権限かテスト専用ディレクトリが必要
+- **ストアエンドポイントの正しいパス: `https://lp-next.jitan.app/current/lp_reverse_cms/store/*.php`**
+  （`/current/` が必要。`/lp_reverse_cms/store/` だと 404 になる）

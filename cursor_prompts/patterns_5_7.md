@@ -305,12 +305,12 @@ push 後、以下の curl を GCP VM 上で実行し、`"url"` キーを含む J
 
 ```bash
 # gradient_bg_generator.php
-curl -s -X POST https://lp-next.jitan.app/lp_reverse_cms/store/gradient_bg_generator.php \
+curl -s -X POST https://lp-next.jitan.app/current/lp_reverse_cms/store/gradient_bg_generator.php \
   -H 'Content-Type: application/json' \
   -d '{"width":400,"height":100,"gradient":{"type":"linear","angle":90,"colors":[{"color":"#3a7bd5","stop":0},{"color":"#00d2ff","stop":1}]}}'
 
 # badge_generator.php
-curl -s -X POST https://lp-next.jitan.app/lp_reverse_cms/store/badge_generator.php \
+curl -s -X POST https://lp-next.jitan.app/current/lp_reverse_cms/store/badge_generator.php \
   -H 'Content-Type: application/json' \
   -d '{"width":80,"height":80,"badge":{"shape":"circle","bg_color":"#e63c3c","text_color":"#ffffff"},"texts":[{"content":"01","x_pct":0,"y_pct":0,"w_pct":1,"h_pct":1,"font_size_pct":0.45,"bold":true,"color":"#ffffff"}]}'
 ```
