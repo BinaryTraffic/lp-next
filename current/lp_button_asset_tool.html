@@ -1379,8 +1379,19 @@
       }
 
       actComposite.addEventListener("click", function () {
+        var srcPath = selected && selected.src ? probePathFromImgSrc(selected.src) : null;
+        var fullW = origPreview.naturalWidth || 0;
+        var fullH = origPreview.naturalHeight || 0;
+        if (probeTrim && probeTrim.fullW > 0 && probeTrim.fullH > 0) {
+          fullW = probeTrim.fullW;
+          fullH = probeTrim.fullH;
+        }
         var w = parseInt(fW.value, 10);
         var h = parseInt(fH.value, 10);
+        if (srcPath && fullW >= 16 && fullH >= 16) {
+          w = fullW;
+          h = fullH;
+        }
         if (w < 16 || h < 16) {
           fStatus.textContent = "W/H 不正";
           return;
@@ -1403,6 +1414,7 @@
           fStatus.textContent = "書き出し中…";
           var payload = { background_url: bgUrl, width: w, height: h, texts: texts };
           if (icons.length) payload.icons = icons;
+          if (srcPath && fullW >= 16 && fullH >= 16) payload.source_url = srcPath;
           return fetch(COMPOSITE_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

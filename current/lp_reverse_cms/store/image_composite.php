@@ -7,6 +7,7 @@ declare(strict_types=1);
  *
  * POST JSON:
  * {
+ *   "source_url": "/output/assets/img/btn01.jpg",
  *   "background_url": "/output/ai_images/hf_xxx.jpg",
  *   "width": 219,
  *   "height": 51,
@@ -20,6 +21,9 @@ declare(strict_types=1);
  *     "x_pct": 0.05, "y_pct": 0.15, "w_pct": 0.20, "h_pct": 0.70
  *   }]
  * }
+ *
+ * source_url を指定すると、元画像からグレー帯などの余白（RGB 各チャンネル 200 以上かつほぼ白でない画素の帯）を検出し、
+ * 出力キャンバスを width×height で余白色で塗ったうえで、内側矩形に background のみリサイズ合成する。
  *
  * icons が空でないときは SVG を Imagick でラスタライズして背景の上・テキストの下に重ねる（Imagick 必須）。
  *
@@ -56,6 +60,7 @@ if (!is_array($in)) {
 }
 
 $backgroundUrl = isset($in['background_url']) ? trim((string) $in['background_url']) : '';
+$sourceUrl = isset($in['source_url']) ? trim((string) $in['source_url']) : '';
 $outW = isset($in['width']) ? (int) $in['width'] : 0;
 $outH = isset($in['height']) ? (int) $in['height'] : 0;
 /** @var list<array<string, mixed>> $texts */
@@ -97,6 +102,16 @@ if ($bgPath === null) {
     http_response_code(400);
     echo json_encode(['error' => 'background_url が無効か、output 配下のファイルとして解決できません'], JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+$sourcePath = null;
+if ($sourceUrl !== '') {
+    $sourcePath = composite_resolve_background_path($sourceUrl);
+    if ($sourcePath === null) {
+        http_response_code(400);
+        echo json_encode(['error' => 'source_url が無効か、output 配下のファイルとして解決できません'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 $fontRegularFile = composite_resolve_font_file(false);
@@ -148,16 +163,16 @@ if ($hasIcons) {
     $fontBoldGdIcons = $fontBoldFile !== '' ? composite_expand_font_for_gd($fontBoldFile) : '';
     $gdFontsOkIcons = ($fontRegularGdIcons !== '' || $fontBoldGdIcons !== '');
     if ($gdFontsOkIcons) {
-        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularGdIcons, $fontBoldGdIcons);
+        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularGdIcons, $fontBoldGdIcons, $sourcePath);
     } else {
-        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularFile, $fontBoldFile);
+        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath);
     }
 } elseif ($engine === 'gd') {
     $fontRegularGd = composite_expand_font_for_gd($fontRegularFile);
     $fontBoldGd = $fontBoldFile !== '' ? composite_expand_font_for_gd($fontBoldFile) : '';
     $gdFontsOk = ($fontRegularGd !== '' || $fontBoldGd !== '');
     if (!$gdFontsOk && composite_imagick_available()) {
-        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile);
+        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath);
     } elseif (!$gdFontsOk) {
         http_response_code(500);
         echo json_encode([
@@ -165,14 +180,17 @@ if ($hasIcons) {
         ], JSON_UNESCAPED_UNICODE);
         exit;
     } else {
-        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularGd, $fontBoldGd);
+        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularGd, $fontBoldGd, $sourcePath);
     }
 } else {
-    $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile);
+    $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath);
 }
 if ($renderResult['error'] !== null) {
     $err = $renderResult['error'];
-    http_response_code($err === '背景画像の読み込みに失敗しました' ? 400 : 500);
+    $badRequest = $err === '背景画像の読み込みに失敗しました'
+        || $err === 'source_url の画像サイズが width / height と一致しません'
+        || $err === 'source_url の画像を読み込めませんでした';
+    http_response_code($badRequest ? 400 : 500);
     echo json_encode(['error' => $err], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -385,45 +403,95 @@ function composite_render_gd(
     array $icons,
     string $destAbs,
     string $fontRegularGd,
-    string $fontBoldGd
+    string $fontBoldGd,
+    ?string $sourcePath = null
 ): array {
-    $srcIm = composite_image_load($bgPath);
-    if ($srcIm === false) {
-        return ['error' => '背景画像の読み込みに失敗しました', 'content_bounds' => []];
-    }
-    imagesavealpha($srcIm, true);
-    imagealphablending($srcIm, true);
+    if ($sourcePath !== null) {
+        $sourceGd = composite_image_load($sourcePath);
+        if ($sourceGd === false) {
+            return ['error' => 'source_url の画像を読み込めませんでした', 'content_bounds' => []];
+        }
+        $sow = imagesx($sourceGd);
+        $soh = imagesy($sourceGd);
+        if ($sow !== $outW || $soh !== $outH) {
+            imagedestroy($sourceGd);
 
-    $fullBase = imagecreatetruecolor($outW, $outH);
-    if ($fullBase === false) {
+            return ['error' => 'source_url の画像サイズが width / height と一致しません', 'content_bounds' => []];
+        }
+        $marginBounds = composite_detect_rgb_light_margin_bounds_gd($sourceGd, 200);
+        [$mr, $mg, $mb] = composite_sample_margin_average_rgb_gd($sourceGd, $marginBounds);
+        imagedestroy($sourceGd);
+
+        $fullBase = imagecreatetruecolor($outW, $outH);
+        if ($fullBase === false) {
+            return ['error' => 'キャンバスの作成に失敗しました', 'content_bounds' => []];
+        }
+        $matte = imagecolorallocate($fullBase, $mr, $mg, $mb);
+        if ($matte === false) {
+            imagedestroy($fullBase);
+
+            return ['error' => 'キャンバスの初期化に失敗しました', 'content_bounds' => []];
+        }
+        imagefilledrectangle($fullBase, 0, 0, max(0, $outW - 1), max(0, $outH - 1), $matte);
+        imagealphablending($fullBase, true);
+        imagesavealpha($fullBase, false);
+
+        $plateIm = composite_image_load($bgPath);
+        if ($plateIm === false) {
+            imagedestroy($fullBase);
+
+            return ['error' => '背景画像の読み込みに失敗しました', 'content_bounds' => []];
+        }
+        imagesavealpha($plateIm, true);
+        imagealphablending($plateIm, true);
+        $pw = imagesx($plateIm);
+        $ph = imagesy($plateIm);
+        $cbJson = composite_content_bounds_for_json($marginBounds);
+        $bx = $marginBounds['button_x'];
+        $by = $marginBounds['button_y'];
+        $bw = $marginBounds['button_w'];
+        $bh = $marginBounds['button_h'];
+        imagecopyresampled($fullBase, $plateIm, $bx, $by, 0, 0, $bw, $bh, $pw, $ph);
+        imagedestroy($plateIm);
+    } else {
+        $srcIm = composite_image_load($bgPath);
+        if ($srcIm === false) {
+            return ['error' => '背景画像の読み込みに失敗しました', 'content_bounds' => []];
+        }
+        imagesavealpha($srcIm, true);
+        imagealphablending($srcIm, true);
+
+        $fullBase = imagecreatetruecolor($outW, $outH);
+        if ($fullBase === false) {
+            imagedestroy($srcIm);
+
+            return ['error' => 'キャンバスの作成に失敗しました', 'content_bounds' => []];
+        }
+
+        $sw = imagesx($srcIm);
+        $sh = imagesy($srcIm);
+        [$mr, $mg, $mb] = composite_sample_matte_rgb($srcIm);
+        $matte = imagecolorallocate($fullBase, $mr, $mg, $mb);
+        if ($matte === false) {
+            imagedestroy($srcIm);
+            imagedestroy($fullBase);
+
+            return ['error' => 'キャンバスの初期化に失敗しました', 'content_bounds' => []];
+        }
+        imagefilledrectangle($fullBase, 0, 0, $outW, $outH, $matte);
+        imagealphablending($fullBase, true);
+        imagesavealpha($fullBase, false);
+        imagecopyresampled($fullBase, $srcIm, 0, 0, 0, 0, $outW, $outH, $sw, $sh);
         imagedestroy($srcIm);
 
-        return ['error' => 'キャンバスの作成に失敗しました', 'content_bounds' => []];
+        $bounds = composite_detect_content_bounds_gd($fullBase);
+        $bounds = composite_expand_content_bounds($bounds, $outW, $outH, 1);
+        $cbJson = composite_content_bounds_for_json($bounds);
+        $bx = $bounds['button_x'];
+        $by = $bounds['button_y'];
+        $bw = $bounds['button_w'];
+        $bh = $bounds['button_h'];
     }
-
-    $sw = imagesx($srcIm);
-    $sh = imagesy($srcIm);
-    [$mr, $mg, $mb] = composite_sample_matte_rgb($srcIm);
-    $matte = imagecolorallocate($fullBase, $mr, $mg, $mb);
-    if ($matte === false) {
-        imagedestroy($srcIm);
-        imagedestroy($fullBase);
-
-        return ['error' => 'キャンバスの初期化に失敗しました', 'content_bounds' => []];
-    }
-    imagefilledrectangle($fullBase, 0, 0, $outW, $outH, $matte);
-    imagealphablending($fullBase, true);
-    imagesavealpha($fullBase, false);
-    imagecopyresampled($fullBase, $srcIm, 0, 0, 0, 0, $outW, $outH, $sw, $sh);
-    imagedestroy($srcIm);
-
-    $bounds = composite_detect_content_bounds_gd($fullBase);
-    $bounds = composite_expand_content_bounds($bounds, $outW, $outH, 1);
-    $cbJson = composite_content_bounds_for_json($bounds);
-    $bx = $bounds['button_x'];
-    $by = $bounds['button_y'];
-    $bw = $bounds['button_w'];
-    $bh = $bounds['button_h'];
 
     $work = composite_gd_clone_rect($fullBase, $bx, $by, $bw, $bh);
     if ($work === false) {
@@ -760,90 +828,128 @@ function composite_render_imagick(
     array $icons,
     string $destAbs,
     string $fontRegularFile,
-    string $fontBoldFile
+    string $fontBoldFile,
+    ?string $sourcePath = null
 ): array {
     try {
-        $img = new Imagick($bgPath);
-        $img->setImageColorspace(Imagick::COLORSPACE_SRGB);
-        $img->resizeImage($outW, $outH, Imagick::FILTER_LANCZOS, 1, false);
+        if ($sourcePath !== null) {
+            $sourceGd = composite_image_load($sourcePath);
+            if ($sourceGd === false) {
+                return ['error' => 'source_url の画像を読み込めませんでした', 'content_bounds' => []];
+            }
+            $sow = imagesx($sourceGd);
+            $soh = imagesy($sourceGd);
+            if ($sow !== $outW || $soh !== $outH) {
+                imagedestroy($sourceGd);
 
-        $gdProbe = composite_imagick_to_gd_probe($img);
-        if ($gdProbe === false) {
-            $bounds = [
-                'padding_top'    => 0,
-                'padding_right'  => 0,
-                'padding_bottom' => 0,
-                'padding_left'   => 0,
-                'button_x'       => 0,
-                'button_y'       => 0,
-                'button_w'       => $outW,
-                'button_h'       => $outH,
-            ];
-        } else {
-            $bounds = composite_detect_content_bounds_gd($gdProbe);
-            imagedestroy($gdProbe);
-        }
-        $bounds = composite_expand_content_bounds($bounds, $outW, $outH, 1);
-        $cbJson = composite_content_bounds_for_json($bounds);
-        $bx = $bounds['button_x'];
-        $by = $bounds['button_y'];
-        $bw = $bounds['button_w'];
-        $bh = $bounds['button_h'];
+                return ['error' => 'source_url の画像サイズが width / height と一致しません', 'content_bounds' => []];
+            }
+            $marginBounds = composite_detect_rgb_light_margin_bounds_gd($sourceGd, 200);
+            [$mr, $mg, $mb] = composite_sample_margin_average_rgb_gd($sourceGd, $marginBounds);
+            imagedestroy($sourceGd);
 
-        $cornerPts = [
-            [0, 0],
-            [$outW - 1, 0],
-            [0, $outH - 1],
-            [$outW - 1, $outH - 1],
-        ];
-        $transparentCorners = 0;
-        foreach ($cornerPts as [$sx, $sy]) {
-            if ($sx < 0 || $sy < 0 || $sx >= $outW || $sy >= $outH) {
-                continue;
-            }
-            $p = $img->getImagePixelColor($sx, $sy);
-            $a = $p->getColorValue(Imagick::COLOR_ALPHA);
-            if ($a < 0.92) {
-                ++$transparentCorners;
-            }
-        }
-        if ($transparentCorners >= 2) {
-            $img->setImageBackgroundColor(new ImagickPixel('white'));
-            if (defined('Imagick::ALPHACHANNEL_REMOVE')) {
-                $img->setImageAlphaChannel(Imagick::ALPHACHANNEL_REMOVE);
-            }
+            $canvas = new Imagick();
+            $canvas->newImage($outW, $outH, new ImagickPixel(sprintf('rgb(%d,%d,%d)', $mr, $mg, $mb)));
+            $canvas->setImageColorspace(Imagick::COLORSPACE_SRGB);
+
+            $plate = new Imagick($bgPath);
+            $plate->setImageColorspace(Imagick::COLORSPACE_SRGB);
+            $cbJson = composite_content_bounds_for_json($marginBounds);
+            $bx = $marginBounds['button_x'];
+            $by = $marginBounds['button_y'];
+            $bw = $marginBounds['button_w'];
+            $bh = $marginBounds['button_h'];
+            $plate->resizeImage($bw, $bh, Imagick::FILTER_LANCZOS, 1, false);
+            $canvas->compositeImage($plate, Imagick::COMPOSITE_OVER, $bx, $by);
+            $plate->clear();
+
+            $base = clone $canvas;
+            $inner = clone $canvas;
+            $canvas->clear();
+            $inner->cropImage($bw, $bh, $bx, $by);
         } else {
-            $mattePx = null;
-            $samplePts = [
-                [(int) ($outW / 2), (int) ($outH / 2)],
-                [(int) ($outW / 2), (int) ($outH / 3)],
-                [(int) ($outW / 3), (int) ($outH / 2)],
-                [(int) (2 * $outW / 3), (int) ($outH / 2)],
+            $img = new Imagick($bgPath);
+            $img->setImageColorspace(Imagick::COLORSPACE_SRGB);
+            $img->resizeImage($outW, $outH, Imagick::FILTER_LANCZOS, 1, false);
+
+            $gdProbe = composite_imagick_to_gd_probe($img);
+            if ($gdProbe === false) {
+                $bounds = [
+                    'padding_top'    => 0,
+                    'padding_right'  => 0,
+                    'padding_bottom' => 0,
+                    'padding_left'   => 0,
+                    'button_x'       => 0,
+                    'button_y'       => 0,
+                    'button_w'       => $outW,
+                    'button_h'       => $outH,
+                ];
+            } else {
+                $bounds = composite_detect_content_bounds_gd($gdProbe);
+                imagedestroy($gdProbe);
+            }
+            $bounds = composite_expand_content_bounds($bounds, $outW, $outH, 1);
+            $cbJson = composite_content_bounds_for_json($bounds);
+            $bx = $bounds['button_x'];
+            $by = $bounds['button_y'];
+            $bw = $bounds['button_w'];
+            $bh = $bounds['button_h'];
+
+            $cornerPts = [
+                [0, 0],
+                [$outW - 1, 0],
+                [0, $outH - 1],
+                [$outW - 1, $outH - 1],
             ];
-            foreach ($samplePts as [$sx, $sy]) {
+            $transparentCorners = 0;
+            foreach ($cornerPts as [$sx, $sy]) {
                 if ($sx < 0 || $sy < 0 || $sx >= $outW || $sy >= $outH) {
                     continue;
                 }
                 $p = $img->getImagePixelColor($sx, $sy);
                 $a = $p->getColorValue(Imagick::COLOR_ALPHA);
-                if ($a < 0.85) {
-                    continue;
+                if ($a < 0.92) {
+                    ++$transparentCorners;
                 }
-                $mattePx = $p;
-                break;
             }
-            if ($mattePx !== null) {
-                $img->setImageBackgroundColor($mattePx);
+            if ($transparentCorners >= 2) {
+                $img->setImageBackgroundColor(new ImagickPixel('white'));
                 if (defined('Imagick::ALPHACHANNEL_REMOVE')) {
                     $img->setImageAlphaChannel(Imagick::ALPHACHANNEL_REMOVE);
                 }
+            } else {
+                $mattePx = null;
+                $samplePts = [
+                    [(int) ($outW / 2), (int) ($outH / 2)],
+                    [(int) ($outW / 2), (int) ($outH / 3)],
+                    [(int) ($outW / 3), (int) ($outH / 2)],
+                    [(int) (2 * $outW / 3), (int) ($outH / 2)],
+                ];
+                foreach ($samplePts as [$sx, $sy]) {
+                    if ($sx < 0 || $sy < 0 || $sx >= $outW || $sy >= $outH) {
+                        continue;
+                    }
+                    $p = $img->getImagePixelColor($sx, $sy);
+                    $a = $p->getColorValue(Imagick::COLOR_ALPHA);
+                    if ($a < 0.85) {
+                        continue;
+                    }
+                    $mattePx = $p;
+                    break;
+                }
+                if ($mattePx !== null) {
+                    $img->setImageBackgroundColor($mattePx);
+                    if (defined('Imagick::ALPHACHANNEL_REMOVE')) {
+                        $img->setImageAlphaChannel(Imagick::ALPHACHANNEL_REMOVE);
+                    }
+                }
             }
-        }
 
-        $base = clone $img;
-        $inner = clone $img;
-        $img->clear();
-        $inner->cropImage($bw, $bh, $bx, $by);
+            $base = clone $img;
+            $inner = clone $img;
+            $img->clear();
+            $inner->cropImage($bw, $bh, $bx, $by);
+        }
 
         if ($icons !== []) {
             $iconErr = composite_imagick_layer_icons($inner, $bw, $bh, $icons, $outW, $outH, $bx, $by, $bw, $bh);

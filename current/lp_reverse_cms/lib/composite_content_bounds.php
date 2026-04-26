@@ -162,6 +162,226 @@ function composite_content_bounds_for_json(array $b): array
 }
 
 /**
+ * 元画像の「明るい余白」（グレー帯など）検出用。
+ * 各チャンネルが minRgb 以上かつ「ほぼ白」でない（min(R,G,B) < nearWhiteMin）なら余白。
+ * 白（255 付近）の内側バッファは内側領域に含め、ボタン全面塗りを防ぐ。
+ * 透過ピクセルは余白。
+ */
+function composite_pixel_is_rgb_light_margin_gd(GdImage $im, int $x, int $y, int $minRgb, int $nearWhiteMin = 250): bool
+{
+    if ($x < 0 || $y < 0 || $x >= imagesx($im) || $y >= imagesy($im)) {
+        return true;
+    }
+    $ci = imagecolorat($im, $x, $y);
+    if (imageistruecolor($im)) {
+        $a = ($ci >> 24) & 127;
+        if ($a >= 126) {
+            return true;
+        }
+        $r = ($ci >> 16) & 0xFF;
+        $g = ($ci >> 8) & 0xFF;
+        $b = $ci & 0xFF;
+        if ($r < $minRgb || $g < $minRgb || $b < $minRgb) {
+            return false;
+        }
+        $mn = min($r, $g, $b);
+
+        return $mn < $nearWhiteMin;
+    }
+    $cols = @imagecolorsforindex($im, $ci);
+    if (!is_array($cols)) {
+        return false;
+    }
+    $a = (int) ($cols['alpha'] ?? 0);
+    if ($a >= 126) {
+        return true;
+    }
+    $r = (int) ($cols['red'] ?? 0);
+    $g = (int) ($cols['green'] ?? 0);
+    $b = (int) ($cols['blue'] ?? 0);
+    if ($r < $minRgb || $g < $minRgb || $b < $minRgb) {
+        return false;
+    }
+    $mn = min($r, $g, $b);
+
+    return $mn < $nearWhiteMin;
+}
+
+function composite_row_has_non_margin_rgb_gd(GdImage $im, int $w, int $y, int $minRgb): bool
+{
+    for ($x = 0; $x < $w; $x++) {
+        if (!composite_pixel_is_rgb_light_margin_gd($im, $x, $y, $minRgb)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function composite_col_has_non_margin_rgb_gd(GdImage $im, int $x, int $y0, int $y1, int $minRgb): bool
+{
+    for ($y = $y0; $y <= $y1; $y++) {
+        if (!composite_pixel_is_rgb_light_margin_gd($im, $x, $y, $minRgb)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * @return array{
+ *   padding_top: int, padding_right: int, padding_bottom: int, padding_left: int,
+ *   button_x: int, button_y: int, button_w: int, button_h: int
+ * }
+ */
+function composite_detect_rgb_light_margin_bounds_gd(GdImage $im, int $minRgb = 200): array
+{
+    $w = imagesx($im);
+    $h = imagesy($im);
+    if ($w < 1 || $h < 1) {
+        return [
+            'padding_top'    => 0,
+            'padding_right'  => 0,
+            'padding_bottom' => 0,
+            'padding_left'   => 0,
+            'button_x'       => 0,
+            'button_y'       => 0,
+            'button_w'       => max(1, $w),
+            'button_h'       => max(1, $h),
+        ];
+    }
+
+    $top = 0;
+    while ($top < $h && !composite_row_has_non_margin_rgb_gd($im, $w, $top, $minRgb)) {
+        ++$top;
+    }
+    if ($top >= $h) {
+        return [
+            'padding_top'    => 0,
+            'padding_right'  => 0,
+            'padding_bottom' => 0,
+            'padding_left'   => 0,
+            'button_x'       => 0,
+            'button_y'       => 0,
+            'button_w'       => $w,
+            'button_h'       => $h,
+        ];
+    }
+
+    $bottom = $h - 1;
+    while ($bottom > $top && !composite_row_has_non_margin_rgb_gd($im, $w, $bottom, $minRgb)) {
+        --$bottom;
+    }
+
+    $left = 0;
+    while ($left < $w && !composite_col_has_non_margin_rgb_gd($im, $left, $top, $bottom, $minRgb)) {
+        ++$left;
+    }
+
+    $right = $w - 1;
+    while ($right > $left && !composite_col_has_non_margin_rgb_gd($im, $right, $top, $bottom, $minRgb)) {
+        --$right;
+    }
+
+    $button_x = $left;
+    $button_y = $top;
+    $button_w = max(1, $right - $left + 1);
+    $button_h = max(1, $bottom - $top + 1);
+
+    return [
+        'padding_top'    => $top,
+        'padding_right'  => $w - 1 - $right,
+        'padding_bottom' => $h - 1 - $bottom,
+        'padding_left'   => $left,
+        'button_x'       => $button_x,
+        'button_y'       => $button_y,
+        'button_w'       => $button_w,
+        'button_h'       => $button_h,
+    ];
+}
+
+/**
+ * 余白帯の画素から平均 RGB（塗りつぶし用）。
+ *
+ * @param array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int} $b
+ *
+ * @return array{0:int,1:int,2:int}
+ */
+function composite_sample_margin_average_rgb_gd(GdImage $im, array $b): array
+{
+    $w = imagesx($im);
+    $h = imagesy($im);
+    $pt = (int) $b['padding_top'];
+    $pr = (int) $b['padding_right'];
+    $pb = (int) $b['padding_bottom'];
+    $pl = (int) $b['padding_left'];
+    $bx = (int) $b['button_x'];
+    $by = (int) $b['button_y'];
+    $bw = (int) $b['button_w'];
+    $bh = (int) $b['button_h'];
+
+    $sumR = 0;
+    $sumG = 0;
+    $sumB = 0;
+    $n = 0;
+
+    $addPx = static function (GdImage $im, int $x, int $y) use (&$sumR, &$sumG, &$sumB, &$n): void {
+        if ($x < 0 || $y < 0 || $x >= imagesx($im) || $y >= imagesy($im)) {
+            return;
+        }
+        $ci = imagecolorat($im, $x, $y);
+        if (imageistruecolor($im)) {
+            $a = ($ci >> 24) & 127;
+            if ($a >= 126) {
+                return;
+            }
+            $sumR += ($ci >> 16) & 0xFF;
+            $sumG += ($ci >> 8) & 0xFF;
+            $sumB += $ci & 0xFF;
+        } else {
+            $cols = @imagecolorsforindex($im, $ci);
+            if (!is_array($cols) || (int) ($cols['alpha'] ?? 0) >= 126) {
+                return;
+            }
+            $sumR += (int) ($cols['red'] ?? 0);
+            $sumG += (int) ($cols['green'] ?? 0);
+            $sumB += (int) ($cols['blue'] ?? 0);
+        }
+        ++$n;
+    };
+
+    for ($y = 0; $y < $pt && $y < $h; $y++) {
+        for ($x = 0; $x < $w; $x++) {
+            $addPx($im, $x, $y);
+        }
+    }
+    for ($y = $by + $bh; $y < $h; $y++) {
+        for ($x = 0; $x < $w; $x++) {
+            $addPx($im, $x, $y);
+        }
+    }
+    for ($y = $by; $y < $by + $bh && $y < $h; $y++) {
+        for ($x = 0; $x < $pl; $x++) {
+            $addPx($im, $x, $y);
+        }
+        for ($x = $bx + $bw; $x < $w; $x++) {
+            $addPx($im, $x, $y);
+        }
+    }
+
+    if ($n === 0) {
+        return [200, 200, 200];
+    }
+
+    return [
+        (int) round($sumR / $n),
+        (int) round($sumG / $n),
+        (int) round($sumB / $n),
+    ];
+}
+
+/**
  * 検出矩形が縁のアンチエイリアス1pxを欠くと、貼り戻しでマット色が縦に覗くことがある。画像端までクランプして拡張する。
  *
  * @param array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int} $b
