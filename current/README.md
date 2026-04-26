@@ -4,7 +4,7 @@
 
 **リモート:** [https://github.com/BinaryTraffic/lp-next](https://github.com/BinaryTraffic/lp-next)
 
-**このディレクトリ `current/`** が、いまの**作業ツリーと本番デプロイの基準**です（凍結版は [リポジトリルートの `releases/`](../releases/)）。DocumentRoot は **`current/` を指す**設定にすると、次の URL 表と一致しやすいです。
+**このディレクトリ `current/`** が、いまの**作業ツリーと本番デプロイの基準**です（過去版の固定点は [Git タグ `v1.0.0` など](https://github.com/BinaryTraffic/lp-next/tags)。手順は [../releases/README.md](../releases/README.md)）。DocumentRoot は **`current/` を指す**設定にすると、次の URL 表と一致しやすいです。
 
 ```bash
 git clone https://github.com/BinaryTraffic/lp-next.git
@@ -23,10 +23,10 @@ cd lp-next/current
 |------|-----|
 | 入口（DocumentRoot＝**`current/`**） | [https://lp-next.jitan.app/](https://lp-next.jitan.app/)（`current/index.html`） |
 | 管理画面（LP Reverse CMS） | [https://lp-next.jitan.app/lp_reverse_cms/](https://lp-next.jitan.app/lp_reverse_cms/) |
-| アプリ版 | **`1.1.11`**（`lp_reverse_cms/index.php` の `APP_VERSION`） |
-| Git タグ | **`v1.1.11-stable`**（この安定版ラインに対応） |
+| アプリ版 | **`1.2.0`**（`lp_reverse_cms/index.php` の `APP_VERSION`） |
+| Git タグ | **`v1.2.0`**（`main` の本番想定）／過去: **`v1.1.0`**, **`v1.0.0`**。レガシー表記: `v1.1.11-stable` |
 
-主な内容: **`data` / `output` 書き込み失敗の明示**（取得 API・v1.1.11）、デプロイ時の **所有権・権限**の留意（[ENVIRONMENT_AND_OPERATIONS.md](ENVIRONMENT_AND_OPERATIONS.md)）、共同作業・運用ドキュメントの整理。
+主な内容（v1.2 以降想定）: 資産解決の強化（`@import` / `url` / `srcset`）、**`data` / `output` 書き込み失敗の明示**、デプロイ時の **所有権・権限**（[ENVIRONMENT_AND_OPERATIONS.md](ENVIRONMENT_AND_OPERATIONS.md)）、共同作業・運用ドキュメント。以降の更新は `main` および **`develop/v1.2.0`** ブランチの運用に従います。
 
 ---
 

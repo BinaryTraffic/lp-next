@@ -1,3 +1,0 @@
-スナップショット: Git コミット 7dfb9d5（feature/v1.2-assets-resolution: v1.2.0 アセット解像度）  
-CSS @import / url() 強化、診断 output_css_diagnostics 等。  
-作業中の latest は常に current/ を参照。
