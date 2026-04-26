@@ -48,9 +48,11 @@
 
 | 機能 | ファイル | 状態 |
 |---|---|---|
-| 画像タイプ自動判定（Vision） | `claude_image_analyze.php` | ✅ 完成・icons検出対応済 |
+| 画像タイプ自動判定（Vision） | `claude_image_analyze.php` | 🔄 パターン5〜7拡張中（Cursor） |
 | HF FLUX画像生成（任意px） | `hf_image_proxy.php` | ✅ 完成・動作確認済 |
 | ボタン等UI画像のテキスト合成 | `image_composite.php` | ✅ 余白検出・内側合成・アイコン対応 完成 |
+| グラデーション背景生成 | `gradient_bg_generator.php` | 🔄 Cursor実装中 |
+| バッジ画像生成 | `badge_generator.php` | 🔄 Cursor実装中 |
 | 写真系画像の自動生成 | — | 🔲 未着手 |
 | イラスト系画像の自動生成 | — | 🔲 未着手 |
 | composite画像の分解・再合成 | — | 🔲 未着手 |
@@ -61,10 +63,14 @@
 
 | # | 判定type | 例 | 処理方針 | 状態 |
 |---|---|---|---|---|
-| 1 | `ui` | ボタン・電話番号・バナー | Claude Vision座標取得 → GD/Imagick合成 | 🔄 テスト中 |
+| 1 | `ui` | ボタン・電話番号・バナー | Claude Vision座標取得 → GD/Imagick合成 | ✅ 完成 |
 | 2 | `photo` | 人物・景色・内装 | FLUX写真生成（実寸px） | 🔲 未着手 |
 | 3 | `illustration` | イラスト・アイコン | FLUX＋styleキーワード生成 | 🔲 未着手 |
 | 4 | `composite` | 背景＋テキスト＋イラスト混在 | FLUX背景生成 → GD合成 | 🔲 未着手 |
+| 5 | `gradient` | グラデーション帯・セクション背景 | GD描画 → image_composite合成 | 🔲 仕様策定済 |
+| 6 | `bordered` | 写真を囲む装飾フレーム | FLUX（内側）→ image_composite border_fill | 🔲 仕様策定済 |
+| 7 | `badge` | 番号丸・NEWリボン・価格タグ | GD形状描画 → テキスト合成 | 🔲 仕様策定済 |
+| 8〜9 | — | CSS アニメ・影 | CSS/プログラミング（画像処理対象外） | — |
 
 ---
 
@@ -97,7 +103,11 @@
 
 ## 次のアクション
 
-- [ ] `claude_image_analyze.php` にパターン5〜7を追加（グラデーション/ボーダー/バッジ検出）
+- [ ] パターン5〜7 Cursor実装（`cursor_prompts/patterns_5_7.md`）
+  - `claude_image_analyze.php` プロンプト拡張（gradient/bordered/badge 型定義）
+  - `gradient_bg_generator.php` 新規作成
+  - `badge_generator.php` 新規作成
+  - `image_composite.php` に `border_fill` パラメータ追加
 - [ ] photo / illustration / composite パターンの実装
 - [ ] テスト要員の確定 → S2以降の日程設定
 
