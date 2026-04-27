@@ -259,6 +259,28 @@
       border-radius: 0;
       background: transparent;
     }
+    .preview-slot--with-overlay {
+      position: relative;
+    }
+    .plate-text-overlay {
+      position: absolute;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      pointer-events: none;
+      line-height: 1.25;
+      overflow: hidden;
+      word-break: keep-all;
+      padding: 1px 2px;
+      z-index: 1;
+      /* 背景が明暗どちらでも読めるよう弱い縁取り */
+      text-shadow:
+        0 0 1px rgba(0, 0, 0, 0.55),
+        0 1px 2px rgba(0, 0, 0, 0.4),
+        0 0 1px rgba(255, 255, 255, 0.35);
+    }
     .compare-foot {
       font-size: 0.66rem;
       color: var(--muted);
@@ -453,8 +475,16 @@
             <div class="preview-slot"><img id="orig_preview" alt="元のボタン画像" /></div>
           </figure>
           <figure id="fig_plate" class="preview-cell" hidden>
-            <figcaption>板<span id="plate_dim_lbl" class="plate-dim"></span></figcaption>
-            <div class="preview-slot"><img id="plate_preview" alt="生成した板" /></div>
+            <figcaption>板<span id="plate_dim_lbl" class="plate-dim"></span>
+              <span class="help-tip" style="margin-left:0.2rem">
+                <button type="button" class="help-tip__btn" aria-label="板プレビューの字">?</button>
+                <span class="help-tip__txt" role="tooltip">保存される板PNGは下地のみです。ここに重なる字は「文字」欄／JSONの参考表示で、本番の描画は書き出しと同じ engine です。</span>
+              </span>
+            </figcaption>
+            <div class="preview-slot preview-slot--with-overlay">
+              <img id="plate_preview" alt="生成した板" />
+              <div id="plate_text_overlay" class="plate-text-overlay" hidden aria-hidden="true"></div>
+            </div>
           </figure>
           <figure id="fig_out" class="preview-cell" hidden>
             <figcaption>書き出し</figcaption>
@@ -499,7 +529,7 @@
           <h3>新しい板
             <span class="help-tip">
               <button type="button" class="help-tip__btn" aria-label="板とは">?</button>
-              <span class="help-tip__txt" role="tooltip">ボタンの下地となるPNGです。色・形・スタイルを決めてから「板を作る」を押します。</span>
+              <span class="help-tip__txt" role="tooltip">ボタンの下地となるPNGです（文字は含みません）。色・形・スタイルを決めて「板を作る」→ 比較枠の板に字を重ねた参考表示が出ます。確定は「書き出し」。</span>
             </span>
           </h3>
           <div class="color-tool-wrap">
@@ -691,6 +721,7 @@
       var actGeneratePlate = document.getElementById("act_generate_plate");
       var figPlate = document.getElementById("fig_plate");
       var platePreview = document.getElementById("plate_preview");
+      var plateTextOverlay = document.getElementById("plate_text_overlay");
       var comparePxLbl = document.getElementById("compare_px_lbl");
       var plateDimLbl = document.getElementById("plate_dim_lbl");
       var origDimLbl = document.getElementById("orig_dim_lbl");
@@ -1055,6 +1086,84 @@
             "色が付いた領域と地を自動で切り分けるのは、単色に近い背景なら比較的やりやすい一方、影・グラデ・写真では誤検出しやすく、完璧には難しいです。" +
             "</span>";
         }
+        syncPlateTextOverlay();
+      }
+
+      /** 板プレビュー用：文字欄または texts[0]（保存PNGには含まれない参考表示） */
+      function getPrimaryTextForPlatePreview() {
+        try {
+          var raw = JSON.parse(fTexts.value || "[]");
+          if (Array.isArray(raw) && raw.length) {
+            var t0 = raw[0];
+            if (t0 && typeof t0 === "object" && String(t0.content || "").trim()) {
+              var c0 = String(t0.color || "").trim();
+              if (!/^#[0-9a-f]{3,6}$/i.test(c0)) c0 = (fColor.value || "#ffffff").trim();
+              if (!/^#[0-9a-f]{3,6}$/i.test(c0)) c0 = "#ffffff";
+              var fsp = parseFloat(t0.font_size_pct != null ? t0.font_size_pct : 0.3);
+              if (!isFinite(fsp)) fsp = 0.3;
+              fsp = Math.max(0.05, Math.min(1, fsp));
+              return {
+                content: String(t0.content).trim(),
+                color: hex6(c0),
+                bold: t0.bold === true,
+                x_pct: clamp01(t0.x_pct != null ? t0.x_pct : 0.08),
+                y_pct: clamp01(t0.y_pct != null ? t0.y_pct : 0.12),
+                w_pct: clamp01(t0.w_pct != null ? t0.w_pct : 0.84),
+                h_pct: clamp01(t0.h_pct != null ? t0.h_pct : 0.76),
+                font_size_pct: fsp
+              };
+            }
+          }
+        } catch (e0) {}
+        var t = (fLabel.value || "").trim();
+        if (!t) return null;
+        var col = (fColor.value || "#ffffff").trim();
+        if (!/^#[0-9a-f]{3,6}$/i.test(col)) col = "#ffffff";
+        return {
+          content: t,
+          color: hex6(col),
+          bold: false,
+          x_pct: 0.08,
+          y_pct: 0.12,
+          w_pct: 0.84,
+          h_pct: 0.76,
+          font_size_pct: 0.3
+        };
+      }
+
+      function syncPlateTextOverlay() {
+        var ov = plateTextOverlay;
+        if (!ov) return;
+        if (!figPlate || figPlate.hidden) {
+          ov.textContent = "";
+          ov.hidden = true;
+          ov.setAttribute("aria-hidden", "true");
+          return;
+        }
+        var p = getPrimaryTextForPlatePreview();
+        if (!p || !p.content) {
+          ov.textContent = "";
+          ov.hidden = true;
+          ov.setAttribute("aria-hidden", "true");
+          return;
+        }
+        ov.hidden = false;
+        ov.setAttribute("aria-hidden", "false");
+        ov.textContent = p.content;
+        ov.style.color = p.color;
+        ov.style.fontWeight = p.bold ? "700" : "600";
+        ov.style.left = (p.x_pct * 100) + "%";
+        ov.style.top = (p.y_pct * 100) + "%";
+        ov.style.width = (p.w_pct * 100) + "%";
+        ov.style.height = (p.h_pct * 100) + "%";
+        var slot = ov.parentElement;
+        var h = slot && slot.clientHeight ? slot.clientHeight : 0;
+        if (h > 0) {
+          var px = Math.max(10, Math.round(h * p.h_pct * p.font_size_pct * 0.82));
+          ov.style.fontSize = px + "px";
+        } else {
+          ov.style.fontSize = "clamp(10px, 2.6vmin, 22px)";
+        }
       }
 
       /** output 配下のパスへ（プローブ API 用）。外部 URL 等は null */
@@ -1297,9 +1406,11 @@
             if (nw > 0 && nh > 0 && plateDimLbl) {
               plateDimLbl.textContent = " · " + nw + "×" + nh + " px";
             }
+            syncPlateTextOverlay();
           };
           platePreview.src = abs + (abs.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
           figPlate.hidden = false;
+          syncPlateTextOverlay();
         }
       }
 
@@ -1350,7 +1461,7 @@
           fetchPlatePng(payload)
             .then(function (url) {
               applyPlatePreviewUrl(url, payload.width, payload.height);
-              fStatus.textContent = "OK · 文字→書き出し";
+              fStatus.textContent = "OK · 板に字を重ねて表示（確定は書き出し）";
             })
             .catch(function (e) {
               fStatus.textContent = "失敗: " + (e.message || String(e));
@@ -1394,6 +1505,7 @@
         }];
         fTexts.value = JSON.stringify(one, null, 2);
         fStatus.textContent = "中央プリセット済み";
+        syncPlateTextOverlay();
       });
 
       actClaude.addEventListener("click", function () {
@@ -1431,6 +1543,7 @@
             fTexts.value = JSON.stringify(textsOut, null, 2);
             if (fIcons) fIcons.value = JSON.stringify(iconsRaw, null, 2);
             fStatus.textContent = "AI 反映済み（テキスト" + textsOut.length + " · アイコン" + iconsRaw.length + "）";
+            syncPlateTextOverlay();
           })
           .catch(function (e) {
             fStatus.textContent = "AI: " + (e.message || String(e));
@@ -1600,6 +1713,21 @@
         fW.addEventListener("change", onWhCompare);
         fH.addEventListener("input", onWhCompare);
         fH.addEventListener("change", onWhCompare);
+      }
+
+      if (fLabel && fColor && fTexts) {
+        ["input", "change"].forEach(function (ev) {
+          fLabel.addEventListener(ev, syncPlateTextOverlay);
+          fColor.addEventListener(ev, syncPlateTextOverlay);
+          fTexts.addEventListener(ev, syncPlateTextOverlay);
+        });
+      }
+      if (fColorPicker) {
+        fColorPicker.addEventListener("input", syncPlateTextOverlay);
+        fColorPicker.addEventListener("change", syncPlateTextOverlay);
+      }
+      if (fColorCombo) {
+        fColorCombo.addEventListener("change", syncPlateTextOverlay);
       }
 
       loadTheme()
