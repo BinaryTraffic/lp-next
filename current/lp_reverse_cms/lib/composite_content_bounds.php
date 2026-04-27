@@ -503,36 +503,39 @@ function composite_sample_margin_average_rgb_gd(GdImage $im, array $b): array
 }
 
 /**
- * 縦余白が非対称のとき padding_top / padding_bottom を max に揃え、ボタン高さを再計算する。
- * JPEG 滲み等で片側のグレー帯だけ検出が薄い場合でも、上下帯を均等に見せる。
+ * padding の上下・左右が非対称（片側が 0）の場合に対称補完する。
+ * 標準的な UI ボタンは対称であることが多いため、
+ * 片側が 0 で反対側が検出済みの場合は反対側の値をコピーする。
  *
- * @param array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int} $b
+ * button_w / button_h も補完後の padding に合わせて再計算する。
+ *
+ * @param array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int} $bounds composite_detect_*_bounds_gd が返す配列
  *
  * @return array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int}
  */
-function composite_symmetry_fallback(array $b, int $outH): array
+function composite_symmetry_fallback(array $bounds, int $imgW, int $imgH): array
 {
-    $pt = (int) $b['padding_top'];
-    $pb = (int) $b['padding_bottom'];
-    if ($pt === $pb) {
-        return $b;
-    }
-    $p = max($pt, $pb);
-    $newBh = $outH - 2 * $p;
-    if ($newBh < 1) {
-        return $b;
+    if ($bounds['padding_top'] > 0 && $bounds['padding_bottom'] === 0) {
+        $bounds['padding_bottom'] = $bounds['padding_top'];
+    } elseif ($bounds['padding_bottom'] > 0 && $bounds['padding_top'] === 0) {
+        $bounds['padding_top'] = $bounds['padding_bottom'];
     }
 
-    return [
-        'padding_top'    => $p,
-        'padding_bottom' => $p,
-        'padding_right'  => (int) $b['padding_right'],
-        'padding_left'   => (int) $b['padding_left'],
-        'button_x'       => (int) $b['button_x'],
-        'button_y'       => $p,
-        'button_w'       => (int) $b['button_w'],
-        'button_h'       => $newBh,
-    ];
+    if ($bounds['padding_left'] > 0 && $bounds['padding_right'] === 0) {
+        $bounds['padding_right'] = $bounds['padding_left'];
+    } elseif ($bounds['padding_right'] > 0 && $bounds['padding_left'] === 0) {
+        $bounds['padding_left'] = $bounds['padding_right'];
+    }
+
+    $bounds['button_x'] = (int) $bounds['padding_left'];
+    $bounds['button_y'] = (int) $bounds['padding_top'];
+    $bounds['button_w'] = $imgW - (int) $bounds['padding_left'] - (int) $bounds['padding_right'];
+    $bounds['button_h'] = $imgH - (int) $bounds['padding_top'] - (int) $bounds['padding_bottom'];
+
+    $bounds['button_w'] = max(1, $bounds['button_w']);
+    $bounds['button_h'] = max(1, $bounds['button_h']);
+
+    return $bounds;
 }
 
 /**
@@ -549,7 +552,7 @@ function composite_detect_margin_with_fallback(GdImage $sourceGd, int $outW, int
         + $bounds['padding_bottom'] + $bounds['padding_left'];
 
     if ($totalPad > 0) {
-        return composite_symmetry_fallback($bounds, $outH);
+        return composite_symmetry_fallback($bounds, $outW, $outH);
     }
 
     $bounds = composite_detect_content_bounds_gd($sourceGd);
@@ -557,7 +560,7 @@ function composite_detect_margin_with_fallback(GdImage $sourceGd, int $outW, int
         + $bounds['padding_bottom'] + $bounds['padding_left'];
 
     if ($totalPad > 0) {
-        return composite_symmetry_fallback($bounds, $outH);
+        return composite_symmetry_fallback($bounds, $outW, $outH);
     }
 
     return [
