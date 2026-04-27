@@ -503,15 +503,42 @@ function composite_sample_margin_average_rgb_gd(GdImage $im, array $b): array
 }
 
 /**
- * 検出矩形が縁のアンチエイリアス1pxを欠くと、貼り戻しでマット色が縦に覗くことがある。画像端までクランプして拡張する。
+ * 縦余白が非対称のとき padding_top / padding_bottom を max に揃え、ボタン高さを再計算する。
+ * JPEG 滲み等で片側のグレー帯だけ検出が薄い場合でも、上下帯を均等に見せる。
  *
  * @param array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int} $b
  *
  * @return array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int}
  */
+function composite_symmetry_fallback(array $b, int $outH): array
+{
+    $pt = (int) $b['padding_top'];
+    $pb = (int) $b['padding_bottom'];
+    if ($pt === $pb) {
+        return $b;
+    }
+    $p = max($pt, $pb);
+    $newBh = $outH - 2 * $p;
+    if ($newBh < 1) {
+        return $b;
+    }
+
+    return [
+        'padding_top'    => $p,
+        'padding_bottom' => $p,
+        'padding_right'  => (int) $b['padding_right'],
+        'padding_left'   => (int) $b['padding_left'],
+        'button_x'       => (int) $b['button_x'],
+        'button_y'       => $p,
+        'button_w'       => (int) $b['button_w'],
+        'button_h'       => $newBh,
+    ];
+}
+
 /**
  * source 画像から余白を検出する（image_composite の source_url 経路と同一）。
  * グレー帯 → 白/透過 の順で試み、どちらも検出できなければ全面ボタンを返す。
+ * ①② いずれかで余白が取れた場合は composite_symmetry_fallback で上下余白を揃える。
  *
  * @return array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int}
  */
@@ -522,7 +549,7 @@ function composite_detect_margin_with_fallback(GdImage $sourceGd, int $outW, int
         + $bounds['padding_bottom'] + $bounds['padding_left'];
 
     if ($totalPad > 0) {
-        return $bounds;
+        return composite_symmetry_fallback($bounds, $outH);
     }
 
     $bounds = composite_detect_content_bounds_gd($sourceGd);
@@ -530,7 +557,7 @@ function composite_detect_margin_with_fallback(GdImage $sourceGd, int $outW, int
         + $bounds['padding_bottom'] + $bounds['padding_left'];
 
     if ($totalPad > 0) {
-        return $bounds;
+        return composite_symmetry_fallback($bounds, $outH);
     }
 
     return [
@@ -545,6 +572,13 @@ function composite_detect_margin_with_fallback(GdImage $sourceGd, int $outW, int
     ];
 }
 
+/**
+ * 検出矩形が縁のアンチエイリアス1pxを欠くと、貼り戻しでマット色が縦に覗くことがある。画像端までクランプして拡張する。
+ *
+ * @param array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int} $b
+ *
+ * @return array{padding_top:int,padding_right:int,padding_bottom:int,padding_left:int,button_x:int,button_y:int,button_w:int,button_h:int}
+ */
 function composite_expand_content_bounds(array $b, int $maxW, int $maxH, int $px): array
 {
     if ($px < 1 || $maxW < 1 || $maxH < 1) {
