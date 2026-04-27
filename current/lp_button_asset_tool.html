@@ -20,7 +20,26 @@
     }
     .topnav { font-size: 0.88rem; margin: 0.75rem 0 0.35rem; }
     .topnav a { color: var(--accent); }
-    h1 { font-size: 1.15rem; margin: 0 0 0.35rem; }
+    .page-title-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+      margin: 0 0 0.35rem;
+    }
+    .page-title-row h1 { font-size: 1.15rem; margin: 0; }
+    .app-version-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--text);
+      background: color-mix(in srgb, var(--card) 88%, var(--muted));
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.22rem 0.6rem;
+      flex-shrink: 0;
+    }
     .toolbar { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: flex-end; margin-bottom: 0.75rem; }
     .toolbar label { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 0.35rem; }
     .toolbar .float-field--toolbar { flex: 0 1 auto; width: min(20rem, 65vw); margin-bottom: 0; }
@@ -362,7 +381,10 @@
 </head>
 <body>
   <p class="topnav"><a href="index.html">← 入口</a> · <a href="lp_layout_images.html">画像一覧</a></p>
-  <h1>ボタン差し替え</h1>
+  <div class="page-title-row">
+    <h1>ボタン差し替え</h1>
+    <span id="app_version_badge" class="app-version-badge" title="LP Reverse CMS（index.php の APP_VERSION）">v…</span>
+  </div>
   <div class="flow-rail" aria-label="流れ">
     <span>① 左で選択</span><span class="sep">→</span><span>② 板</span><span class="sep">→</span><span>③ 書き出し</span>
     <span class="help-tip">
@@ -654,6 +676,7 @@
       var figOut = document.getElementById("fig_out");
       var outPreview = document.getElementById("out_preview");
       var envKeysNote = document.getElementById("env_keys_note");
+      var appVersionBadge = document.getElementById("app_version_badge");
       var plateColorCombo = document.getElementById("plate_color_combo");
       var plateColorPicker = document.getElementById("plate_color_picker");
       var fColorCombo = document.getElementById("f_color_combo");
@@ -857,12 +880,17 @@
           .then(function (j) {
             if (compositeEnv && j.php_gd !== undefined) {
               var imOk = !!j.php_imagick;
+              var ver = typeof j.app_version === "string" && j.app_version ? " · CMS v" + j.app_version : "";
               compositeEnv.textContent =
                 "書き出し環境: GD " + (j.php_gd ? "OK" : "未検出") +
                 " · FreeType " + (j.php_gd_freetype ? "OK" : "未検出") +
                 " · Imagick " + (imOk ? "OK" : "未検出") +
-                (imOk ? "（アイコン合成可）" : "（アイコン合成は Imagick が必要）");
+                (imOk ? "（アイコン合成可）" : "（アイコン合成は Imagick が必要）") +
+                ver;
               compositeEnv.classList.toggle("warn", !j.php_gd);
+            }
+            if (appVersionBadge && typeof j.app_version === "string" && j.app_version) {
+              appVersionBadge.textContent = "v" + j.app_version;
             }
             envKeysNote.hidden = true;
             envKeysNote.classList.remove("warn");
@@ -884,6 +912,10 @@
             if (compositeEnv) {
               compositeEnv.textContent = "書き出し環境: 取得できませんでした";
               compositeEnv.classList.add("warn");
+            }
+            if (appVersionBadge) {
+              appVersionBadge.textContent = "v?";
+              appVersionBadge.title = "版の取得に失敗しました";
             }
           });
       }

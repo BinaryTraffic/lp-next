@@ -28,6 +28,13 @@ $gd = extension_loaded('gd');
 $imagick = extension_loaded('imagick');
 $freetype = $gd && function_exists('imagettfbbox');
 
+$appVersion = '1.2.0';
+$idxPhp = dirname(__DIR__) . '/index.php';
+$idxSrc = @file_get_contents($idxPhp);
+if ($idxSrc !== false && preg_match("/define\\s*\\(\\s*'APP_VERSION'\\s*,\\s*'([^']+)'/", $idxSrc, $vm)) {
+    $appVersion = $vm[1];
+}
+
 echo json_encode([
     'env_relative'      => 'lp_reverse_cms/.env',
     'env_path_resolved' => $resolved !== false ? $resolved : $path,
@@ -46,4 +53,6 @@ echo json_encode([
     'api_usage_summary' => 'store/api_usage_summary.php',
     'lp_theme_json'     => 'store/lp_theme.php',
     'lp_theme_css'      => 'store/lp_theme.css.php',
+    /** index.php の APP_VERSION と同期（ツール画面のバッジ表示用） */
+    'app_version'       => $appVersion,
 ], JSON_UNESCAPED_UNICODE);
