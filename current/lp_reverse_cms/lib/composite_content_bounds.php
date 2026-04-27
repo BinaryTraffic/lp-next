@@ -503,9 +503,9 @@ function composite_sample_margin_average_rgb_gd(GdImage $im, array $b): array
 }
 
 /**
- * padding の上下・左右が非対称（片側が 0）の場合に対称補完する。
- * 標準的な UI ボタンは対称であることが多いため、
- * 片側が 0 で反対側が検出済みの場合は反対側の値をコピーする。
+ * padding の上下・左右を対称化する。
+ * - 片側だけ 0 のときは反対側をコピー（従来どおり）。
+ * - 両側とも正で値が違うときは max に揃える（JPEG 滲み等で T≠B だけ検出されるケース）。
  *
  * button_w / button_h も補完後の padding に合わせて再計算する。
  *
@@ -515,16 +515,36 @@ function composite_sample_margin_average_rgb_gd(GdImage $im, array $b): array
  */
 function composite_symmetry_fallback(array $bounds, int $imgW, int $imgH): array
 {
-    if ($bounds['padding_top'] > 0 && $bounds['padding_bottom'] === 0) {
-        $bounds['padding_bottom'] = $bounds['padding_top'];
-    } elseif ($bounds['padding_bottom'] > 0 && $bounds['padding_top'] === 0) {
-        $bounds['padding_top'] = $bounds['padding_bottom'];
+    $pt = (int) $bounds['padding_top'];
+    $pb = (int) $bounds['padding_bottom'];
+    if ($pt > 0 && $pb === 0) {
+        $bounds['padding_bottom'] = $pt;
+    } elseif ($pb > 0 && $pt === 0) {
+        $bounds['padding_top'] = $pb;
+    } elseif ($pt !== $pb) {
+        $pv = max($pt, $pb);
+        $capV = (int) ($imgH / 2);
+        if ($pv > $capV) {
+            $pv = $capV;
+        }
+        $bounds['padding_top'] = $pv;
+        $bounds['padding_bottom'] = $pv;
     }
 
-    if ($bounds['padding_left'] > 0 && $bounds['padding_right'] === 0) {
-        $bounds['padding_right'] = $bounds['padding_left'];
-    } elseif ($bounds['padding_right'] > 0 && $bounds['padding_left'] === 0) {
-        $bounds['padding_left'] = $bounds['padding_right'];
+    $pl = (int) $bounds['padding_left'];
+    $pr = (int) $bounds['padding_right'];
+    if ($pl > 0 && $pr === 0) {
+        $bounds['padding_right'] = $pl;
+    } elseif ($pr > 0 && $pl === 0) {
+        $bounds['padding_left'] = $pr;
+    } elseif ($pl !== $pr) {
+        $ph = max($pl, $pr);
+        $capH = (int) ($imgW / 2);
+        if ($ph > $capH) {
+            $ph = $capH;
+        }
+        $bounds['padding_left'] = $ph;
+        $bounds['padding_right'] = $ph;
     }
 
     $bounds['button_x'] = (int) $bounds['padding_left'];
