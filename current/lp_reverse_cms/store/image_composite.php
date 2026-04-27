@@ -23,8 +23,8 @@ declare(strict_types=1);
  *   "border_fill": { "color": "#c8a96e", "width_px": 24 }
  * }
  *
- * source_url を指定すると、元画像から余白・ボタン矩形・角丸半径を検出し、
- * 余白色でキャンバスを塗ったうえで板を角丸クリップして貼り付ける（GD 再描画方式）。
+ * source_url を指定すると、元画像から余白・ボタン矩形・角丸半径（参考値）を検出し、
+ * 余白色でキャンバスを塗ったうえで板を imagecopyresampled / COMPOSITE_OVER でアルファ合成する。
  *
  * border_fill を指定したときは source_url による余白検出は行わない。全面を color で塗り、width_px 幅の枠の内側に background を貼る（bordered フロー用）。
  *
@@ -397,109 +397,6 @@ function composite_sample_matte_rgb($im): array
 }
 
 /**
- * 角丸クリップ領域にスケール済み板を転写（透過は下の背景とブレンド）。
- */
-function composite_gd_apply_scaled_plate_rounded_clip(
-    GdImage $dst,
-    GdImage $plateScaled,
-    int $bx,
-    int $by,
-    int $bw,
-    int $bh,
-    int $radius
-): void {
-    for ($py = 0; $py < $bh; $py++) {
-        for ($px = 0; $px < $bw; $px++) {
-            if (!composite_point_in_rounded_rect($px, $py, 0, 0, $bw, $bh, $radius)) {
-                continue;
-            }
-            $pc = imagecolorat($plateScaled, $px, $py);
-            $dx = $bx + $px;
-            $dy = $by + $py;
-            if (imageistruecolor($plateScaled)) {
-                $a = ($pc >> 24) & 127;
-                if ($a >= 120) {
-                    continue;
-                }
-                $pr = ($pc >> 16) & 0xFF;
-                $pg = ($pc >> 8) & 0xFF;
-                $pb = $pc & 0xFF;
-                $opa = 1.0 - ($a / 127.0);
-                if ($opa < 0.02) {
-                    continue;
-                }
-                $dc = imagecolorat($dst, $dx, $dy);
-                $dr = ($dc >> 16) & 0xFF;
-                $dg = ($dc >> 8) & 0xFF;
-                $db = $dc & 0xFF;
-                if ($opa >= 0.98) {
-                    $nr = $pr;
-                    $ng = $pg;
-                    $nb = $pb;
-                } else {
-                    $nr = (int) round($pr * $opa + $dr * (1.0 - $opa));
-                    $ng = (int) round($pg * $opa + $dg * (1.0 - $opa));
-                    $nb = (int) round($pb * $opa + $db * (1.0 - $opa));
-                }
-                imagesetpixel($dst, $dx, $dy, imagecolorresolvealpha($dst, $nr, $ng, $nb, 0));
-            } else {
-                imagesetpixel($dst, $dx, $dy, $pc);
-            }
-        }
-    }
-}
-
-/**
- * Imagick 版：角丸クリップで板を転写。
- */
-function composite_imagick_apply_scaled_plate_rounded_clip(
-    Imagick $dst,
-    Imagick $plate,
-    int $bx,
-    int $by,
-    int $bw,
-    int $bh,
-    int $radius
-): void {
-    for ($py = 0; $py < $bh; $py++) {
-        for ($px = 0; $px < $bw; $px++) {
-            if (!composite_point_in_rounded_rect($px, $py, 0, 0, $bw, $bh, $radius)) {
-                continue;
-            }
-            $pp = $plate->getImagePixelColor($px, $py);
-            $opacity = $pp->getColorValue(Imagick::COLOR_ALPHA);
-            if ($opacity < 0.02) {
-                continue;
-            }
-            $x = $bx + $px;
-            $y = $by + $py;
-            $dp = $dst->getImagePixelColor($x, $y);
-            $sr = $pp->getColorValue(Imagick::COLOR_RED);
-            $sg = $pp->getColorValue(Imagick::COLOR_GREEN);
-            $sb = $pp->getColorValue(Imagick::COLOR_BLUE);
-            $dr = $dp->getColorValue(Imagick::COLOR_RED);
-            $dg = $dp->getColorValue(Imagick::COLOR_GREEN);
-            $db = $dp->getColorValue(Imagick::COLOR_BLUE);
-            if ($opacity > 0.98) {
-                $nr = $sr;
-                $ng = $sg;
-                $nb = $sb;
-            } else {
-                $nr = min(1.0, max(0.0, $opacity * $sr + (1.0 - $opacity) * $dr));
-                $ng = min(1.0, max(0.0, $opacity * $sg + (1.0 - $opacity) * $dg));
-                $nb = min(1.0, max(0.0, $opacity * $sb + (1.0 - $opacity) * $db));
-            }
-            $out = new ImagickPixel();
-            $out->setColorValue(Imagick::COLOR_RED, $nr);
-            $out->setColorValue(Imagick::COLOR_GREEN, $ng);
-            $out->setColorValue(Imagick::COLOR_BLUE, $nb);
-            $out->setColorValue(Imagick::COLOR_ALPHA, 1.0);
-            $dst->setImagePixelColor($x, $y, $out);
-        }
-    }
-}
-
-/**
  * @param list<array<string, mixed>> $icons 空なら無視（通常は Imagick 経路で icons を渡す）
  *
  * @return array{error: ?string, content_bounds: array<string, int>, output_width?: int, output_height?: int}
@@ -613,21 +510,8 @@ function composite_render_gd(
         imagealphablending($plateIm, true);
         $pw = imagesx($plateIm);
         $ph = imagesy($plateIm);
-        $plateScaled = imagecreatetruecolor($bw, $bh);
-        if ($plateScaled === false) {
-            imagedestroy($plateIm);
-            imagedestroy($sourceGd);
-            imagedestroy($fullBase);
-
-            return ['error' => '板スケール用キャンバスの作成に失敗しました', 'content_bounds' => $cbJson];
-        }
-        imagealphablending($plateScaled, true);
-        imagesavealpha($plateScaled, true);
-        imagecopyresampled($plateScaled, $plateIm, 0, 0, 0, 0, $bw, $bh, $pw, $ph);
+        imagecopyresampled($fullBase, $plateIm, $bx, $by, 0, 0, $bw, $bh, $pw, $ph);
         imagedestroy($plateIm);
-
-        composite_gd_apply_scaled_plate_rounded_clip($fullBase, $plateScaled, $bx, $by, $bw, $bh, $radius);
-        imagedestroy($plateScaled);
         imagedestroy($sourceGd);
     } else {
         $srcIm = composite_image_load($bgPath);
@@ -1023,7 +907,7 @@ function composite_render_imagick(
             $plate = new Imagick($bgPath);
             $plate->setImageColorspace(Imagick::COLORSPACE_SRGB);
             $plate->resizeImage($bw, $bh, Imagick::FILTER_LANCZOS, 1, false);
-            composite_imagick_apply_scaled_plate_rounded_clip($canvas, $plate, $bx, $by, $bw, $bh, $radius);
+            $canvas->compositeImage($plate, Imagick::COMPOSITE_OVER, $bx, $by);
             $plate->clear();
 
             $base = clone $canvas;
