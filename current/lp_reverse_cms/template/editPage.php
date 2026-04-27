@@ -12,6 +12,14 @@ if (!isset($structure) || !is_array($structure)) {
     return;
 }
 
+require_once dirname(__DIR__) . '/lib/suggest_industries.php';
+$suggestBundle  = lp_reverse_suggest_industries_from_structure($structure);
+$sourceIndustry = (string) ($suggestBundle['source_industry'] ?? '');
+$suggestions    = $suggestBundle['suggestions'] ?? [];
+if (!is_array($suggestions)) {
+    $suggestions = [];
+}
+
 $meta       = $structure['meta']      ?? [];
 $sections   = $structure['sections']  ?? [];
 $clientMeta = ($clientData['meta']     ?? []);
@@ -38,7 +46,7 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
 
   <form id="clientDataForm">
 
-  <!-- AI テキスト自動置換パネル（cursor_prompts/text_replace_ui.md） -->
+  <!-- AI テキスト自動置換（text_replace_ui + industry_suggest_and_batch） -->
   <div id="ai-text-replace-panel" class="card shadow-sm mb-3 border-primary">
     <div class="card-header bg-primary text-white d-flex align-items-center gap-2 py-2 flex-wrap">
       <span><i class="bi bi-stars me-1" aria-hidden="true"></i><strong>AI テキスト自動生成</strong></span>
@@ -46,13 +54,43 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
     </div>
     <div class="card-body py-3">
       <p class="small text-muted mb-2">
-        対象は <code>data-lp-field="text"</code>（および将来用 <code>content</code>）のみです。画像URL・リンクURLは変更しません。
+        対象は <code>data-lp-field="text"</code> / <code>content</code> のみ。画像URL・リンクURLは変更しません。
       </p>
+      <?php if ($sourceIndustry !== ''): ?>
+        <p class="small text-muted mb-2">
+          元LP業種: <strong class="text-body"><?= htmlspecialchars($sourceIndustry, ENT_QUOTES, 'UTF-8') ?></strong>
+        </p>
+      <?php endif; ?>
+      <?php if ($suggestions !== []): ?>
+        <div class="mb-2 d-flex flex-wrap gap-1" id="ai-suggest-chips">
+          <?php foreach ($suggestions as $s): ?>
+            <?php
+              $s = (string) $s;
+              if ($s === '') {
+                  continue;
+              }
+            ?>
+            <button type="button"
+                    class="btn btn-sm btn-outline-primary ai-chip"
+                    data-value="<?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>">
+              <?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>
+            </button>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
       <div class="row g-2 align-items-end">
         <div class="col-md-5 col-lg-4">
           <label class="form-label small mb-1" for="ai-industry">ターゲット業種 <span class="text-danger">*</span></label>
           <input type="text" id="ai-industry" class="form-control form-control-sm"
-                 placeholder="例：ネイルサロン、歯科クリニック、学習塾" autocomplete="off">
+                 placeholder="例：ネイルサロン、歯科クリニック、学習塾" autocomplete="off"
+                 list="ai-industry-list">
+          <datalist id="ai-industry-list">
+            <?php foreach ($suggestions as $s): ?>
+              <?php $s = (string) $s; ?>
+              <?php if ($s === '') { continue; } ?>
+              <option value="<?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>"></option>
+            <?php endforeach; ?>
+          </datalist>
         </div>
         <div class="col-md-4 col-lg-3">
           <label class="form-label small mb-1" for="ai-tone">トーン</label>

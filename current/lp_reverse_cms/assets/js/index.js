@@ -379,6 +379,17 @@
         backup = null;
       });
     }
+
+    document.querySelectorAll('#ai-text-replace-panel .ai-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const inp = document.getElementById('ai-industry');
+        const v = chip.dataset.value;
+        if (inp && v) {
+          inp.value = v;
+          inp.focus();
+        }
+      });
+    });
   }
 
   // -----------------------------------------------------------------------
