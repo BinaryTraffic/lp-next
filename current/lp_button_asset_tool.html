@@ -262,6 +262,32 @@
     .preview-slot--with-overlay {
       position: relative;
     }
+    #plate_preview_slot.plate-preview-slot--framed {
+      align-items: stretch;
+      justify-content: stretch;
+    }
+    .plate-canvas {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      flex: 1 1 auto;
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .plate-canvas.plate-canvas--framed {
+      display: block;
+    }
+    .plate-canvas.plate-canvas--framed .plate-canvas__inset {
+      position: absolute;
+      display: block;
+      margin: 0;
+      object-fit: fill;
+      max-width: none !important;
+      max-height: none !important;
+    }
     .plate-text-overlay {
       position: absolute;
       box-sizing: border-box;
@@ -274,7 +300,7 @@
       overflow: hidden;
       word-break: keep-all;
       padding: 1px 2px;
-      z-index: 1;
+      z-index: 2;
       /* 背景が明暗どちらでも読めるよう弱い縁取り */
       text-shadow:
         0 0 1px rgba(0, 0, 0, 0.55),
@@ -477,13 +503,15 @@
           <figure id="fig_plate" class="preview-cell" hidden>
             <figcaption>板<span id="plate_dim_lbl" class="plate-dim"></span>
               <span class="help-tip" style="margin-left:0.2rem">
-                <button type="button" class="help-tip__btn" aria-label="板プレビューの字">?</button>
-                <span class="help-tip__txt" role="tooltip">保存される板PNGは下地のみです。ここに重なる字は「文字」欄／JSONの参考表示で、本番の描画は書き出しと同じ engine です。</span>
+                <button type="button" class="help-tip__btn" aria-label="板プレビュー">?</button>
+                <span class="help-tip__txt" role="tooltip">余白を検出したあとは、元画像と同じキャンバス比率で帯（マット色のサンプル）を敷き、その内側に板PNGを置きます。保存される板ファイル自体はボタン寸法の下地のみです。</span>
               </span>
             </figcaption>
-            <div class="preview-slot preview-slot--with-overlay">
-              <img id="plate_preview" alt="生成した板" />
-              <div id="plate_text_overlay" class="plate-text-overlay" hidden aria-hidden="true"></div>
+            <div class="preview-slot preview-slot--with-overlay" id="plate_preview_slot">
+              <div class="plate-canvas" id="plate_canvas">
+                <img id="plate_preview" class="plate-canvas__img" alt="生成した板" />
+                <div id="plate_text_overlay" class="plate-text-overlay" hidden aria-hidden="true"></div>
+              </div>
             </div>
           </figure>
           <figure id="fig_out" class="preview-cell" hidden>
@@ -529,7 +557,7 @@
           <h3>新しい板
             <span class="help-tip">
               <button type="button" class="help-tip__btn" aria-label="板とは">?</button>
-              <span class="help-tip__txt" role="tooltip">ボタンの下地となるPNGです（文字は含みません）。色・形・スタイルを決めて「板を作る」→ 比較枠の板に字を重ねた参考表示が出ます。確定は「書き出し」。</span>
+              <span class="help-tip__txt" role="tooltip">ボタン寸法の下地PNGです。余白検出後は板プレビューがフルキャンバス表示になり、帯と板の位置を確認できます。</span>
             </span>
           </h3>
           <div class="color-tool-wrap">
@@ -1061,6 +1089,59 @@
         return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
       }
 
+      /** 元画像の余白付近を1点サンプルし、板プレビューの帯色に使う（同一オリジン想定） */
+      function sampleMatteRgbFromOrigForPlate(cb) {
+        if (!origPreview || !origPreview.complete || origPreview.naturalWidth < 2 || !cb) {
+          return "rgb(236,236,236)";
+        }
+        try {
+          var cnv = document.createElement("canvas");
+          cnv.width = origPreview.naturalWidth;
+          cnv.height = origPreview.naturalHeight;
+          var ctx = cnv.getContext("2d");
+          if (!ctx) return "rgb(236,236,236)";
+          ctx.drawImage(origPreview, 0, 0);
+          var pl = parseInt(cb.padding_left, 10) || 0;
+          var pt = parseInt(cb.padding_top, 10) || 0;
+          var px = pl > 0 ? Math.min(Math.floor(pl / 2), origPreview.naturalWidth - 1) : 1;
+          var py = pt > 0 ? Math.min(Math.floor(pt / 2), origPreview.naturalHeight - 1) : 1;
+          px = Math.max(0, px);
+          py = Math.max(0, py);
+          var d = ctx.getImageData(px, py, 1, 1).data;
+          return "rgb(" + d[0] + "," + d[1] + "," + d[2] + ")";
+        } catch (e0) {
+          return "rgb(236,236,236)";
+        }
+      }
+
+      /** 余白検出ありのとき、板プレビューをフルキャンバス上に配置し直す */
+      function syncPlateCanvasLayout() {
+        var slot = document.getElementById("plate_preview_slot");
+        var canvas = document.getElementById("plate_canvas");
+        var img = platePreview;
+        if (!slot || !canvas || !img) return;
+        var framed = !!(probeTrim && probeTrim.cb && probeTrim.fullW >= 16 && probeTrim.fullH >= 16);
+        slot.classList.toggle("plate-preview-slot--framed", framed);
+        if (framed) {
+          var cb = probeTrim.cb;
+          var fw = probeTrim.fullW;
+          var fh = probeTrim.fullH;
+          canvas.classList.add("plate-canvas--framed");
+          canvas.style.backgroundColor = sampleMatteRgbFromOrigForPlate(cb);
+          img.classList.add("plate-canvas__inset");
+          img.style.left = (100 * cb.padding_left / fw) + "%";
+          img.style.top = (100 * cb.padding_top / fh) + "%";
+          img.style.width = (100 * cb.button_w / fw) + "%";
+          img.style.height = (100 * cb.button_h / fh) + "%";
+        } else {
+          canvas.classList.remove("plate-canvas--framed");
+          canvas.style.backgroundColor = "";
+          img.classList.remove("plate-canvas__inset");
+          img.removeAttribute("style");
+        }
+        syncPlateTextOverlay();
+      }
+
       /** W×H（フォーム値）に合わせた同一アスペクトの枠で並べ、板・書き出しと見比べやすくする */
       function syncComparePreviewFrames() {
         var w = parseInt(fW && fW.value, 10);
@@ -1071,22 +1152,34 @@
         }
         var ar = w + " / " + h;
         document.querySelectorAll(".preview-row--compare .preview-slot").forEach(function (el) {
+          if (el.id === "plate_preview_slot") return;
           el.style.aspectRatio = ar;
         });
+        var plateSlot = document.getElementById("plate_preview_slot");
+        if (plateSlot) {
+          if (probeTrim && probeTrim.fullW >= 16 && probeTrim.fullH >= 16) {
+            plateSlot.style.aspectRatio = probeTrim.fullW + " / " + probeTrim.fullH;
+          } else {
+            plateSlot.style.aspectRatio = ar;
+          }
+        }
         if (comparePxLbl) {
           comparePxLbl.hidden = false;
           var trimNote = probeTrim
             ? "「元」はフル画像のまま表示しています。下の W×H は <strong>余白を除いた内容領域</strong>（板・書き出しの作業サイズ）です。"
             : "";
+          var plateFrameNote = probeTrim
+            ? "<span class=\"compare-foot-sub\">板の列は、検出したキャンバス全体（" + probeTrim.fullW + "×" + probeTrim.fullH + " px 比率）で帯を表示し、内側に板PNGを置きます。</span>"
+            : "";
           comparePxLbl.innerHTML =
-            "比較枠は " + w + "×" + h + " px の比率です。板はこのサイズで生成されます。書き出しは元画像に余白がある場合、検出した内側（この比率）に切り出して保存します。" +
+            "比較枠は " + w + "×" + h + " px の比率です（内側の作業サイズ）。板PNGはこのサイズで生成されます。" +
             (trimNote ? "<span class=\"compare-foot-sub\">" + trimNote + "</span>" : "") +
+            plateFrameNote +
             "<span class=\"compare-foot-sub\">" +
-            "板PNGは角丸の外側が透明です（上の灰色は透過の見え方）。元画像の白い帯は、多くの場合キャンバスに含まれる余白です。" +
-            "色が付いた領域と地を自動で切り分けるのは、単色に近い背景なら比較的やりやすい一方、影・グラデ・写真では誤検出しやすく、完璧には難しいです。" +
+            "スロットの灰色は透過の見え方です。帯の色は元画像の余白近傍を1点サンプルした参考値です。" +
             "</span>";
         }
-        syncPlateTextOverlay();
+        syncPlateCanvasLayout();
       }
 
       /** 板プレビュー用：文字欄または texts[0]（保存PNGには含まれない参考表示） */
@@ -1152,15 +1245,36 @@
         ov.textContent = p.content;
         ov.style.color = p.color;
         ov.style.fontWeight = p.bold ? "700" : "600";
-        ov.style.left = (p.x_pct * 100) + "%";
-        ov.style.top = (p.y_pct * 100) + "%";
-        ov.style.width = (p.w_pct * 100) + "%";
-        ov.style.height = (p.h_pct * 100) + "%";
-        var slot = ov.parentElement;
-        var h = slot && slot.clientHeight ? slot.clientHeight : 0;
-        if (h > 0) {
-          var px = Math.max(10, Math.round(h * p.h_pct * p.font_size_pct * 0.82));
-          ov.style.fontSize = px + "px";
+        var framed = !!(probeTrim && probeTrim.cb && probeTrim.fullW > 0 && probeTrim.fullH > 0);
+        var cbFr = framed ? probeTrim.cb : null;
+        var fwFr = framed ? probeTrim.fullW : 0;
+        var fhFr = framed ? probeTrim.fullH : 0;
+        if (framed && cbFr) {
+          var pl = cbFr.padding_left;
+          var pt = cbFr.padding_top;
+          var bw = cbFr.button_w;
+          var bh = cbFr.button_h;
+          ov.style.left = (100 * (pl + p.x_pct * bw) / fwFr) + "%";
+          ov.style.top = (100 * (pt + p.y_pct * bh) / fhFr) + "%";
+          ov.style.width = (100 * (p.w_pct * bw) / fwFr) + "%";
+          ov.style.height = (100 * (p.h_pct * bh) / fhFr) + "%";
+        } else {
+          ov.style.left = (p.x_pct * 100) + "%";
+          ov.style.top = (p.y_pct * 100) + "%";
+          ov.style.width = (p.w_pct * 100) + "%";
+          ov.style.height = (p.h_pct * 100) + "%";
+        }
+        var canvasEl = ov.parentElement;
+        var ch = canvasEl && canvasEl.clientHeight ? canvasEl.clientHeight : 0;
+        if (framed && ch > 0 && cbFr) {
+          var boxH = (p.h_pct * cbFr.button_h / fhFr) * ch;
+          if (boxH > 0) {
+            ov.style.fontSize = Math.max(10, Math.round(boxH * p.font_size_pct * 0.82)) + "px";
+          } else {
+            ov.style.fontSize = "clamp(10px, 2.6vmin, 22px)";
+          }
+        } else if (ch > 0) {
+          ov.style.fontSize = Math.max(10, Math.round(ch * p.h_pct * p.font_size_pct * 0.82)) + "px";
         } else {
           ov.style.fontSize = "clamp(10px, 2.6vmin, 22px)";
         }
@@ -1406,11 +1520,11 @@
             if (nw > 0 && nh > 0 && plateDimLbl) {
               plateDimLbl.textContent = " · " + nw + "×" + nh + " px";
             }
-            syncPlateTextOverlay();
+            syncPlateCanvasLayout();
           };
           platePreview.src = abs + (abs.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
           figPlate.hidden = false;
-          syncPlateTextOverlay();
+          syncPlateCanvasLayout();
         }
       }
 
@@ -1461,7 +1575,7 @@
           fetchPlatePng(payload)
             .then(function (url) {
               applyPlatePreviewUrl(url, payload.width, payload.height);
-              fStatus.textContent = "OK · 板に字を重ねて表示（確定は書き出し）";
+              fStatus.textContent = "OK · プレビュー更新（余白あり時はフル枠表示）";
             })
             .catch(function (e) {
               fStatus.textContent = "失敗: " + (e.message || String(e));
@@ -1505,7 +1619,7 @@
         }];
         fTexts.value = JSON.stringify(one, null, 2);
         fStatus.textContent = "中央プリセット済み";
-        syncPlateTextOverlay();
+        syncPlateCanvasLayout();
       });
 
       actClaude.addEventListener("click", function () {
@@ -1543,7 +1657,7 @@
             fTexts.value = JSON.stringify(textsOut, null, 2);
             if (fIcons) fIcons.value = JSON.stringify(iconsRaw, null, 2);
             fStatus.textContent = "AI 反映済み（テキスト" + textsOut.length + " · アイコン" + iconsRaw.length + "）";
-            syncPlateTextOverlay();
+            syncPlateCanvasLayout();
           })
           .catch(function (e) {
             fStatus.textContent = "AI: " + (e.message || String(e));
@@ -1717,17 +1831,17 @@
 
       if (fLabel && fColor && fTexts) {
         ["input", "change"].forEach(function (ev) {
-          fLabel.addEventListener(ev, syncPlateTextOverlay);
-          fColor.addEventListener(ev, syncPlateTextOverlay);
-          fTexts.addEventListener(ev, syncPlateTextOverlay);
+          fLabel.addEventListener(ev, syncPlateCanvasLayout);
+          fColor.addEventListener(ev, syncPlateCanvasLayout);
+          fTexts.addEventListener(ev, syncPlateCanvasLayout);
         });
       }
       if (fColorPicker) {
-        fColorPicker.addEventListener("input", syncPlateTextOverlay);
-        fColorPicker.addEventListener("change", syncPlateTextOverlay);
+        fColorPicker.addEventListener("input", syncPlateCanvasLayout);
+        fColorPicker.addEventListener("change", syncPlateCanvasLayout);
       }
       if (fColorCombo) {
-        fColorCombo.addEventListener("change", syncPlateTextOverlay);
+        fColorCombo.addEventListener("change", syncPlateCanvasLayout);
       }
 
       loadTheme()
