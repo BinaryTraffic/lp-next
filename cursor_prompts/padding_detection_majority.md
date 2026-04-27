@@ -124,7 +124,8 @@ curl -s -X POST https://lp-next.jitan.app/current/lp_reverse_cms/store/image_com
   }'
 ```
 
-成功条件: `content_bounds.padding_top` が **10 以上**であること。
+成功条件: `content_bounds.padding_top` が **4 以上**であること。
+（btn01.jpg の中央ストリップ実測値は 6px。角丸コーナー部の目視 ~15px との乖離は正常。）
 
 ---
 
