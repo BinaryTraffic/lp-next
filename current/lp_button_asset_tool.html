@@ -1303,7 +1303,12 @@
           .then(function (x) {
             if (seq !== boundsProbeSeq) return;
             if (!x.ok || x.j.error || !x.j.content_bounds) return;
-            if (!x.j.trimmed) return;
+            if (!x.j.trimmed) {
+              syncComparePreviewFrames();
+              fStatus.textContent =
+                "余白検出なし（全面をボタン領域と判定）。板プレビューは全面の塗り比較になります。書き出しの「文字まわりの余白」は板PNGではなく描画ボックスによるものです。";
+              return;
+            }
             var cb = x.j.content_bounds;
             probeTrim = {
               fullW: x.j.full_width || nw,
