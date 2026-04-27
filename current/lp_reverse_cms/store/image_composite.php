@@ -20,11 +20,13 @@ declare(strict_types=1);
  *     "label": "LINE",
  *     "x_pct": 0.05, "y_pct": 0.15, "w_pct": 0.20, "h_pct": 0.70
  *   }],
- *   "border_fill": { "color": "#c8a96e", "width_px": 24 }
+ *   "border_fill": { "color": "#c8a96e", "width_px": 24 },
+ *   "border_radius": 15
  * }
  *
- * source_url を指定すると、元画像から余白・ボタン矩形・角丸半径（参考値）を検出し、
- * 余白色でキャンバスを塗ったうえで板を imagecopyresampled / COMPOSITE_OVER でアルファ合成する。
+ * source_url を指定すると、元画像から余白・ボタン矩形・角丸半径を検出し、
+ * 余白色でキャンバスを塗ったうえで板を角丸クリップ（4×スーパーサンプル＋縮小）で貼る。
+ * border_radius を省略すると検出値を使用。指定時はその値（clamp 後）をクリップと content_bounds に反映する。
  *
  * border_fill を指定したときは source_url による余白検出は行わない。全面を color で塗り、width_px 幅の枠の内側に background を貼る（bordered フロー用）。
  *
@@ -91,6 +93,14 @@ $texts = isset($in['texts']) && is_array($in['texts']) ? $in['texts'] : [];
 /** @var list<array<string, mixed>> $icons */
 $icons = isset($in['icons']) && is_array($in['icons']) ? $in['icons'] : [];
 $hasIcons = $icons !== [];
+/** 角丸半径（px）。source_url 時のみ有効。null は検出値を使う。 */
+$borderRadiusRequest = null;
+if (array_key_exists('border_radius', $in)) {
+    $brRaw = $in['border_radius'];
+    if (is_numeric($brRaw)) {
+        $borderRadiusRequest = max(0, (int) round((float) $brRaw));
+    }
+}
 
 if ($backgroundUrl === '') {
     http_response_code(400);
@@ -204,16 +214,16 @@ if ($hasIcons) {
     $fontBoldGdIcons = $fontBoldFile !== '' ? composite_expand_font_for_gd($fontBoldFile) : '';
     $gdFontsOkIcons = ($fontRegularGdIcons !== '' || $fontBoldGdIcons !== '');
     if ($gdFontsOkIcons) {
-        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularGdIcons, $fontBoldGdIcons, $sourcePath, $borderFill, $cropToButton);
+        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularGdIcons, $fontBoldGdIcons, $sourcePath, $borderFill, $borderRadiusRequest, $cropToButton);
     } else {
-        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill, $cropToButton);
+        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, $icons, $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill, $borderRadiusRequest, $cropToButton);
     }
 } elseif ($engine === 'gd') {
     $fontRegularGd = composite_expand_font_for_gd($fontRegularFile);
     $fontBoldGd = $fontBoldFile !== '' ? composite_expand_font_for_gd($fontBoldFile) : '';
     $gdFontsOk = ($fontRegularGd !== '' || $fontBoldGd !== '');
     if (!$gdFontsOk && composite_imagick_available()) {
-        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill, $cropToButton);
+        $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill, $borderRadiusRequest, $cropToButton);
     } elseif (!$gdFontsOk) {
         http_response_code(500);
         echo json_encode([
@@ -221,10 +231,10 @@ if ($hasIcons) {
         ], JSON_UNESCAPED_UNICODE);
         exit;
     } else {
-        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularGd, $fontBoldGd, $sourcePath, $borderFill, $cropToButton);
+        $renderResult = composite_render_gd($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularGd, $fontBoldGd, $sourcePath, $borderFill, $borderRadiusRequest, $cropToButton);
     }
 } else {
-    $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill, $cropToButton);
+    $renderResult = composite_render_imagick($bgPath, $outW, $outH, $texts, [], $destAbs, $fontRegularFile, $fontBoldFile, $sourcePath, $borderFill, $borderRadiusRequest, $cropToButton);
 }
 if ($renderResult['error'] !== null) {
     $err = $renderResult['error'];
@@ -397,6 +407,119 @@ function composite_sample_matte_rgb($im): array
 }
 
 /**
+ * 板を $bw×$bh にスケールし、角丸 $radius（最終出力 px、clamp 済み想定）でクリップする。
+ * 内部で 4 倍解像度に拡大してからクリップし、縮小してエッジをアンチエイリアス化する。
+ *
+ * @return GdImage|false
+ */
+function composite_gd_rounded_plate_supersample(GdImage $plateIm, int $bw, int $bh, int $radius): GdImage|false
+{
+    if ($bw < 1 || $bh < 1) {
+        return false;
+    }
+    $pw = imagesx($plateIm);
+    $ph = imagesy($plateIm);
+    $r = max(0, min($radius, (int) (min($bw, $bh) / 2)));
+
+    $lo = imagecreatetruecolor($bw, $bh);
+    if ($lo === false) {
+        return false;
+    }
+    imagesavealpha($lo, true);
+    imagealphablending($lo, false);
+    $tlo = imagecolorallocatealpha($lo, 0, 0, 0, 127);
+    if ($tlo === false) {
+        imagedestroy($lo);
+
+        return false;
+    }
+    imagefilledrectangle($lo, 0, 0, max(0, $bw - 1), max(0, $bh - 1), $tlo);
+
+    if ($r <= 0) {
+        imagealphablending($lo, true);
+        imagesavealpha($lo, true);
+        imagecopyresampled($lo, $plateIm, 0, 0, 0, 0, $bw, $bh, $pw, $ph);
+
+        return $lo;
+    }
+
+    $ss = 4;
+    $w4 = $bw * $ss;
+    $h4 = $bh * $ss;
+    $r4 = $r * $ss;
+
+    $hi = imagecreatetruecolor($w4, $h4);
+    if ($hi === false) {
+        imagedestroy($lo);
+
+        return false;
+    }
+    imagesavealpha($hi, true);
+    imagealphablending($hi, false);
+    $thi = imagecolorallocatealpha($hi, 0, 0, 0, 127);
+    if ($thi === false) {
+        imagedestroy($hi);
+        imagedestroy($lo);
+
+        return false;
+    }
+    imagefilledrectangle($hi, 0, 0, max(0, $w4 - 1), max(0, $h4 - 1), $thi);
+    imagealphablending($hi, true);
+    imagesavealpha($hi, true);
+    imagecopyresampled($hi, $plateIm, 0, 0, 0, 0, $w4, $h4, $pw, $ph);
+
+    $clip = imagecreatetruecolor($w4, $h4);
+    if ($clip === false) {
+        imagedestroy($hi);
+        imagedestroy($lo);
+
+        return false;
+    }
+    imagesavealpha($clip, true);
+    imagealphablending($clip, false);
+    $tclip = imagecolorallocatealpha($clip, 0, 0, 0, 127);
+    if ($tclip === false) {
+        imagedestroy($hi);
+        imagedestroy($clip);
+        imagedestroy($lo);
+
+        return false;
+    }
+    imagefilledrectangle($clip, 0, 0, max(0, $w4 - 1), max(0, $h4 - 1), $tclip);
+
+    for ($py = 0; $py < $h4; $py++) {
+        for ($px = 0; $px < $w4; $px++) {
+            if (!composite_point_in_rounded_rect($px, $py, 0, 0, $w4, $h4, $r4)) {
+                continue;
+            }
+            $c = imagecolorat($hi, $px, $py);
+            imagesetpixel($clip, $px, $py, $c);
+        }
+    }
+    imagedestroy($hi);
+
+    imagealphablending($lo, true);
+    imagesavealpha($lo, true);
+    imagecopyresampled($lo, $clip, 0, 0, 0, 0, $bw, $bh, $w4, $h4);
+    imagedestroy($clip);
+
+    return $lo;
+}
+
+/**
+ * source_url 時: 検出半径とリクエスト border_radius から実際に使う半径を決める。
+ */
+function composite_resolve_border_radius_used(int $bw, int $bh, int $detected, ?int $request): int
+{
+    $maxR = (int) (min($bw, $bh) / 2);
+    if ($request !== null) {
+        return max(0, min($request, $maxR));
+    }
+
+    return max(0, min($detected, $maxR));
+}
+
+/**
  * @param list<array<string, mixed>> $icons 空なら無視（通常は Imagick 経路で icons を渡す）
  *
  * @return array{error: ?string, content_bounds: array<string, int>, output_width?: int, output_height?: int}
@@ -412,6 +535,7 @@ function composite_render_gd(
     string $fontBoldGd,
     ?string $sourcePath = null,
     ?array $borderFill = null,
+    ?int $borderRadiusRequest = null,
     bool $cropToButton = false
 ): array {
     if ($borderFill !== null) {
@@ -476,9 +600,10 @@ function composite_render_gd(
         $by = $marginBounds['button_y'];
         $bw = $marginBounds['button_w'];
         $bh = $marginBounds['button_h'];
-        $radius = composite_detect_border_radius_gd($sourceGd, $bx, $by, $bw, $bh);
+        $detectedRadius = composite_detect_border_radius_gd($sourceGd, $bx, $by, $bw, $bh);
+        $radiusUsed = composite_resolve_border_radius_used($bw, $bh, $detectedRadius, $borderRadiusRequest);
         $boundsForJson = $marginBounds;
-        $boundsForJson['border_radius'] = $radius;
+        $boundsForJson['border_radius'] = $radiusUsed;
         $cbJson = composite_content_bounds_for_json($boundsForJson);
 
         $fullBase = imagecreatetruecolor($outW, $outH);
@@ -508,10 +633,18 @@ function composite_render_gd(
         }
         imagesavealpha($plateIm, true);
         imagealphablending($plateIm, true);
-        $pw = imagesx($plateIm);
-        $ph = imagesy($plateIm);
-        imagecopyresampled($fullBase, $plateIm, $bx, $by, 0, 0, $bw, $bh, $pw, $ph);
+        $plateLo = composite_gd_rounded_plate_supersample($plateIm, $bw, $bh, $radiusUsed);
         imagedestroy($plateIm);
+        if ($plateLo === false) {
+            imagedestroy($sourceGd);
+            imagedestroy($fullBase);
+
+            return ['error' => '板の角丸処理に失敗しました', 'content_bounds' => $cbJson];
+        }
+        imagealphablending($fullBase, true);
+        imagesavealpha($fullBase, true);
+        imagecopy($fullBase, $plateLo, $bx, $by, 0, 0, $bw, $bh);
+        imagedestroy($plateLo);
         imagedestroy($sourceGd);
     } else {
         $srcIm = composite_image_load($bgPath);
@@ -840,6 +973,7 @@ function composite_render_imagick(
     string $fontBoldFile,
     ?string $sourcePath = null,
     ?array $borderFill = null,
+    ?int $borderRadiusRequest = null,
     bool $cropToButton = false
 ): array {
     try {
@@ -894,9 +1028,10 @@ function composite_render_imagick(
             $by = $marginBounds['button_y'];
             $bw = $marginBounds['button_w'];
             $bh = $marginBounds['button_h'];
-            $radius = composite_detect_border_radius_gd($sourceGd, $bx, $by, $bw, $bh);
+            $detectedRadius = composite_detect_border_radius_gd($sourceGd, $bx, $by, $bw, $bh);
+            $radiusUsed = composite_resolve_border_radius_used($bw, $bh, $detectedRadius, $borderRadiusRequest);
             $boundsForJson = $marginBounds;
-            $boundsForJson['border_radius'] = $radius;
+            $boundsForJson['border_radius'] = $radiusUsed;
             $cbJson = composite_content_bounds_for_json($boundsForJson);
             imagedestroy($sourceGd);
 
@@ -904,9 +1039,33 @@ function composite_render_imagick(
             $canvas->newImage($outW, $outH, new ImagickPixel(sprintf('rgb(%d,%d,%d)', $mr, $mg, $mb)));
             $canvas->setImageColorspace(Imagick::COLORSPACE_SRGB);
 
-            $plate = new Imagick($bgPath);
+            $plateGd = composite_image_load($bgPath);
+            if ($plateGd === false) {
+                $canvas->clear();
+
+                return ['error' => '背景画像の読み込みに失敗しました', 'content_bounds' => $cbJson];
+            }
+            $plateLo = composite_gd_rounded_plate_supersample($plateGd, $bw, $bh, $radiusUsed);
+            imagedestroy($plateGd);
+            if ($plateLo === false) {
+                $canvas->clear();
+
+                return ['error' => '板の角丸処理に失敗しました', 'content_bounds' => $cbJson];
+            }
+            ob_start();
+            imagesavealpha($plateLo, true);
+            imagealphablending($plateLo, false);
+            imagepng($plateLo, null, 6);
+            $pngBlob = ob_get_clean();
+            imagedestroy($plateLo);
+            if ($pngBlob === false || $pngBlob === '') {
+                $canvas->clear();
+
+                return ['error' => '板画像のエンコードに失敗しました', 'content_bounds' => $cbJson];
+            }
+            $plate = new Imagick();
+            $plate->readImageBlob($pngBlob);
             $plate->setImageColorspace(Imagick::COLORSPACE_SRGB);
-            $plate->resizeImage($bw, $bh, Imagick::FILTER_LANCZOS, 1, false);
             $canvas->compositeImage($plate, Imagick::COMPOSITE_OVER, $bx, $by);
             $plate->clear();
 
