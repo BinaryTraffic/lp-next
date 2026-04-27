@@ -515,7 +515,7 @@
             </div>
           </figure>
           <figure id="fig_out" class="preview-cell" hidden>
-            <figcaption>書き出し</figcaption>
+            <figcaption>書き出し<span id="out_dim_lbl" class="plate-dim"></span></figcaption>
             <div class="preview-slot"><img id="out_preview" alt="合成結果" /></div>
           </figure>
         </div>
@@ -733,6 +733,7 @@
       var actIconSample = document.getElementById("act_icon_sample");
       var figOut = document.getElementById("fig_out");
       var outPreview = document.getElementById("out_preview");
+      var outDimLbl = document.getElementById("out_dim_lbl");
       var envKeysNote = document.getElementById("env_keys_note");
       var appVersionBadge = document.getElementById("app_version_badge");
       var plateColorCombo = document.getElementById("plate_color_combo");
@@ -1370,6 +1371,7 @@
         if (fIcons) fIcons.value = it.icons && it.icons.length ? JSON.stringify(it.icons, null, 2) : "[]";
         fStatus.textContent = "";
         figOut.hidden = true;
+        if (outDimLbl) outDimLbl.textContent = "";
         if (figPlate) figPlate.hidden = true;
         if (plateDimLbl) plateDimLbl.textContent = "";
         if (origDimLbl) origDimLbl.textContent = "";
@@ -1738,6 +1740,9 @@
               var abs = resolvePublicOutputUrl(j.url);
               outPreview.src = abs + (abs.indexOf("?") >= 0 ? "&" : "?") + "_=" + Date.now();
               figOut.hidden = false;
+              var ow = typeof j.output_width === "number" ? j.output_width : w;
+              var oh = typeof j.output_height === "number" ? j.output_height : h;
+              if (outDimLbl) outDimLbl.textContent = " · " + ow + "×" + oh + " px";
               var cbMsg = formatContentBoundsStatus(j.content_bounds);
               fStatus.textContent = "完了" + (icons.length ? " · アイコン" + icons.length + "件" : "") + cbMsg;
             });
