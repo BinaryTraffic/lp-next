@@ -42,40 +42,46 @@ function composite_is_padding_pixel_gd(GdImage $im, int $x, int $y): bool
     return $r >= 245 && $g >= 245 && $b >= 245;
 }
 
-/** 行・列は中央50%ストリップのみ走査（JPEG 端のリンギングを無視） */
+/**
+ * 行・列は中央50%ストリップのみ走査。ストリップ内「80%以上が余白」ならパディング行／列とみなす（JPEG 滲み耐性）。
+ */
 function composite_row_has_content_gd(GdImage $im, int $w, int $y): bool
 {
     $x0 = (int) ($w * 0.25);
     $x1 = (int) ($w * 0.75);
     $x1 = max($x1, $x0 + 1);
+    $total   = $x1 - $x0;
+    $padding = 0;
     for ($x = $x0; $x < $x1; $x++) {
-        if (!composite_is_padding_pixel_gd($im, $x, $y)) {
-            return true;
+        if (composite_is_padding_pixel_gd($im, $x, $y)) {
+            ++$padding;
         }
     }
 
-    return false;
+    return ($padding / $total) < 0.80;
 }
 
 function composite_col_has_content_gd(GdImage $im, int $x, int $y0, int $y1): bool
 {
-    $h = $y1 - $y0 + 1;
+    $h  = $y1 - $y0 + 1;
     $ys = $y0 + (int) ($h * 0.25);
     $ye = $y0 + (int) ($h * 0.75);
     $ye = max($ye, $ys + 1);
-    $ys = max($y0, $ys);
-    $ye = min($y1, $ye);
+    $ys = max($ys, $y0);
+    $ye = min($ye, $y1);
     if ($ys > $ye) {
         $ys = $y0;
         $ye = $y1;
     }
+    $total   = $ye - $ys + 1;
+    $padding = 0;
     for ($y = $ys; $y <= $ye; $y++) {
-        if (!composite_is_padding_pixel_gd($im, $x, $y)) {
-            return true;
+        if (composite_is_padding_pixel_gd($im, $x, $y)) {
+            ++$padding;
         }
     }
 
-    return false;
+    return ($padding / $total) < 0.80;
 }
 
 /**
@@ -226,34 +232,38 @@ function composite_row_has_non_margin_rgb_gd(GdImage $im, int $w, int $y, int $m
     $x0 = (int) ($w * 0.25);
     $x1 = (int) ($w * 0.75);
     $x1 = max($x1, $x0 + 1);
+    $total  = $x1 - $x0;
+    $margin = 0;
     for ($x = $x0; $x < $x1; $x++) {
-        if (!composite_pixel_is_rgb_light_margin_gd($im, $x, $y, $minRgb)) {
-            return true;
+        if (composite_pixel_is_rgb_light_margin_gd($im, $x, $y, $minRgb)) {
+            ++$margin;
         }
     }
 
-    return false;
+    return ($margin / $total) < 0.80;
 }
 
 function composite_col_has_non_margin_rgb_gd(GdImage $im, int $x, int $y0, int $y1, int $minRgb): bool
 {
-    $h = $y1 - $y0 + 1;
+    $h  = $y1 - $y0 + 1;
     $ys = $y0 + (int) ($h * 0.25);
     $ye = $y0 + (int) ($h * 0.75);
     $ye = max($ye, $ys + 1);
-    $ys = max($y0, $ys);
-    $ye = min($y1, $ye);
+    $ys = max($ys, $y0);
+    $ye = min($ye, $y1);
     if ($ys > $ye) {
         $ys = $y0;
         $ye = $y1;
     }
+    $total  = $ye - $ys + 1;
+    $margin = 0;
     for ($y = $ys; $y <= $ye; $y++) {
-        if (!composite_pixel_is_rgb_light_margin_gd($im, $x, $y, $minRgb)) {
-            return true;
+        if (composite_pixel_is_rgb_light_margin_gd($im, $x, $y, $minRgb)) {
+            ++$margin;
         }
     }
 
-    return false;
+    return ($margin / $total) < 0.80;
 }
 
 /**
