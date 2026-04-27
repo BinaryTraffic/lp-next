@@ -269,7 +269,7 @@
         '[data-lp-id][data-lp-field="text"], [data-lp-id][data-lp-field="content"]',
       );
       backup = {};
-      const elements = [];
+      let elements = [];
       inputs.forEach(el => {
         const id = el.dataset.lpId;
         if (!id) return;
@@ -292,18 +292,32 @@
         backup = null;
         return;
       }
+
+      const elementTotalBeforeSlice = elements.length;
       if (elements.length > AI_TEXT_REPLACE_MAX) {
-        setAiStatus(`一度に置換できるのは ${AI_TEXT_REPLACE_MAX} 件までです`, 'danger');
-        showToast(`最大 ${AI_TEXT_REPLACE_MAX} 件までです`, 'danger');
-        backup = null;
-        return;
+        elements = elements.slice(0, AI_TEXT_REPLACE_MAX);
+        const keepIds = new Set(elements.map(e => e.id));
+        const trimmedBackup = {};
+        keepIds.forEach(id => {
+          if (Object.prototype.hasOwnProperty.call(backup, id)) {
+            trimmedBackup[id] = backup[id];
+          }
+        });
+        backup = trimmedBackup;
       }
 
       const toneKey = toneSel && toneSel.value ? toneSel.value : 'polite';
       const tone = AI_TONE_MAP[toneKey] || toneKey;
 
       btn.disabled = true;
-      setAiStatus(`${elements.length} 件のテキストを AI で生成中…`, 'muted');
+      if (elementTotalBeforeSlice > AI_TEXT_REPLACE_MAX) {
+        setAiStatus(
+          `${elementTotalBeforeSlice}件中 先頭${AI_TEXT_REPLACE_MAX}件を処理します — ${elements.length} 件を AI で生成中…`,
+          'muted',
+        );
+      } else {
+        setAiStatus(`${elements.length} 件のテキストを AI で生成中…`, 'muted');
+      }
 
       try {
         const res = await fetch('store/text_replace.php', {
