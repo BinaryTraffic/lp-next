@@ -95,7 +95,7 @@ class LpMapper
                 if ($href === '' && $scoreInfo['score'] < 1) {
                     continue;
                 }
-                $out[] = [
+                $bo = [
                     'element_id'     => $el['id'] ?? '',
                     'section_id'     => $sec['id'] ?? '',
                     'section_type'   => $secType,
@@ -112,6 +112,15 @@ class LpMapper
                         $href !== '' ? ['囲みa要素'] : []
                     ),
                 ];
+                if (isset($el['original_width'], $el['original_height'])) {
+                    $ow = (int) $el['original_width'];
+                    $oh = (int) $el['original_height'];
+                    if ($ow >= 16 && $oh >= 16) {
+                        $bo['original_width']  = $ow;
+                        $bo['original_height'] = $oh;
+                    }
+                }
+                $out[] = $bo;
             }
         }
 

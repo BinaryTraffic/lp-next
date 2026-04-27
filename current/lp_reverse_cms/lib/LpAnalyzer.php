@@ -240,6 +240,39 @@ class LpAnalyzer
     }
 
     /**
+     * HTML img の width / height 属性からピクセル整数を得る（% 等は無視）。
+     *
+     * @return array{width: int, height: int}|null
+     */
+    private function parseHtmlImgDimensions(DOMElement $img): ?array
+    {
+        $w = $this->parseHtmlPixelLength($img->getAttribute('width'));
+        $h = $this->parseHtmlPixelLength($img->getAttribute('height'));
+        if ($w === null || $h === null || $w < 16 || $h < 16 || $w > 8192 || $h > 8192) {
+            return null;
+        }
+
+        return ['width' => $w, 'height' => $h];
+    }
+
+    private function parseHtmlPixelLength(string $raw): ?int
+    {
+        $s = strtolower(trim($raw));
+        if ($s === '') {
+            return null;
+        }
+        if (str_ends_with($s, 'px')) {
+            $s = trim(substr($s, 0, -2));
+        }
+        if ($s === '' || !ctype_digit($s)) {
+            return null;
+        }
+        $v = (int) $s;
+
+        return $v > 0 ? $v : null;
+    }
+
+    /**
      * Recursively walk the element tree and tag editable nodes with data-lp-id.
      */
     private function findEditableElements(
@@ -322,6 +355,11 @@ class LpAnalyzer
                         'original_src'  => $src,
                         'original_href' => $wrapHref,
                     ];
+                    $dims = $this->parseHtmlImgDimensions($child);
+                    if ($dims !== null) {
+                        $row['original_width']  = $dims['width'];
+                        $row['original_height'] = $dims['height'];
+                    }
                     if ($wrapTarget !== null) {
                         $row['wrap_target'] = $wrapTarget;
                     }

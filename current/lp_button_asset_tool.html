@@ -1007,6 +1007,8 @@
             label: bo.label || "（ラベルなし）",
             alt: bo.alt || "",
             src: String(bo.image_src || ""),
+            original_width: bo.original_width != null ? parseInt(bo.original_width, 10) : null,
+            original_height: bo.original_height != null ? parseInt(bo.original_height, 10) : null,
             section_type: bo.section_type || "general",
             section_label: bo.section_label || "",
             button_score: typeof bo.button_score === "number" ? bo.button_score : 0,
@@ -1038,6 +1040,8 @@
               label: el.label || "（ラベルなし）",
               alt: el.original_text || "",
               src: u,
+              original_width: el.original_width != null ? parseInt(el.original_width, 10) : null,
+              original_height: el.original_height != null ? parseInt(el.original_height, 10) : null,
               section_type: secType,
               section_label: sec.label || sec.id || "",
               button_score: score,
@@ -1088,6 +1092,25 @@
 
       function escapeHtml(s) {
         return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+
+      /** image_composite の width/height（= source_url 実ファイルと一致）: 構造 JSON → img 実寸 → 余白APIフル枠 */
+      function parsePositiveDim(v) {
+        var n = typeof v === "number" ? v : parseInt(v, 10);
+        return isFinite(n) && n >= 16 ? n : 0;
+      }
+
+      function getSourceImageDimensionsForComposite(selectedItem, origImgEl, probeTrimState) {
+        var ow = parsePositiveDim(selectedItem && selectedItem.original_width);
+        var oh = parsePositiveDim(selectedItem && selectedItem.original_height);
+        if (ow > 0 && oh > 0) return { w: ow, h: oh };
+        if (origImgEl && origImgEl.naturalWidth >= 16 && origImgEl.naturalHeight >= 16) {
+          return { w: origImgEl.naturalWidth, h: origImgEl.naturalHeight };
+        }
+        if (probeTrimState && probeTrimState.fullW >= 16 && probeTrimState.fullH >= 16) {
+          return { w: probeTrimState.fullW, h: probeTrimState.fullH };
+        }
+        return { w: 0, h: 0 };
       }
 
       /** 元画像の余白付近を1点サンプルし、板プレビューの帯色に使う（同一オリジン想定） */
@@ -1281,13 +1304,52 @@
         }
       }
 
-      /** output 配下のパスへ（プローブ API 用）。外部 URL 等は null */
+      /**
+       * LpAssetDownloader::allocateFilename と同じく URL パス末尾をサニタイズしたファイル名。
+       * 同一ベース名で URL が衝突した場合のみ PHP 側が _abcdefg サフィックスを付けるため、そのケースは推測不能。
+       */
+      function mirrorBasenameFromUrlLikePhp(urlPathTail, defaultExt) {
+        defaultExt = defaultExt || "jpg";
+        var basename = String(urlPathTail || "").split("/").filter(Boolean).pop() || "";
+        var q = basename.indexOf("?");
+        if (q >= 0) basename = basename.slice(0, q);
+        var dot = basename.lastIndexOf(".");
+        var ext = dot > 0 ? basename.slice(dot + 1).toLowerCase() : "";
+        if (!ext || ext.length > 5) {
+          var stem = dot > 0 ? basename.slice(0, dot) : basename;
+          basename = (stem || "asset") + "." + defaultExt;
+        }
+        basename = basename.replace(/[^a-zA-Z0-9._\-]/g, "_").replace(/_+/g, "_");
+        basename = basename.replace(/^_+|_+$/g, "") || "asset." + defaultExt;
+        return basename;
+      }
+
+      function pathnameOnlyFromImgSrc(src) {
+        var s = String(src || "").trim();
+        if (!s || /^data:|^blob:/i.test(s)) return "";
+        try {
+          if (/^https?:\/\//i.test(s)) return new URL(s).pathname || "";
+          if (s.indexOf("//") === 0) return new URL("https:" + s).pathname || "";
+          return new URL(s, "https://local.invalid/").pathname || "";
+        } catch (e) {
+          return "";
+        }
+      }
+
+      /**
+       * output 配下のパスへ（image_content_bounds / image_composite 用）。
+       * 既に /output/ を含む場合はそのまま。http(s)・相対・// はミラー先 output/assets/img/<basename> を推測。
+       */
       function probePathFromImgSrc(src) {
         var s = String(src || "");
         var i = s.indexOf("/output/");
         if (i >= 0) return s.slice(i);
         if (s.indexOf("output/") === 0) return "/" + s;
-        return null;
+        var path = pathnameOnlyFromImgSrc(s);
+        if (!path) return null;
+        var base = mirrorBasenameFromUrlLikePhp(path, "jpg");
+        if (!base) return null;
+        return "/output/assets/img/" + base;
       }
 
       function tryApplyContentBoundsFromSrc(src, nw, nh, seq) {
@@ -1632,8 +1694,9 @@
       actClaude.addEventListener("click", function () {
         if (!selected) return;
         var key = getAnthropicKey();
-        var fw = origPreview.naturalWidth || 0;
-        var fh = origPreview.naturalHeight || 0;
+        var sd = getSourceImageDimensionsForComposite(selected, origPreview, probeTrim);
+        var fw = sd.w > 0 ? sd.w : (origPreview.naturalWidth || 0);
+        var fh = sd.h > 0 ? sd.h : (origPreview.naturalHeight || 0);
         if (fw < 16) fw = parseInt(fW.value, 10) || 0;
         if (fh < 16) fh = parseInt(fH.value, 10) || 0;
         actClaude.disabled = true;
@@ -1683,17 +1746,16 @@
 
       actComposite.addEventListener("click", function () {
         var srcPath = selected && selected.src ? probePathFromImgSrc(selected.src) : null;
-        var fullW = origPreview.naturalWidth || 0;
-        var fullH = origPreview.naturalHeight || 0;
-        if (probeTrim && probeTrim.fullW > 0 && probeTrim.fullH > 0) {
-          fullW = probeTrim.fullW;
-          fullH = probeTrim.fullH;
-        }
+        var srcDims = getSourceImageDimensionsForComposite(selected, origPreview, probeTrim);
         var w = parseInt(fW.value, 10);
         var h = parseInt(fH.value, 10);
-        if (srcPath && fullW >= 16 && fullH >= 16) {
-          w = fullW;
-          h = fullH;
+        if (srcPath) {
+          if (srcDims.w < 16 || srcDims.h < 16) {
+            fStatus.textContent = "元画像のピクセルサイズを取得できません（lp_structure の original_width/height または画像の読み込みを確認）";
+            return;
+          }
+          w = srcDims.w;
+          h = srcDims.h;
         }
         if (w < 16 || h < 16) {
           fStatus.textContent = "W/H 不正";
@@ -1717,9 +1779,8 @@
           fStatus.textContent = "書き出し中…";
           var payload = { background_url: bgUrl, width: w, height: h, texts: texts };
           if (icons.length) payload.icons = icons;
-          if (srcPath && fullW >= 16 && fullH >= 16) {
+          if (srcPath && srcDims.w >= 16 && srcDims.h >= 16) {
             payload.source_url = srcPath;
-            payload.crop_to_button = true;
             var brVal = fBorderRadius && String(fBorderRadius.value || "").trim();
             if (brVal !== "" && isFinite(Number(brVal))) {
               payload.border_radius = Math.max(0, Math.round(Number(brVal)));
