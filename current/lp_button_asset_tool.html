@@ -465,6 +465,13 @@
             <label for="f_h">H</label>
           </div>
         </div>
+        <div class="float-field" style="max-width: 15rem">
+          <input type="number" id="f_border_radius" min="0" max="256" step="1" placeholder=" " inputmode="numeric" />
+          <label for="f_border_radius"><span class="lbl-hint">合成の角丸クリップ (px)<span class="help-tip">
+            <button type="button" class="help-tip__btn" aria-label="角丸クリップ">?</button>
+            <span class="help-tip__txt" role="tooltip">元画像＋板で書き出すとき、板を角丸で切り抜く半径です。空欄ならサーバが元画像から検出。板スライダの角丸と揃えたいときは目安の px を入れてください（例: 15）。</span>
+          </span></span></label>
+        </div>
 
         <div class="plate-panel" id="plate_panel">
           <h3>新しい板
@@ -633,6 +640,7 @@
       var actCopyLink = document.getElementById("act_copy_link");
       var fW = document.getElementById("f_w");
       var fH = document.getElementById("f_h");
+      var fBorderRadius = document.getElementById("f_border_radius");
       var fBg = document.getElementById("f_bg");
       var fLabel = document.getElementById("f_label");
       var fColor = document.getElementById("f_color");
@@ -1197,7 +1205,9 @@
         var pr = cb.padding_right;
         var pb = cb.padding_bottom;
         var pl = cb.padding_left;
-        return " · 検出領域 " + bw + "×" + bh + "px · 余白 T" + pt + " R" + pr + " B" + pb + " L" + pl;
+        var br = cb.border_radius;
+        var brPart = typeof br === "number" ? " · 角丸r" + br + "px" : "";
+        return " · 検出領域 " + bw + "×" + bh + "px · 余白 T" + pt + " R" + pr + " B" + pb + " L" + pl + brPart;
       }
 
       function platePayloadFromForm() {
@@ -1444,6 +1454,10 @@
           if (srcPath && fullW >= 16 && fullH >= 16) {
             payload.source_url = srcPath;
             payload.crop_to_button = true;
+            var brVal = fBorderRadius && String(fBorderRadius.value || "").trim();
+            if (brVal !== "" && isFinite(Number(brVal))) {
+              payload.border_radius = Math.max(0, Math.round(Number(brVal)));
+            }
           }
           return fetch(COMPOSITE_URL, {
             method: "POST",
