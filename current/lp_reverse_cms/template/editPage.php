@@ -34,9 +34,44 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
       <span class="ms-1 badge bg-secondary"><?= $elementCount ?>要素</span>
     </p>
   </div>
-</div>
+  </div>
 
-<form id="clientDataForm">
+  <form id="clientDataForm">
+
+  <!-- AI テキスト自動置換パネル（cursor_prompts/text_replace_ui.md） -->
+  <div id="ai-text-replace-panel" class="card shadow-sm mb-3 border-primary">
+    <div class="card-header bg-primary text-white d-flex align-items-center gap-2 py-2 flex-wrap">
+      <span><i class="bi bi-stars me-1" aria-hidden="true"></i><strong>AI テキスト自動生成</strong></span>
+      <small class="ms-md-auto opacity-75">業種を入力して全テキストを一括置換（保存は従来どおり）</small>
+    </div>
+    <div class="card-body py-3">
+      <p class="small text-muted mb-2">
+        対象は <code>data-lp-field="text"</code>（および将来用 <code>content</code>）のみです。画像URL・リンクURLは変更しません。
+      </p>
+      <div class="row g-2 align-items-end">
+        <div class="col-md-5 col-lg-4">
+          <label class="form-label small mb-1" for="ai-industry">ターゲット業種 <span class="text-danger">*</span></label>
+          <input type="text" id="ai-industry" class="form-control form-control-sm"
+                 placeholder="例：ネイルサロン、歯科クリニック、学習塾" autocomplete="off">
+        </div>
+        <div class="col-md-4 col-lg-3">
+          <label class="form-label small mb-1" for="ai-tone">トーン</label>
+          <select id="ai-tone" class="form-select form-select-sm">
+            <option value="polite">丁寧・上品</option>
+            <option value="casual">カジュアル</option>
+            <option value="professional">ビジネス</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2 col-lg-2">
+          <button type="button" id="ai-replace-btn" class="btn btn-sm btn-primary w-100">AI 置換</button>
+        </div>
+        <div class="col-6 col-md-2 col-lg-2">
+          <button type="button" id="ai-replace-undo" class="btn btn-sm btn-outline-secondary w-100" hidden>元に戻す</button>
+        </div>
+      </div>
+      <div id="ai-replace-status" class="mt-2 small text-muted" hidden></div>
+    </div>
+  </div>
 
   <!-- ===== META ===== -->
   <div class="card shadow-sm mb-3">
@@ -165,6 +200,8 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                       <input type="text" class="form-control form-control-sm mb-2"
                              data-lp-id="<?= $elemId ?>"
                              data-lp-field="text"
+                             data-lp-type="<?= htmlspecialchars($elemType, ENT_QUOTES) ?>"
+                             data-lp-label="<?= htmlspecialchars($elem['label'] ?? '', ENT_QUOTES) ?>"
                              placeholder="<?= htmlspecialchars($origText, ENT_QUOTES) ?>"
                              value="<?= htmlspecialchars($currentText, ENT_QUOTES) ?>">
                       <?php
@@ -196,6 +233,8 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                                 rows="3"
                                 data-lp-id="<?= $elemId ?>"
                                 data-lp-field="text"
+                                data-lp-type="<?= htmlspecialchars($elemType, ENT_QUOTES) ?>"
+                                data-lp-label="<?= htmlspecialchars($elem['label'] ?? '', ENT_QUOTES) ?>"
                                 placeholder="<?= htmlspecialchars($origText, ENT_QUOTES) ?>"><?= htmlspecialchars($currentText, ENT_QUOTES) ?></textarea>
 
                     <?php elseif ($elemType === 'button' || $elemType === 'link'): ?>
@@ -207,6 +246,8 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                       <input type="text" class="form-control form-control-sm mb-2"
                              data-lp-id="<?= $elemId ?>"
                              data-lp-field="text"
+                             data-lp-type="<?= htmlspecialchars($elemType, ENT_QUOTES) ?>"
+                             data-lp-label="<?= htmlspecialchars($elem['label'] ?? '', ENT_QUOTES) ?>"
                              placeholder="<?= htmlspecialchars($origText, ENT_QUOTES) ?>"
                              value="<?= htmlspecialchars($currentText, ENT_QUOTES) ?>">
                       <label class="form-label small">リンク先URL</label>
@@ -224,6 +265,8 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                       <input type="text" class="form-control form-control-sm"
                              data-lp-id="<?= $elemId ?>"
                              data-lp-field="text"
+                             data-lp-type="<?= htmlspecialchars($elemType, ENT_QUOTES) ?>"
+                             data-lp-label="<?= htmlspecialchars($elem['label'] ?? '', ENT_QUOTES) ?>"
                              placeholder="<?= htmlspecialchars($origText, ENT_QUOTES) ?>"
                              value="<?= htmlspecialchars($currentText, ENT_QUOTES) ?>">
                     <?php endif; ?>

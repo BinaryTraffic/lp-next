@@ -212,6 +212,162 @@
   }
 
   // -----------------------------------------------------------------------
+  // AI テキスト自動置換（store/text_replace.php）— cursor_prompts/text_replace_ui.md
+  // -----------------------------------------------------------------------
+  const AI_TEXT_REPLACE_MAX = 60;
+  const AI_TONE_MAP = {
+    polite: '丁寧・上品',
+    casual: 'カジュアル・親しみやすい',
+    professional: 'ビジネス・信頼感',
+  };
+
+  function initAiTextReplace() {
+    const btn = document.getElementById('ai-replace-btn');
+    const undoBtn = document.getElementById('ai-replace-undo');
+    const status = document.getElementById('ai-replace-status');
+    if (!btn || !status) return;
+
+    /** @type {Record<string, string>|null} */
+    let backup = null;
+
+    function findAiField(form, id) {
+      const sid = String(id);
+      const fields = form.querySelectorAll('[data-lp-field="text"], [data-lp-field="content"]');
+      for (let i = 0; i < fields.length; i++) {
+        if (fields[i].dataset.lpId === sid) return fields[i];
+      }
+      return null;
+    }
+
+    function setAiStatus(message, kind) {
+      status.hidden = false;
+      status.textContent = message;
+      const cls = {
+        muted: 'mt-2 small text-muted',
+        danger: 'mt-2 small text-danger',
+        warning: 'mt-2 small text-warning',
+        success: 'mt-2 small text-success',
+      }[kind] || 'mt-2 small text-muted';
+      status.className = cls;
+    }
+
+    btn.addEventListener('click', async () => {
+      const form = document.getElementById('clientDataForm');
+      const industryInp = document.getElementById('ai-industry');
+      const toneSel = document.getElementById('ai-tone');
+      if (!form || !industryInp) return;
+
+      const industry = industryInp.value.trim();
+      if (!industry) {
+        setAiStatus('業種を入力してください', 'danger');
+        showToast('業種を入力してください。', 'warning');
+        industryInp.focus();
+        return;
+      }
+
+      const inputs = form.querySelectorAll(
+        '[data-lp-id][data-lp-field="text"], [data-lp-id][data-lp-field="content"]',
+      );
+      backup = {};
+      const elements = [];
+      inputs.forEach(el => {
+        const id = el.dataset.lpId;
+        if (!id) return;
+        const val = (el.value || '').trim();
+        const ph = (el.placeholder || '').trim();
+        const originalText = val || ph;
+        if (!originalText) return;
+        backup[id] = el.value;
+        elements.push({
+          id,
+          type: el.dataset.lpType || 'paragraph',
+          label: el.dataset.lpLabel || '',
+          original_text: originalText,
+        });
+      });
+
+      if (elements.length === 0) {
+        setAiStatus('置換対象のテキストがありません（空欄はプレースホルダの元テキストで補完されます）', 'warning');
+        showToast('置換対象のテキストがありません', 'warning');
+        backup = null;
+        return;
+      }
+      if (elements.length > AI_TEXT_REPLACE_MAX) {
+        setAiStatus(`一度に置換できるのは ${AI_TEXT_REPLACE_MAX} 件までです`, 'danger');
+        showToast(`最大 ${AI_TEXT_REPLACE_MAX} 件までです`, 'danger');
+        backup = null;
+        return;
+      }
+
+      const toneKey = toneSel && toneSel.value ? toneSel.value : 'polite';
+      const tone = AI_TONE_MAP[toneKey] || toneKey;
+
+      btn.disabled = true;
+      setAiStatus(`${elements.length} 件のテキストを AI で生成中…`, 'muted');
+
+      try {
+        const res = await fetch('store/text_replace.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ industry, tone, elements }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        if (!Array.isArray(data.items)) {
+          throw new Error('応答形式が不正です');
+        }
+
+        let replaced = 0;
+        data.items.forEach(item => {
+          const el = findAiField(form, item.id);
+          if (el && item.replaced_text != null && String(item.replaced_text).trim() !== '') {
+            el.value = String(item.replaced_text);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            replaced++;
+          }
+        });
+
+        setAiStatus(
+          `✅ ${replaced} 件を「${industry}」向けに置換しました。確認後、保存してください。`,
+          'success',
+        );
+        showToast(`AI テキスト置換：${replaced} 件`, 'success');
+        if (undoBtn) undoBtn.hidden = false;
+      } catch (e) {
+        const msg = e.message || String(e);
+        setAiStatus(`❌ エラー: ${msg}`, 'danger');
+        showToast(msg, 'danger');
+        backup = null;
+        if (undoBtn) undoBtn.hidden = true;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    if (undoBtn) {
+      undoBtn.addEventListener('click', () => {
+        const form = document.getElementById('clientDataForm');
+        if (!backup || !form) return;
+        Object.keys(backup).forEach(id => {
+          const el = findAiField(form, id);
+          if (el) {
+            el.value = backup[id];
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
+        setAiStatus('元のテキストに戻しました', 'muted');
+        showToast('入力を元に戻しました', 'info');
+        undoBtn.hidden = true;
+        backup = null;
+      });
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Collect form data into client_data structure
   // -----------------------------------------------------------------------
   function collectFormData() {
@@ -419,6 +575,8 @@
     if (btnSaveGenerate) {
       btnSaveGenerate.addEventListener('click', runSaveAndGenerate);
     }
+
+    initAiTextReplace();
 
     // Step 3 events
     if (btnEditAgain) {
