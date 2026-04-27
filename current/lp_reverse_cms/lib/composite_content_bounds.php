@@ -43,6 +43,85 @@ function composite_is_padding_pixel_gd(GdImage $im, int $x, int $y): bool
 }
 
 /**
+ * ボタン矩形の左上コーナーをスキャンして border-radius を近似取得する。
+ * x方向・y方向それぞれで「最初の非パディング画素」までの距離の小さい方を返す。
+ */
+function composite_detect_border_radius_gd(
+    GdImage $im,
+    int $bx,
+    int $by,
+    int $bw,
+    int $bh
+): int {
+    $maxScan = min(50, (int) ($bw / 2), (int) ($bh / 2));
+    if ($maxScan < 1) {
+        return 0;
+    }
+
+    $rx = $maxScan;
+    for ($x = $bx; $x < $bx + $maxScan; $x++) {
+        if (!composite_is_padding_pixel_gd($im, $x, $by)) {
+            $rx = $x - $bx;
+            break;
+        }
+    }
+
+    $ry = $maxScan;
+    for ($y = $by; $y < $by + $maxScan; $y++) {
+        if (!composite_is_padding_pixel_gd($im, $bx, $y)) {
+            $ry = $y - $by;
+            break;
+        }
+    }
+
+    $radius = min($rx, $ry);
+
+    return max(0, min($radius, (int) (min($bw, $bh) / 2)));
+}
+
+/**
+ * 点 ($x, $y) が角丸矩形の内側にあるかどうかを返す。
+ * 矩形: ($rx, $ry) を左上とする $rw × $rh。角丸半径 $radius。
+ */
+function composite_point_in_rounded_rect(
+    int $x,
+    int $y,
+    int $rx,
+    int $ry,
+    int $rw,
+    int $rh,
+    int $radius
+): bool {
+    $lx = $x - $rx;
+    $ly = $y - $ry;
+
+    if ($lx < 0 || $ly < 0 || $lx >= $rw || $ly >= $rh) {
+        return false;
+    }
+    if ($radius <= 0) {
+        return true;
+    }
+
+    $inCorner = false;
+    $nearLeft   = $lx < $radius;
+    $nearRight  = $lx >= $rw - $radius;
+    $nearTop    = $ly < $radius;
+    $nearBottom = $ly >= $rh - $radius;
+
+    if (($nearLeft || $nearRight) && ($nearTop || $nearBottom)) {
+        $inCorner = true;
+        $cx = $nearLeft ? $radius : $rw - $radius;
+        $cy = $nearTop ? $radius : $rh - $radius;
+        $dx = $lx - $cx;
+        $dy = $ly - $cy;
+
+        return ($dx * $dx + $dy * $dy) <= ($radius * $radius);
+    }
+
+    return !$inCorner;
+}
+
+/** 
  * 行・列は中央50%ストリップのみ走査。ストリップ内「80%以上が余白」ならパディング行／列とみなす（JPEG 滲み耐性）。
  */
 function composite_row_has_content_gd(GdImage $im, int $w, int $y): bool
@@ -167,11 +246,11 @@ function composite_detect_content_bounds_gd(GdImage $im): array
  *
  * @param array<string, int> $b
  *
- * @return array{padding_top: int, padding_right: int, padding_bottom: int, padding_left: int, button_w: int, button_h: int}
+ * @return array{padding_top: int, padding_right: int, padding_bottom: int, padding_left: int, button_w: int, button_h: int, border_radius?: int}
  */
 function composite_content_bounds_for_json(array $b): array
 {
-    return [
+    $out = [
         'padding_top'    => (int) $b['padding_top'],
         'padding_right'  => (int) $b['padding_right'],
         'padding_bottom' => (int) $b['padding_bottom'],
@@ -179,6 +258,11 @@ function composite_content_bounds_for_json(array $b): array
         'button_w'       => (int) $b['button_w'],
         'button_h'       => (int) $b['button_h'],
     ];
+    if (array_key_exists('border_radius', $b)) {
+        $out['border_radius'] = (int) $b['border_radius'];
+    }
+
+    return $out;
 }
 
 /**

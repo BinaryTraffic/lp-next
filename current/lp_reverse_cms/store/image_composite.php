@@ -23,8 +23,8 @@ declare(strict_types=1);
  *   "border_fill": { "color": "#c8a96e", "width_px": 24 }
  * }
  *
- * source_url を指定すると、元画像から余白矩形を検出し、出力にソース画像をコピーしたうえで
- * ボタン矩形内の「非パディング」画素だけを板で置換する（グレー帯・角丸アンチエイリアスを保持）。
+ * source_url を指定すると、元画像から余白・ボタン矩形・角丸半径を検出し、
+ * 余白色でキャンバスを塗ったうえで板を角丸クリップして貼り付ける（GD 再描画方式）。
  *
  * border_fill を指定したときは source_url による余白検出は行わない。全面を color で塗り、width_px 幅の枠の内側に background を貼る（bordered フロー用）。
  *
@@ -397,27 +397,25 @@ function composite_sample_matte_rgb($im): array
 }
 
 /**
- * ソースのパディングでない画素だけ、スケール済み板の色で置換（板が透過の画素は元を維持）。
+ * 角丸クリップ領域にスケール済み板を転写（透過は下の背景とブレンド）。
  */
-function composite_gd_source_mask_plate_paste(
+function composite_gd_apply_scaled_plate_rounded_clip(
     GdImage $dst,
-    GdImage $sourceMask,
     GdImage $plateScaled,
     int $bx,
     int $by,
     int $bw,
-    int $bh
+    int $bh,
+    int $radius
 ): void {
-    $xEnd = $bx + $bw;
-    $yEnd = $by + $bh;
-    for ($y = $by; $y < $yEnd; $y++) {
-        for ($x = $bx; $x < $xEnd; $x++) {
-            if (composite_is_padding_pixel_gd($sourceMask, $x, $y)) {
+    for ($py = 0; $py < $bh; $py++) {
+        for ($px = 0; $px < $bw; $px++) {
+            if (!composite_point_in_rounded_rect($px, $py, 0, 0, $bw, $bh, $radius)) {
                 continue;
             }
-            $px = $x - $bx;
-            $py = $y - $by;
             $pc = imagecolorat($plateScaled, $px, $py);
+            $dx = $bx + $px;
+            $dy = $by + $py;
             if (imageistruecolor($plateScaled)) {
                 $a = ($pc >> 24) & 127;
                 if ($a >= 120) {
@@ -430,7 +428,7 @@ function composite_gd_source_mask_plate_paste(
                 if ($opa < 0.02) {
                     continue;
                 }
-                $dc = imagecolorat($dst, $x, $y);
+                $dc = imagecolorat($dst, $dx, $dy);
                 $dr = ($dc >> 16) & 0xFF;
                 $dg = ($dc >> 8) & 0xFF;
                 $db = $dc & 0xFF;
@@ -443,39 +441,39 @@ function composite_gd_source_mask_plate_paste(
                     $ng = (int) round($pg * $opa + $dg * (1.0 - $opa));
                     $nb = (int) round($pb * $opa + $db * (1.0 - $opa));
                 }
-                imagesetpixel($dst, $x, $y, imagecolorresolvealpha($dst, $nr, $ng, $nb, 0));
+                imagesetpixel($dst, $dx, $dy, imagecolorresolvealpha($dst, $nr, $ng, $nb, 0));
             } else {
-                imagesetpixel($dst, $x, $y, $pc);
+                imagesetpixel($dst, $dx, $dy, $pc);
             }
         }
     }
 }
 
 /**
- * Imagick 版ソースマスク合成（GD でパディング判定）。
+ * Imagick 版：角丸クリップで板を転写。
  */
-function composite_imagick_source_mask_plate_paste(
-    Imagick $canvas,
-    GdImage $maskSource,
+function composite_imagick_apply_scaled_plate_rounded_clip(
+    Imagick $dst,
     Imagick $plate,
     int $bx,
     int $by,
     int $bw,
-    int $bh
+    int $bh,
+    int $radius
 ): void {
-    $xEnd = $bx + $bw;
-    $yEnd = $by + $bh;
-    for ($y = $by; $y < $yEnd; $y++) {
-        for ($x = $bx; $x < $xEnd; $x++) {
-            if (composite_is_padding_pixel_gd($maskSource, $x, $y)) {
+    for ($py = 0; $py < $bh; $py++) {
+        for ($px = 0; $px < $bw; $px++) {
+            if (!composite_point_in_rounded_rect($px, $py, 0, 0, $bw, $bh, $radius)) {
                 continue;
             }
-            $pp = $plate->getImagePixelColor($x - $bx, $y - $by);
+            $pp = $plate->getImagePixelColor($px, $py);
             $opacity = $pp->getColorValue(Imagick::COLOR_ALPHA);
             if ($opacity < 0.02) {
                 continue;
             }
-            $dp = $canvas->getImagePixelColor($x, $y);
+            $x = $bx + $px;
+            $y = $by + $py;
+            $dp = $dst->getImagePixelColor($x, $y);
             $sr = $pp->getColorValue(Imagick::COLOR_RED);
             $sg = $pp->getColorValue(Imagick::COLOR_GREEN);
             $sb = $pp->getColorValue(Imagick::COLOR_BLUE);
@@ -496,7 +494,7 @@ function composite_imagick_source_mask_plate_paste(
             $out->setColorValue(Imagick::COLOR_GREEN, $ng);
             $out->setColorValue(Imagick::COLOR_BLUE, $nb);
             $out->setColorValue(Imagick::COLOR_ALPHA, 1.0);
-            $canvas->setImagePixelColor($x, $y, $out);
+            $dst->setImagePixelColor($x, $y, $out);
         }
     }
 }
@@ -576,11 +574,15 @@ function composite_render_gd(
             return ['error' => 'source_url の画像サイズが width / height と一致しません', 'content_bounds' => []];
         }
         $marginBounds = composite_detect_margin_with_fallback($sourceGd, $outW, $outH);
-        $cbJson = composite_content_bounds_for_json($marginBounds);
+        [$mr, $mg, $mb] = composite_sample_margin_average_rgb_gd($sourceGd, $marginBounds);
         $bx = $marginBounds['button_x'];
         $by = $marginBounds['button_y'];
         $bw = $marginBounds['button_w'];
         $bh = $marginBounds['button_h'];
+        $radius = composite_detect_border_radius_gd($sourceGd, $bx, $by, $bw, $bh);
+        $boundsForJson = $marginBounds;
+        $boundsForJson['border_radius'] = $radius;
+        $cbJson = composite_content_bounds_for_json($boundsForJson);
 
         $fullBase = imagecreatetruecolor($outW, $outH);
         if ($fullBase === false) {
@@ -588,16 +590,24 @@ function composite_render_gd(
 
             return ['error' => 'キャンバスの作成に失敗しました', 'content_bounds' => []];
         }
+        imagesavealpha($fullBase, true);
+        imagealphablending($fullBase, false);
+        $matCol = imagecolorallocate($fullBase, $mr, $mg, $mb);
+        if ($matCol === false) {
+            imagedestroy($sourceGd);
+            imagedestroy($fullBase);
+
+            return ['error' => 'キャンバスの初期化に失敗しました', 'content_bounds' => $cbJson];
+        }
+        imagefilledrectangle($fullBase, 0, 0, max(0, $outW - 1), max(0, $outH - 1), $matCol);
         imagealphablending($fullBase, true);
-        imagesavealpha($fullBase, false);
-        imagecopy($fullBase, $sourceGd, 0, 0, 0, 0, $outW, $outH);
 
         $plateIm = composite_image_load($bgPath);
         if ($plateIm === false) {
             imagedestroy($sourceGd);
             imagedestroy($fullBase);
 
-            return ['error' => '背景画像の読み込みに失敗しました', 'content_bounds' => []];
+            return ['error' => '背景画像の読み込みに失敗しました', 'content_bounds' => $cbJson];
         }
         imagesavealpha($plateIm, true);
         imagealphablending($plateIm, true);
@@ -616,7 +626,7 @@ function composite_render_gd(
         imagecopyresampled($plateScaled, $plateIm, 0, 0, 0, 0, $bw, $bh, $pw, $ph);
         imagedestroy($plateIm);
 
-        composite_gd_source_mask_plate_paste($fullBase, $sourceGd, $plateScaled, $bx, $by, $bw, $bh);
+        composite_gd_apply_scaled_plate_rounded_clip($fullBase, $plateScaled, $bx, $by, $bw, $bh, $radius);
         imagedestroy($plateScaled);
         imagedestroy($sourceGd);
     } else {
@@ -995,20 +1005,25 @@ function composite_render_imagick(
                 return ['error' => 'source_url の画像サイズが width / height と一致しません', 'content_bounds' => []];
             }
             $marginBounds = composite_detect_margin_with_fallback($sourceGd, $outW, $outH);
-            $cbJson = composite_content_bounds_for_json($marginBounds);
+            [$mr, $mg, $mb] = composite_sample_margin_average_rgb_gd($sourceGd, $marginBounds);
             $bx = $marginBounds['button_x'];
             $by = $marginBounds['button_y'];
             $bw = $marginBounds['button_w'];
             $bh = $marginBounds['button_h'];
+            $radius = composite_detect_border_radius_gd($sourceGd, $bx, $by, $bw, $bh);
+            $boundsForJson = $marginBounds;
+            $boundsForJson['border_radius'] = $radius;
+            $cbJson = composite_content_bounds_for_json($boundsForJson);
+            imagedestroy($sourceGd);
 
-            $canvas = new Imagick($sourcePath);
+            $canvas = new Imagick();
+            $canvas->newImage($outW, $outH, new ImagickPixel(sprintf('rgb(%d,%d,%d)', $mr, $mg, $mb)));
             $canvas->setImageColorspace(Imagick::COLORSPACE_SRGB);
 
             $plate = new Imagick($bgPath);
             $plate->setImageColorspace(Imagick::COLORSPACE_SRGB);
             $plate->resizeImage($bw, $bh, Imagick::FILTER_LANCZOS, 1, false);
-            composite_imagick_source_mask_plate_paste($canvas, $sourceGd, $plate, $bx, $by, $bw, $bh);
-            imagedestroy($sourceGd);
+            composite_imagick_apply_scaled_plate_rounded_clip($canvas, $plate, $bx, $by, $bw, $bh, $radius);
             $plate->clear();
 
             $base = clone $canvas;
