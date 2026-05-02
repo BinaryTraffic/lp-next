@@ -605,7 +605,27 @@
   }
 
   /**
-   * CMS がサブディレクトリ配下でも /output/... が正しく解決されるよう baseURI 基準にする。
+   * 現在ページの pathname から CMS ディレクトリの絶対URL（末尾 `/`）。
+   * document.baseURI が末尾スラッシュ無しだと `/current/lp_reverse_cms` + `output/...`
+   * が sibling の `/current/output/...` になり 404（プレビュー寸法読込失敗）になるため使う。
+   */
+  function cmsRootBaseHref() {
+    try {
+      let p = window.location.pathname;
+      const last = p.split('/').pop() || '';
+      if (last && last.includes('.')) {
+        p = p.slice(0, p.lastIndexOf('/') + 1);
+      } else if (!p.endsWith('/')) {
+        p += '/';
+      }
+      return new URL(p || '/', window.location.origin).href;
+    } catch {
+      return new URL('./', document.baseURI || window.location.href).href;
+    }
+  }
+
+  /**
+   * CMS がサブディレクトリ配下でも /output/... が正しく解決されるよう CMS ルート基準にする。
    * @param {string} apiPath /output/... または output/...
    * @returns {string}
    */
@@ -615,7 +635,7 @@
     if (/^https?:\/\//i.test(s)) return s;
     const raw = s.replace(/^\//, '');
     try {
-      return new URL(raw, document.baseURI).href;
+      return new URL(raw, cmsRootBaseHref()).href;
     } catch {
       return s.startsWith('/') ? s : `/${s}`;
     }
