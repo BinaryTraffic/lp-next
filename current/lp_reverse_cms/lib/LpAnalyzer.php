@@ -23,8 +23,11 @@ class LpAnalyzer
 
     /**
      * Analyse fetched HTML and return a structured array for LP Reverse CMS.
+     *
+     * @param callable(int $doneSteps, int $totalSteps, string $phase, array<string, mixed> $ctx): void|null $onWalkProgress
+     *        Called during DOM ツリー走査（進捗可視化用。throttle は呼び出し側でも可）。
      */
-    public function analyze(string $html, string $sourceUrl): array
+    public function analyze(string $html, string $sourceUrl, ?callable $onWalkProgress = null): array
     {
         $this->sourceUrl = $sourceUrl;
         $this->urlCtx    = LpUrlContext::fromPageAndHtml($sourceUrl, $html);
@@ -37,12 +40,67 @@ class LpAnalyzer
 
         $xpath = new DOMXPath($dom);
 
+        /** @var array{walk_total_steps: int, walk_completed_steps: int, sections_planned: int, sections_written: int, section_errors: list<array<string, mixed>>, warnings: list<array<string, mixed>>} $diag */
+        $diag = [
+            'walk_total_steps'       => 0,
+            'walk_completed_steps'   => 0,
+            'sections_planned'       => 0,
+            'sections_written'       => 0,
+            'section_errors'         => [],
+            'warnings'               => [],
+        ];
+
+        $candidates = $this->findStructuralElements($dom, $xpath);
+        $diag['sections_planned'] = count($candidates);
+
+        $walkTotal = 0;
+        foreach ($candidates as $cand) {
+            $walkTotal += $this->countTraversalSteps($cand);
+        }
+        $diag['walk_total_steps'] = $walkTotal;
+
+        $lastEmitDone = -1;
+        $throttleVisit = function () use (&$diag, $onWalkProgress, &$lastEmitDone): void {
+            if ($onWalkProgress === null) {
+                return;
+            }
+            $done = $diag['walk_completed_steps'];
+            if (($done - $lastEmitDone) < 48 && $done < $diag['walk_total_steps']) {
+                return;
+            }
+            $lastEmitDone = $done;
+            $onWalkProgress($done, $diag['walk_total_steps'], 'tree_walk', []);
+        };
+
+        $onVisit = function () use (&$diag, $throttleVisit): void {
+            $diag['walk_completed_steps']++;
+            $throttleVisit();
+        };
+
+        $sections = $this->extractSections($dom, $xpath, $onVisit, $diag);
+
+        $walkPct = $diag['walk_total_steps'] > 0
+            ? round(100.0 * $diag['walk_completed_steps'] / $diag['walk_total_steps'], 2)
+            : 100.0;
+
         return [
-            'source_url'  => $sourceUrl,
-            'analyzed_at' => date('Y-m-d H:i:s'),
-            'meta'        => $this->extractMeta($xpath),
-            'head_extra'  => $this->extractHeadExtra($xpath),
-            'sections'    => $this->extractSections($dom, $xpath),
+            'source_url'          => $sourceUrl,
+            'analyzed_at'         => date('Y-m-d H:i:s'),
+            'meta'                => $this->extractMeta($xpath),
+            'head_extra'          => $this->extractHeadExtra($xpath),
+            'sections'            => $sections,
+            'parse_diagnostics'   => [
+                'walk_total_steps'      => $diag['walk_total_steps'],
+                'walk_completed_steps'  => $diag['walk_completed_steps'],
+                'walk_pct'              => $walkPct,
+                'sections_planned'      => $diag['sections_planned'],
+                'sections_written'      => $diag['sections_written'],
+                'section_error_count'   => count($diag['section_errors']),
+                'section_errors'        => $diag['section_errors'],
+                'warnings'                         => $diag['warnings'],
+                'walk_incomplete'                  => $diag['walk_total_steps'] > 0
+                    && $diag['walk_completed_steps'] < $diag['walk_total_steps'],
+            ],
         ];
     }
 
@@ -141,8 +199,16 @@ class LpAnalyzer
     // Section extraction
     // -----------------------------------------------------------------------
 
-    private function extractSections(DOMDocument $dom, DOMXPath $xpath): array
-    {
+    /**
+     * @param callable(): void|null $onWalkVisit
+     * @param array{walk_total_steps: int, walk_completed_steps: int, sections_planned: int, sections_written: int, section_errors: list<array<string, mixed>>, warnings: list<array<string, mixed>>}|null $diagnosticsOut
+     */
+    private function extractSections(
+        DOMDocument $dom,
+        DOMXPath $xpath,
+        ?callable $onWalkVisit = null,
+        ?array &$diagnosticsOut = null
+    ): array {
         $sections     = [];
         $sectionIndex = 0;
         $candidates   = $this->findStructuralElements($dom, $xpath);
@@ -152,29 +218,75 @@ class LpAnalyzer
             $elements  = [];
             $elemIndex = 0;
 
-            $this->findEditableElements($element, $sectionId, $elemIndex, $elements);
+            try {
+                $this->findEditableElements($element, $sectionId, $elemIndex, $elements, $onWalkVisit);
 
-            if (empty($elements)) {
-                $sectionIndex++;
-                continue;
+                if ($elements !== []) {
+                    $html = $this->buildSectionHtml($element, $dom);
+                    if ($html === '' && $diagnosticsOut !== null) {
+                        $diagnosticsOut['warnings'][] = [
+                            'section_id' => $sectionId,
+                            'message'    => 'セクション saveHTML が空でした',
+                        ];
+                    }
+
+                    $sections[] = [
+                        'id'            => $sectionId,
+                        'type'          => $this->classifySection($element),
+                        'label'         => $this->generateLabel($element, $sectionIndex),
+                        'outer_tag'     => strtolower($element->tagName),
+                        'html'          => $html,
+                        'elements'      => $elements,
+                        'element_count' => count($elements),
+                    ];
+
+                    if ($diagnosticsOut !== null) {
+                        $diagnosticsOut['sections_written']++;
+                    }
+                }
+            } catch (Throwable $e) {
+                if ($diagnosticsOut !== null) {
+                    $diagnosticsOut['section_errors'][] = [
+                        'section_id'      => $sectionId,
+                        'section_index'   => $sectionIndex,
+                        'exception_class' => $e::class,
+                        'message'         => $e->getMessage(),
+                        'file'            => $e->getFile(),
+                        'line'            => $e->getLine(),
+                    ];
+                }
             }
-
-            $html = $this->buildSectionHtml($element, $dom);
-
-            $sections[] = [
-                'id'            => $sectionId,
-                'type'          => $this->classifySection($element),
-                'label'         => $this->generateLabel($element, $sectionIndex),
-                'outer_tag'     => strtolower($element->tagName),
-                'html'          => $html,
-                'elements'      => $elements,
-                'element_count' => count($elements),
-            ];
 
             $sectionIndex++;
         }
 
         return $sections;
+    }
+
+    /**
+     * findEditableElements と同じ分岐で走査対象 DOM 要素ノード数を数える（進捗 100% の分母）。
+     */
+    private function countTraversalSteps(DOMElement $parent): int
+    {
+        $n = 0;
+        foreach ($parent->childNodes as $child) {
+            if (!($child instanceof DOMElement)) {
+                continue;
+            }
+            $n++;
+            $tag = strtolower($child->tagName);
+
+            if ($tag === 'a') {
+                $text = trim($child->textContent);
+                if (mb_strlen($text) <= 1 || $child->getElementsByTagName('img')->length) {
+                    $n += $this->countTraversalSteps($child);
+                }
+            } elseif (in_array($tag, self::CONTAINER_TAGS, true) || in_array($tag, self::SECTION_TAGS, true)) {
+                $n += $this->countTraversalSteps($child);
+            }
+        }
+
+        return $n;
     }
 
     /**
@@ -275,15 +387,23 @@ class LpAnalyzer
     /**
      * Recursively walk the element tree and tag editable nodes with data-lp-id.
      */
+    /**
+     * @param callable(): void|null $onVisit 各 DOMElement 子ノードを訪問する直前に 1 回呼ぶ（進捗用）
+     */
     private function findEditableElements(
         DOMElement $parent,
         string $sectionId,
         int &$index,
-        array &$elements
+        array &$elements,
+        ?callable $onVisit = null
     ): void {
         foreach ($parent->childNodes as $child) {
             if (!($child instanceof DOMElement)) {
                 continue;
+            }
+
+            if ($onVisit !== null) {
+                $onVisit();
             }
 
             $tag = strtolower($child->tagName);
@@ -354,6 +474,7 @@ class LpAnalyzer
                         'original_text' => $alt,
                         'original_src'  => $src,
                         'original_href' => $wrapHref,
+                        'image_embedded_text_memo' => '',
                     ];
                     $dims = $this->parseHtmlImgDimensions($child);
                     if ($dims !== null) {
@@ -393,7 +514,7 @@ class LpAnalyzer
                     ];
                 } else {
                     // Recurse into anchor's children (might wrap an image)
-                    $this->findEditableElements($child, $sectionId, $index, $elements);
+                    $this->findEditableElements($child, $sectionId, $index, $elements, $onVisit);
                 }
             } elseif ($tag === 'button') {
                 $text = trim($child->textContent);
@@ -410,8 +531,8 @@ class LpAnalyzer
                         'original_href' => null,
                     ];
                 }
-            } elseif (in_array($tag, self::CONTAINER_TAGS) || in_array($tag, self::SECTION_TAGS)) {
-                $this->findEditableElements($child, $sectionId, $index, $elements);
+            } elseif (in_array($tag, self::CONTAINER_TAGS, true) || in_array($tag, self::SECTION_TAGS, true)) {
+                $this->findEditableElements($child, $sectionId, $index, $elements, $onVisit);
             }
         }
     }
