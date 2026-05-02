@@ -277,6 +277,51 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 
 </div><!-- /container-fluid -->
 
+<!-- 画像手動置き換え（Step2 から起動） -->
+<div class="modal fade" id="imageReplaceModal" tabindex="-1" aria-labelledby="imageReplaceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6" id="imageReplaceModalLabel">画像の手動置き換え</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="small text-secondary mb-1">オリジナル（置き換え対象）</div>
+            <div class="border rounded bg-light p-2 text-center d-flex align-items-center justify-content-center" style="min-height:240px">
+              <img id="imageReplaceModalLeft" src="" alt="" class="img-fluid rounded" style="max-height:280px;object-fit:contain" />
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="small text-secondary mb-1">新しい画像</div>
+            <div id="imageReplaceDropzone"
+                 class="border border-2 border-dashed rounded bg-white p-2 text-center d-flex flex-column align-items-center justify-content-center"
+                 style="min-height:240px;cursor:default">
+              <img id="imageReplaceModalRight" src="" alt="" class="img-fluid rounded d-none mb-2" style="max-height:220px;object-fit:contain" />
+              <div id="imageReplaceRightPlaceholder" class="text-muted small px-2">
+                ドラッグ＆ドロップ、またはファイル選択
+              </div>
+              <input type="file" id="imageReplaceFile" class="d-none"
+                     accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.svg,image/jpeg,image/png,image/gif,image/webp,image/avif,image/svg+xml" />
+              <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="imageReplacePickFile">ローカルから選ぶ</button>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 pt-2 border-top">
+          <div class="small text-secondary mb-2">ユーザーカスタム画像（このワークスペースにアップロードしたファイル）</div>
+          <div id="imageReplaceGallery" class="d-flex flex-wrap gap-2 align-items-start" style="max-height:200px;overflow-y:auto"></div>
+          <p id="imageReplaceGalleryEmpty" class="small text-muted mb-0 d-none">ユーザーカスタム画像はまだありません。上のエリアからアップロードしてください。</p>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-sm btn-primary" id="imageReplaceApply" disabled>この画像で確定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 

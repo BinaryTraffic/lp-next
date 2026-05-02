@@ -551,7 +551,8 @@
       if (!data.elements[id]) {
         data.elements[id] = {};
       }
-      if (value) {
+      const persistEmpty = field === 'image_embedded_text_memo';
+      if (value || persistEmpty) {
         data.elements[id][field] = value;
       }
     });
@@ -571,6 +572,335 @@
           img.src = input.value.trim();
         }
       });
+    });
+  }
+
+  /**
+   * 画像URLから CMS ワークスペース相対パス output/ws_xx/... を得る。
+   * @param {string} src
+   * @returns {string|null}
+   */
+  function workspaceRelFromImageSrc(src) {
+    if (!src || typeof src !== 'string') return null;
+    const s = src.trim();
+    const relPat = /(output\/ws_[a-f0-9]{32}\/.+?)(?:\?|#|$)/i;
+    const m1 = s.match(relPat);
+    if (m1) {
+      const out = m1[1].replace(/\/+$/, '');
+      return out || null;
+    }
+    try {
+      const path = new URL(s, window.location.href).pathname;
+      const m2 = path.match(/\/(output\/ws_[a-f0-9]{32}\/.+)$/i);
+      if (m2) {
+        let p = m2[1];
+        const q = p.indexOf('?');
+        if (q !== -1) p = p.slice(0, q);
+        return p.replace(/\/+$/, '') || null;
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  /**
+   * CMS がサブディレクトリ配下でも /output/... が正しく解決されるよう baseURI 基準にする。
+   * @param {string} apiPath /output/... または output/...
+   * @returns {string}
+   */
+  function publicUrlFromApiPath(apiPath) {
+    if (!apiPath) return '';
+    const s = apiPath.trim();
+    if (/^https?:\/\//i.test(s)) return s;
+    const raw = s.replace(/^\//, '');
+    try {
+      return new URL(raw, document.baseURI).href;
+    } catch {
+      return s.startsWith('/') ? s : `/${s}`;
+    }
+  }
+
+  /**
+   * メモのテキストを Vision のレイアウトに焼き込んだ画像へ差し替え（UI/composite）。
+   */
+  function bindImageMemoRefine() {
+    const form = document.getElementById('clientDataForm');
+    if (!form) return;
+    form.addEventListener('click', ev => {
+      const t = ev.target;
+      const btn = t && t.closest ? t.closest('.lp-refine-image-from-memo') : null;
+      if (!btn || !form.contains(btn)) return;
+      ev.preventDefault();
+      const id = btn.dataset.lpId;
+      if (!id) return;
+      void runImageRefineFromMemo(id, btn);
+    });
+  }
+
+  /**
+   * @param {string} elemId
+   * @param {HTMLButtonElement} btnEl
+   */
+  async function runImageRefineFromMemo(elemId, btnEl) {
+    const form = document.getElementById('clientDataForm');
+    const industryInp = document.getElementById('ai-industry');
+    if (!form || !industryInp) return;
+    const srcInp = form.querySelector(`[data-lp-id="${elemId}"][data-lp-field="src"]`);
+    const memoTa = form.querySelector(`[data-lp-id="${elemId}"][data-lp-field="image_embedded_text_memo"]`);
+    if (!(srcInp instanceof HTMLInputElement) || !(memoTa instanceof HTMLTextAreaElement)) {
+      showToast('画像URLまたはメモ欄が見つかりません', 'danger');
+      return;
+    }
+    const rel = workspaceRelFromImageSrc(srcInp.value.trim());
+    if (!rel) {
+      showToast(
+        '画像URLがワークスペース内（output/ws_…）ではありません。解析済みLPのアセットURLを使ってください。',
+        'warning',
+      );
+      return;
+    }
+    const memoText = memoTa.value.trim();
+    if (!memoText) {
+      showToast('メモに焼き込みたい文言を入力してください', 'warning');
+      return;
+    }
+    const industry = industryInp.value.trim();
+    if (!industry) {
+      showToast('上部の「ターゲット業種」を入力してください', 'warning');
+      industryInp.focus();
+      return;
+    }
+    const prevText = btnEl.textContent;
+    btnEl.disabled = true;
+    btnEl.textContent = '生成中…';
+    try {
+      showToast('画像パイプラインを実行中…', 'info');
+      const pipeRes = await fetch('store/lp_ai_image_pipeline.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({
+          image_local_rel: rel,
+          industry,
+          memo_text: memoTa.value,
+        }),
+      });
+      const pipeData = await pipeRes.json().catch(() => ({}));
+      if (!pipeRes.ok) {
+        throw new Error(pipeData.error || `pipeline HTTP ${pipeRes.status}`);
+      }
+
+      let finalUrl = typeof pipeData.url === 'string' ? pipeData.url : '';
+      if (pipeData.outcome === 'needs_composite' && pipeData.image_composite_post_body) {
+        const compRes = await fetch('store/image_composite.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify(pipeData.image_composite_post_body),
+        });
+        const compData = await compRes.json().catch(() => ({}));
+        if (!compRes.ok) {
+          throw new Error(compData.error || `composite HTTP ${compRes.status}`);
+        }
+        finalUrl = typeof compData.url === 'string' ? compData.url : '';
+      }
+
+      if (!finalUrl) {
+        throw new Error(pipeData.error || pipeData.note || '画像URLを取得できませんでした');
+      }
+      srcInp.value = publicUrlFromApiPath(finalUrl);
+      srcInp.dispatchEvent(new Event('input', { bubbles: true }));
+      srcInp.dispatchEvent(new Event('change', { bubbles: true }));
+      showToast('画像を更新しました。保存してからLP生成してください', 'success');
+    } catch (e) {
+      showToast(String(e.message || e), 'danger');
+    } finally {
+      btnEl.disabled = false;
+      btnEl.textContent = prevText;
+    }
+  }
+
+  /**
+   * 画像URLの手動置き換え（モーダル・アップロード・ワークスペース内サムネイル）。
+   */
+  function bindImageReplaceModal() {
+    const modalEl = document.getElementById('imageReplaceModal');
+    if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+      return;
+    }
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    const leftImg = document.getElementById('imageReplaceModalLeft');
+    const rightImg = document.getElementById('imageReplaceModalRight');
+    const rightPh = document.getElementById('imageReplaceRightPlaceholder');
+    const dropzone = document.getElementById('imageReplaceDropzone');
+    const fileInp = document.getElementById('imageReplaceFile');
+    const pickBtn = document.getElementById('imageReplacePickFile');
+    const gallery = document.getElementById('imageReplaceGallery');
+    const galleryEmpty = document.getElementById('imageReplaceGalleryEmpty');
+    const applyBtn = document.getElementById('imageReplaceApply');
+
+    let targetElemId = '';
+    /** @type {string} */
+    let selectedPath = '';
+
+    function resolveDisplayUrl(pathOrUrl) {
+      const s = (pathOrUrl || '').trim();
+      if (!s) return '';
+      if (/^https?:\/\//i.test(s) || /^data:/i.test(s)) return s;
+      return publicUrlFromApiPath(s.startsWith('/') ? s : `/${s}`);
+    }
+
+    function setRightSelection(path) {
+      selectedPath = (path || '').trim();
+      const url = resolveDisplayUrl(selectedPath);
+      if (url && rightImg && rightPh) {
+        rightImg.src = url;
+        rightImg.classList.remove('d-none');
+        rightPh.classList.add('d-none');
+        if (applyBtn) applyBtn.disabled = false;
+      } else {
+        selectedPath = '';
+        if (rightImg) {
+          rightImg.removeAttribute('src');
+          rightImg.classList.add('d-none');
+        }
+        if (rightPh) rightPh.classList.remove('d-none');
+        if (applyBtn) applyBtn.disabled = true;
+      }
+    }
+
+    function resetRight() {
+      setRightSelection('');
+    }
+
+    /**
+     * @param {File} file
+     */
+    async function uploadFile(file) {
+      const name = ((file && file.name) || '').toLowerCase();
+      const byType = !!(file && file.type && file.type.startsWith('image/'));
+      const byExt = /\.(jpe?g|png|gif|webp|avif|svg)$/i.test(name) || (file?.type === 'image/svg+xml');
+      if (!file || (!byType && !byExt)) {
+        showToast('画像ファイルを選んでください', 'warning');
+        return;
+      }
+      const fd = new FormData();
+      fd.append('image', file);
+      try {
+        const res = await fetch('store/upload_user_image.php', { method: 'POST', body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        setRightSelection(typeof data.path === 'string' ? data.path : '');
+        showToast('アップロードしました', 'success');
+        void fillGallery();
+      } catch (e) {
+        showToast(String(e.message || e), 'danger');
+      }
+    }
+
+    async function fillGallery() {
+      if (!gallery || !galleryEmpty) return;
+      gallery.innerHTML = '';
+      try {
+        const res = await fetch('store/list_workspace_images.php', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!data.ok || !Array.isArray(data.items)) return;
+        if (data.items.length === 0) {
+          galleryEmpty.classList.remove('d-none');
+          return;
+        }
+        galleryEmpty.classList.add('d-none');
+        data.items.forEach(item => {
+          const path = typeof item.path === 'string' ? item.path : '';
+          if (!path) return;
+          const url = resolveDisplayUrl(path);
+          const wrap = document.createElement('button');
+          wrap.type = 'button';
+          wrap.className = 'btn p-0 border rounded bg-white';
+          wrap.style.width = '72px';
+          wrap.style.height = '72px';
+          wrap.style.overflow = 'hidden';
+          wrap.title = typeof item.name === 'string' ? item.name : '';
+          const im = document.createElement('img');
+          im.src = url;
+          im.alt = wrap.title;
+          im.className = 'w-100 h-100';
+          im.style.objectFit = 'cover';
+          wrap.appendChild(im);
+          wrap.addEventListener('click', () => setRightSelection(path));
+          gallery.appendChild(wrap);
+        });
+      } catch {
+        galleryEmpty.classList.remove('d-none');
+      }
+    }
+
+    document.body.addEventListener('click', ev => {
+      const t = ev.target;
+      const btn = t && t.closest ? t.closest('.lp-open-image-replace') : null;
+      if (!btn) return;
+      ev.preventDefault();
+      const form = document.getElementById('clientDataForm');
+      if (!form || !form.contains(btn)) return;
+      targetElemId = btn.dataset.lpId || '';
+      const orig = (btn.getAttribute('data-lp-original-src') || '').trim();
+      const srcInp = form.querySelector(`[data-lp-id="${targetElemId}"][data-lp-field="src"]`);
+      let leftSrc = '';
+      if (srcInp && 'value' in srcInp && srcInp.value.trim()) {
+        leftSrc = srcInp.value.trim();
+      } else if (srcInp && 'placeholder' in srcInp && (srcInp.placeholder || '').trim()) {
+        leftSrc = (srcInp.placeholder || '').trim();
+      } else if (orig) {
+        leftSrc = orig;
+      }
+      if (leftImg) {
+        leftImg.src = resolveDisplayUrl(leftSrc);
+      }
+      resetRight();
+      void fillGallery();
+      modal.show();
+    });
+
+    pickBtn?.addEventListener('click', () => fileInp?.click());
+    fileInp?.addEventListener('change', () => {
+      const f = fileInp.files && fileInp.files[0];
+      if (f) void uploadFile(f);
+      fileInp.value = '';
+    });
+
+    ['dragenter', 'dragover'].forEach(evt => {
+      dropzone?.addEventListener(evt, e => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+    dropzone?.addEventListener('dragleave', e => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    dropzone?.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) void uploadFile(f);
+    });
+
+    applyBtn?.addEventListener('click', () => {
+      const form = document.getElementById('clientDataForm');
+      if (!form || !targetElemId || !selectedPath) return;
+      const srcInp = form.querySelector(`[data-lp-id="${targetElemId}"][data-lp-field="src"]`);
+      if (!(srcInp instanceof HTMLInputElement)) return;
+      srcInp.value = resolveDisplayUrl(selectedPath);
+      srcInp.dispatchEvent(new Event('input', { bubbles: true }));
+      srcInp.dispatchEvent(new Event('change', { bubbles: true }));
+      modal.hide();
+      showToast('画像URLを更新しました', 'success');
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+      targetElemId = '';
+      resetRight();
     });
   }
 
@@ -706,6 +1036,8 @@
     const step = resolveInitialStep();
     goToStep(step);
     bindImagePreviews();
+    bindImageMemoRefine();
+    bindImageReplaceModal();
 
     // Diagnostic modal button
     const btnDiag = document.getElementById('btnDiag');
