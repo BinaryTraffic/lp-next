@@ -13,8 +13,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 $pRaw = isset($_GET['p']) ? trim((string) $_GET['p']) : '';
+if ($pRaw !== '' && strpos($pRaw, "\0") !== false) {
+    http_response_code(400);
+    exit;
+}
 
-$p = '/' . ltrim(trim(rawurldecode(strtok($pRaw, "\0"))), '/');
+$p = '/' . ltrim(trim(rawurldecode($pRaw)), '/');
 $p = strtok($p, '?'); // disallow query concatenation attacks on p itself
 
 if (!is_string($p) || $p === '/') {
