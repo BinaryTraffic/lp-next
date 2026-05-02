@@ -289,12 +289,14 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
         <div class="row g-3">
           <div class="col-md-6">
             <div class="small text-secondary mb-1">オリジナル（置き換え対象）</div>
+            <div id="imageReplaceDimsLeft" class="small text-body mb-2">サイズ：—</div>
             <div class="border rounded bg-light p-2 text-center d-flex align-items-center justify-content-center" style="min-height:240px">
               <img id="imageReplaceModalLeft" src="" alt="" class="img-fluid rounded" style="max-height:280px;object-fit:contain" />
             </div>
           </div>
           <div class="col-md-6">
             <div class="small text-secondary mb-1">新しい画像</div>
+            <div id="imageReplaceDimsRight" class="small text-body mb-2">サイズ：—</div>
             <div id="imageReplaceDropzone"
                  class="border border-2 border-dashed rounded bg-white p-2 text-center d-flex flex-column align-items-center justify-content-center"
                  style="min-height:240px;cursor:default">
@@ -307,11 +309,6 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
               <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="imageReplacePickFile">ローカルから選ぶ</button>
             </div>
           </div>
-        </div>
-        <div class="mt-3 pt-2 border-top">
-          <div class="small text-secondary mb-2">ユーザーカスタム画像（このワークスペースにアップロードしたファイル）</div>
-          <div id="imageReplaceGallery" class="d-flex flex-wrap gap-2 align-items-start" style="max-height:200px;overflow-y:auto"></div>
-          <p id="imageReplaceGalleryEmpty" class="small text-muted mb-0 d-none">ユーザーカスタム画像はまだありません。上のエリアからアップロードしてください。</p>
         </div>
       </div>
       <div class="modal-footer py-2">

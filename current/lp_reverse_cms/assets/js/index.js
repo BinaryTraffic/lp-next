@@ -720,7 +720,7 @@
   }
 
   /**
-   * 画像URLの手動置き換え（モーダル・アップロード・ワークスペース内サムネイル）。
+   * 画像URLの手動置き換え（モーダル・ドラッグ＆ドロップ／ローカルアップロード）。
    */
   function bindImageReplaceModal() {
     const modalEl = document.getElementById('imageReplaceModal');
@@ -734,13 +734,52 @@
     const dropzone = document.getElementById('imageReplaceDropzone');
     const fileInp = document.getElementById('imageReplaceFile');
     const pickBtn = document.getElementById('imageReplacePickFile');
-    const gallery = document.getElementById('imageReplaceGallery');
-    const galleryEmpty = document.getElementById('imageReplaceGalleryEmpty');
     const applyBtn = document.getElementById('imageReplaceApply');
+    const dimsLeftEl = document.getElementById('imageReplaceDimsLeft');
+    const dimsRightEl = document.getElementById('imageReplaceDimsRight');
 
     let targetElemId = '';
     /** @type {string} */
     let selectedPath = '';
+
+    /** @param {HTMLImageElement|null} img */
+    function formatImgPxDimsLine(img) {
+      if (!img || !img.src) return 'サイズ：—';
+      if (!img.complete) return 'サイズ：読み込み中…';
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      if (w <= 0 || h <= 0) return 'サイズ：（px を取得できません／非ラスタ画像など）';
+      return `サイズ：幅 ${w}px × 高さ ${h}px`;
+    }
+
+    /**
+     * @param {HTMLImageElement|null} imgEl
+     * @param {HTMLElement|null} dimsEl
+     * @param {string} absUrl 空なら src を外して寸法をリセット
+     */
+    function wireImgDimsReporting(imgEl, dimsEl, absUrl) {
+      if (!dimsEl || !imgEl) return;
+      const u = (absUrl || '').trim();
+      imgEl.onload = null;
+      imgEl.onerror = null;
+      if (!u) {
+        dimsEl.textContent = 'サイズ：—';
+        imgEl.removeAttribute('src');
+        return;
+      }
+      dimsEl.textContent = 'サイズ：読み込み中…';
+      const apply = () => {
+        dimsEl.textContent = formatImgPxDimsLine(imgEl);
+      };
+      imgEl.onload = apply;
+      imgEl.onerror = () => {
+        dimsEl.textContent = 'サイズ：読み込みに失敗しました';
+      };
+      imgEl.src = u;
+      if (typeof imgEl.decode === 'function') {
+        void imgEl.decode().then(apply).catch(() => {});
+      }
+    }
 
     function resolveDisplayUrl(pathOrUrl) {
       const s = (pathOrUrl || '').trim();
@@ -753,16 +792,14 @@
       selectedPath = (path || '').trim();
       const url = resolveDisplayUrl(selectedPath);
       if (url && rightImg && rightPh) {
-        rightImg.src = url;
+        wireImgDimsReporting(rightImg, dimsRightEl, url);
         rightImg.classList.remove('d-none');
         rightPh.classList.add('d-none');
         if (applyBtn) applyBtn.disabled = false;
       } else {
         selectedPath = '';
-        if (rightImg) {
-          rightImg.removeAttribute('src');
-          rightImg.classList.add('d-none');
-        }
+        wireImgDimsReporting(rightImg, dimsRightEl, '');
+        rightImg?.classList.add('d-none');
         if (rightPh) rightPh.classList.remove('d-none');
         if (applyBtn) applyBtn.disabled = true;
       }
@@ -793,46 +830,8 @@
         }
         setRightSelection(typeof data.path === 'string' ? data.path : '');
         showToast('アップロードしました', 'success');
-        void fillGallery();
       } catch (e) {
         showToast(String(e.message || e), 'danger');
-      }
-    }
-
-    async function fillGallery() {
-      if (!gallery || !galleryEmpty) return;
-      gallery.innerHTML = '';
-      try {
-        const res = await fetch('store/list_workspace_images.php', { cache: 'no-store' });
-        const data = await res.json().catch(() => ({}));
-        if (!data.ok || !Array.isArray(data.items)) return;
-        if (data.items.length === 0) {
-          galleryEmpty.classList.remove('d-none');
-          return;
-        }
-        galleryEmpty.classList.add('d-none');
-        data.items.forEach(item => {
-          const path = typeof item.path === 'string' ? item.path : '';
-          if (!path) return;
-          const url = resolveDisplayUrl(path);
-          const wrap = document.createElement('button');
-          wrap.type = 'button';
-          wrap.className = 'btn p-0 border rounded bg-white';
-          wrap.style.width = '72px';
-          wrap.style.height = '72px';
-          wrap.style.overflow = 'hidden';
-          wrap.title = typeof item.name === 'string' ? item.name : '';
-          const im = document.createElement('img');
-          im.src = url;
-          im.alt = wrap.title;
-          im.className = 'w-100 h-100';
-          im.style.objectFit = 'cover';
-          wrap.appendChild(im);
-          wrap.addEventListener('click', () => setRightSelection(path));
-          gallery.appendChild(wrap);
-        });
-      } catch {
-        galleryEmpty.classList.remove('d-none');
       }
     }
 
@@ -855,10 +854,13 @@
         leftSrc = orig;
       }
       if (leftImg) {
-        leftImg.src = resolveDisplayUrl(leftSrc);
+        if (leftSrc) {
+          wireImgDimsReporting(leftImg, dimsLeftEl, resolveDisplayUrl(leftSrc));
+        } else {
+          wireImgDimsReporting(leftImg, dimsLeftEl, '');
+        }
       }
       resetRight();
-      void fillGallery();
       modal.show();
     });
 
@@ -901,6 +903,7 @@
     modalEl.addEventListener('hidden.bs.modal', () => {
       targetElemId = '';
       resetRight();
+      wireImgDimsReporting(leftImg, dimsLeftEl, '');
     });
   }
 
