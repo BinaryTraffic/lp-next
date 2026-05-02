@@ -3,6 +3,26 @@
 declare(strict_types=1);
 
 /**
+ * アシスタント本文から JSON オブジェクトだけを抽出（コードフェンス付きでの返答にも対応）。
+ */
+function lp_reverse_text_replace_extract_json_text(string $text): string
+{
+    $t = trim($text);
+    if (preg_match('/\A```(?:json)?\\s*\R(.*)\R```\\s*\z/s', $t, $m)) {
+        return trim($m[1]);
+    }
+    /** 先頭のみフェンスがある場合の緩い剥がし */
+    if (preg_match('/\A```(?:json)?\\s*\R(.*)/s', $t, $m)) {
+        $t = trim($m[1]);
+        $t = preg_replace('/\R```\\s*\z/', '', $t) ?? $t;
+
+        return trim($t);
+    }
+
+    return $t;
+}
+
+/**
  * 業種に合わせた LP テキストの一括置換草案（Claude Messages API）。
  *
  * POST JSON:
@@ -13,6 +33,7 @@ declare(strict_types=1);
  *   "elements": [
  *     { "id": "elem_sec_0_1", "type": "heading", "label": "見出し", "original_text": "元の文言" }
  *   ],
+ *   "no_element_limit": true,            // 任意・既定は最大60件。true で最大10000件まで（内部で出力上限に応じチャンク分割）
  *   "api_key": "..."                       // 任意（.env の ANTHROPIC_API_KEY が無いとき）
  * }
  *
@@ -52,6 +73,7 @@ $industry = isset($in['industry']) ? trim((string) $in['industry']) : '';
 $tone     = isset($in['tone']) ? trim((string) $in['tone']) : '';
 $sourceCx = isset($in['source_context']) ? trim((string) $in['source_context']) : '';
 $bodyKey  = isset($in['api_key']) ? trim((string) $in['api_key']) : '';
+$noElementLimit = !empty($in['no_element_limit']);
 /** @var mixed $elementsRaw */
 $elementsRaw = $in['elements'] ?? null;
 
@@ -82,7 +104,13 @@ if ($apiKey === '') {
 }
 
 const TEXT_REPLACE_MAX_ELEMENTS = 60;
+/** no_element_limit 時の防御的上限（悪用・誤送信防止） */
+const TEXT_REPLACE_MAX_ELEMENTS_UNBOUND = 10000;
 const TEXT_REPLACE_MAX_ORIG_LEN = 2000;
+/** 単一応答での出力肥大を避ける分割単位（元テキスト最大長×件数での入力ウィンドウも考慮） */
+const TEXT_REPLACE_CHUNK_ELEMENTS = 42;
+/** Claude Sonnet 4.6 同期 Messages の公称 max output 上限 */
+const TEXT_REPLACE_MAX_OUTPUT_TOKENS = 64000;
 
 /** @var list<array{id: string, type: string, label: string, original_text: string}> $elementsNorm */
 $elementsNorm = [];
@@ -119,17 +147,35 @@ foreach ($elementsRaw as $idx => $row) {
     ];
 }
 
-if (count($elementsNorm) > TEXT_REPLACE_MAX_ELEMENTS) {
+$maxElements = $noElementLimit ? TEXT_REPLACE_MAX_ELEMENTS_UNBOUND : TEXT_REPLACE_MAX_ELEMENTS;
+if (count($elementsNorm) > $maxElements) {
     http_response_code(400);
-    echo json_encode(['error' => 'elements は最大 ' . TEXT_REPLACE_MAX_ELEMENTS . ' 件です'], JSON_UNESCAPED_UNICODE);
+    echo json_encode([
+        'error' => $noElementLimit
+            ? 'elements が多すぎます（最大 ' . TEXT_REPLACE_MAX_ELEMENTS_UNBOUND . ' 件）'
+            : 'elements は最大 ' . TEXT_REPLACE_MAX_ELEMENTS . ' 件です（制限解除が必要なら no_element_limit を付与してください）',
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-$elementsJson = json_encode($elementsNorm, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-$toneLine     = $tone !== '' ? "トーンの希望: {$tone}\n" : '';
-$srcLine      = $sourceCx !== '' ? "元コンテンツの文脈: {$sourceCx}\n" : '';
+$toneLine = $tone !== '' ? "トーンの希望: {$tone}\n" : '';
+$srcLine  = $sourceCx !== '' ? "元コンテンツの文脈: {$sourceCx}\n" : '';
 
-$prompt = <<<PROMPT
+$chunks  = array_chunk($elementsNorm, TEXT_REPLACE_CHUNK_ELEMENTS);
+$nChunks = count($chunks);
+if ($nChunks > 1) {
+    /** 複数回 API するためタイムアウトを緩める */
+    set_time_limit(max(300, min(7200, 180 * $nChunks)));
+}
+
+/** @var array<string, string> $byId */
+$byId     = [];
+$sumInTok = 0;
+$sumOutTok = 0;
+
+foreach ($chunks as $chunkIdx => $chunkElems) {
+    $elementsJson = json_encode($chunkElems, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    $prompt       = <<<PROMPT
 あなたは日本語のLPコピーライターです。次の JSON 配列 `elements` は、参照ランディングページから抽出した編集可能テキストです。
 各要素を、**業種「{$industry}」**の店舗・サービス向けランディングページとして自然な日本語に書き換えてください。
 
@@ -153,127 +199,218 @@ $prompt = <<<PROMPT
 `items` は入力の全要素について **id ごとに1件ずつ**、**件数も入力と同じ**にすること。順序は入力と同じ推奨。
 PROMPT;
 
-$payload = json_encode([
-    'model'       => 'claude-sonnet-4-6',
-    'max_tokens'  => 8192,
-    'temperature' => 0.4,
-    'messages'    => [[
-        'role'    => 'user',
-        'content' => $prompt,
-    ]],
-], JSON_UNESCAPED_UNICODE);
-
-$ch = curl_init('https://api.anthropic.com/v1/messages');
-curl_setopt_array($ch, [
-    CURLOPT_POST           => true,
-    CURLOPT_HTTPHEADER     => [
-        'Content-Type: application/json',
-        'x-api-key: ' . $apiKey,
-        'anthropic-version: 2023-06-01',
-    ],
-    CURLOPT_POSTFIELDS     => $payload,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 120,
-]);
-
-$response = curl_exec($ch);
-$curlErr  = curl_error($ch);
-$code     = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-if ($response === false) {
-    lp_reverse_api_usage_record([
-        'env_var'   => 'ANTHROPIC_API_KEY',
-        'provider'  => 'anthropic',
-        'operation' => 'text_replace',
-        'ok'        => false,
-        'http_code' => 502,
-        'meta'      => [
-            'model'        => 'claude-sonnet-4-6',
-            'key_source'   => $serverKey !== '' ? 'server_env' : 'client_body',
-            'curl_error'   => $curlErr,
-        ],
-        'usage'         => [],
-        'estimated_usd' => 0.0,
-    ]);
-    http_response_code(502);
-    echo json_encode(['error' => 'Anthropic 接続エラー: ' . $curlErr], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-$data = json_decode($response, true);
-$usageBlock = is_array($data) && isset($data['usage']) && is_array($data['usage']) ? $data['usage'] : [];
-$inTok      = (int) ($usageBlock['input_tokens'] ?? 0);
-$outTok     = (int) ($usageBlock['output_tokens'] ?? 0);
-$estAnth    = lp_reverse_api_usage_estimate_anthropic_usd($inTok, $outTok);
-
-if ($code !== 200 || !isset($data['content'][0]['text'])) {
-    $msg = is_array($data) && isset($data['error']['message'])
-        ? (string) $data['error']['message']
-        : mb_substr($response, 0, 400);
-    lp_reverse_api_usage_record([
-        'env_var'   => 'ANTHROPIC_API_KEY',
-        'provider'  => 'anthropic',
-        'operation' => 'text_replace',
-        'ok'        => false,
-        'http_code' => $code,
-        'meta'      => [
-            'model'          => 'claude-sonnet-4-6',
-            'key_source'     => $serverKey !== '' ? 'server_env' : 'client_body',
-            'error_message'  => $msg,
-        ],
-        'usage' => [
-            'input_tokens'  => $inTok,
-            'output_tokens' => $outTok,
-        ],
-        'estimated_usd' => $estAnth,
-    ]);
-    http_response_code($code >= 400 ? $code : 502);
-    echo json_encode(['error' => $msg], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-$text   = trim((string) $data['content'][0]['text']);
-$parsed = json_decode($text, true);
-
-if (!is_array($parsed) || !isset($parsed['items']) || !is_array($parsed['items'])) {
-    lp_reverse_api_usage_record([
-        'env_var'   => 'ANTHROPIC_API_KEY',
-        'provider'  => 'anthropic',
-        'operation' => 'text_replace',
-        'ok'        => false,
-        'http_code' => $code,
-        'meta'      => [
-            'model'      => 'claude-sonnet-4-6',
-            'key_source' => $serverKey !== '' ? 'server_env' : 'client_body',
-            'reason'     => 'text_replace_json_parse_failed',
-        ],
-        'usage' => [
-            'input_tokens'  => $inTok,
-            'output_tokens' => $outTok,
-        ],
-        'estimated_usd' => $estAnth,
-    ]);
-    http_response_code(502);
-    echo json_encode([
-        'error' => 'Claude 応答の JSON パースに失敗しました',
-        'raw'   => $text,
+    $chunkCount      = count($chunkElems);
+    $maxTokThisChunk = max(8192, min(TEXT_REPLACE_MAX_OUTPUT_TOKENS, $chunkCount * 135 + 4500));
+    $payload         = json_encode([
+        'model'       => 'claude-sonnet-4-6',
+        'max_tokens'  => $maxTokThisChunk,
+        'temperature' => 0.4,
+        'messages'    => [[
+            'role'    => 'user',
+            'content' => $prompt,
+        ]],
     ], JSON_UNESCAPED_UNICODE);
-    exit;
+
+    $curlTimeout = min(600, max(120, 90 + $chunkCount * 4));
+
+    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'x-api-key: ' . $apiKey,
+            'anthropic-version: 2023-06-01',
+        ],
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => $curlTimeout,
+    ]);
+
+    $response = curl_exec($ch);
+    $curlErr  = curl_error($ch);
+    $code     = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false) {
+        lp_reverse_api_usage_record([
+            'env_var'   => 'ANTHROPIC_API_KEY',
+            'provider'  => 'anthropic',
+            'operation' => 'text_replace',
+            'ok'        => false,
+            'http_code' => 502,
+            'meta'      => [
+                'model'        => 'claude-sonnet-4-6',
+                'key_source'   => $serverKey !== '' ? 'server_env' : 'client_body',
+                'curl_error'   => $curlErr,
+                'chunk_index'  => $chunkIdx,
+                'chunk_total'  => $nChunks,
+            ],
+            'usage' => [
+                'input_tokens'  => $sumInTok,
+                'output_tokens' => $sumOutTok,
+            ],
+            'estimated_usd' => lp_reverse_api_usage_estimate_anthropic_usd($sumInTok, $sumOutTok),
+        ]);
+        http_response_code(502);
+        echo json_encode(['error' => 'Anthropic 接続エラー: ' . $curlErr], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $data = json_decode($response, true);
+    $usageBlock = is_array($data) && isset($data['usage']) && is_array($data['usage']) ? $data['usage'] : [];
+    $inTok      = (int) ($usageBlock['input_tokens'] ?? 0);
+    $outTok     = (int) ($usageBlock['output_tokens'] ?? 0);
+
+    $sumInTok += $inTok;
+    $sumOutTok += $outTok;
+
+    if ($code !== 200 || !isset($data['content'][0]['text'])) {
+        $msg = is_array($data) && isset($data['error']['message'])
+            ? (string) $data['error']['message']
+            : mb_substr($response, 0, 400);
+        lp_reverse_api_usage_record([
+            'env_var'   => 'ANTHROPIC_API_KEY',
+            'provider'  => 'anthropic',
+            'operation' => 'text_replace',
+            'ok'        => false,
+            'http_code' => $code,
+            'meta'      => [
+                'model'         => 'claude-sonnet-4-6',
+                'key_source'    => $serverKey !== '' ? 'server_env' : 'client_body',
+                'error_message' => $msg,
+                'chunk_index'   => $chunkIdx,
+                'chunk_total'   => $nChunks,
+            ],
+            'usage' => [
+                'input_tokens'  => $sumInTok,
+                'output_tokens' => $sumOutTok,
+            ],
+            'estimated_usd' => lp_reverse_api_usage_estimate_anthropic_usd($sumInTok, $sumOutTok),
+        ]);
+        http_response_code($code >= 400 ? $code : 502);
+        echo json_encode(['error' => $msg], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $assistRaw = trim((string) $data['content'][0]['text']);
+    $text      = lp_reverse_text_replace_extract_json_text($assistRaw);
+    $parsed    = json_decode($text, true);
+
+    if (!is_array($parsed) || !isset($parsed['items']) || !is_array($parsed['items'])) {
+        $stopReason = is_array($data) && isset($data['stop_reason']) ? (string) $data['stop_reason'] : '';
+        lp_reverse_api_usage_record([
+            'env_var'   => 'ANTHROPIC_API_KEY',
+            'provider'  => 'anthropic',
+            'operation' => 'text_replace',
+            'ok'        => false,
+            'http_code' => $code,
+            'meta'      => [
+                'model'        => 'claude-sonnet-4-6',
+                'key_source'   => $serverKey !== '' ? 'server_env' : 'client_body',
+                'reason'       => 'text_replace_json_parse_failed',
+                'chunk_index'  => $chunkIdx,
+                'chunk_total'  => $nChunks,
+                'stop_reason'  => $stopReason,
+            ],
+            'usage' => [
+                'input_tokens'  => $sumInTok,
+                'output_tokens' => $sumOutTok,
+            ],
+            'estimated_usd' => lp_reverse_api_usage_estimate_anthropic_usd($sumInTok, $sumOutTok),
+        ]);
+        http_response_code(502);
+        echo json_encode([
+            'error' => $nChunks > 1
+                ? sprintf('Claude 応答の JSON パースに失敗しました（チャンク %d/%d）', $chunkIdx + 1, $nChunks)
+                : 'Claude 応答の JSON パースに失敗しました',
+            'stop_reason' => $stopReason,
+            'raw'         => mb_substr($assistRaw, 0, 50000),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    /** @var array<string, string> $chunkById */
+    $chunkById = [];
+    foreach ($parsed['items'] as $it) {
+        if (!is_array($it)) {
+            continue;
+        }
+        $rid = isset($it['id']) ? trim((string) $it['id']) : '';
+        $rt  = isset($it['replaced_text']) ? trim((string) $it['replaced_text']) : '';
+        if ($rid !== '' && $rt !== '') {
+            $chunkById[$rid] = $rt;
+        }
+    }
+
+    if (count($chunkById) !== $chunkCount) {
+        lp_reverse_api_usage_record([
+            'env_var'   => 'ANTHROPIC_API_KEY',
+            'provider'  => 'anthropic',
+            'operation' => 'text_replace',
+            'ok'        => false,
+            'http_code' => $code,
+            'meta'      => [
+                'model'       => 'claude-sonnet-4-6',
+                'key_source'  => $serverKey !== '' ? 'server_env' : 'client_body',
+                'reason'      => 'chunk_item_count_mismatch',
+                'chunk_index' => $chunkIdx,
+                'chunk_total' => $nChunks,
+                'expected'    => $chunkCount,
+                'got'         => count($chunkById),
+            ],
+            'usage' => [
+                'input_tokens'  => $sumInTok,
+                'output_tokens' => $sumOutTok,
+            ],
+            'estimated_usd' => lp_reverse_api_usage_estimate_anthropic_usd($sumInTok, $sumOutTok),
+        ]);
+        http_response_code(502);
+        echo json_encode([
+            'error' => sprintf('モデル応答のチャンク内 items 件数が一致しません（チャンク %d/%d）', $chunkIdx + 1, $nChunks),
+            'raw'   => mb_substr($assistRaw, 0, 50000),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    foreach ($chunkElems as $cel) {
+        $eidChunk = $cel['id'];
+        if (!isset($chunkById[$eidChunk])) {
+            lp_reverse_api_usage_record([
+                'env_var'   => 'ANTHROPIC_API_KEY',
+                'provider'  => 'anthropic',
+                'operation' => 'text_replace',
+                'ok'        => false,
+                'http_code' => $code,
+                'meta'      => [
+                    'model'       => 'claude-sonnet-4-6',
+                    'key_source'  => $serverKey !== '' ? 'server_env' : 'client_body',
+                    'reason'      => 'missing_id_in_model_response',
+                    'missing_id'  => $eidChunk,
+                    'chunk_index' => $chunkIdx,
+                    'chunk_total' => $nChunks,
+                ],
+                'usage' => [
+                    'input_tokens'  => $sumInTok,
+                    'output_tokens' => $sumOutTok,
+                ],
+                'estimated_usd' => lp_reverse_api_usage_estimate_anthropic_usd($sumInTok, $sumOutTok),
+            ]);
+            http_response_code(502);
+            echo json_encode([
+                'error' => sprintf('モデル応答に id が欠落しています: %s（チャンク %d/%d）', $eidChunk, $chunkIdx + 1, $nChunks),
+                'raw'   => mb_substr($assistRaw, 0, 50000),
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    }
+
+    $byId = array_merge($byId, $chunkById);
 }
 
-/** @var array<string, string> $byId */
-$byId = [];
-foreach ($parsed['items'] as $i => $it) {
-    if (!is_array($it)) {
-        continue;
-    }
-    $rid = isset($it['id']) ? trim((string) $it['id']) : '';
-    $rt  = isset($it['replaced_text']) ? trim((string) $it['replaced_text']) : '';
-    if ($rid !== '' && $rt !== '') {
-        $byId[$rid] = $rt;
-    }
-}
+$code    = 200;
+$estAnth = lp_reverse_api_usage_estimate_anthropic_usd($sumInTok, $sumOutTok);
+$inTok   = $sumInTok;
+$outTok  = $sumOutTok;
 
 $outItems = [];
 foreach ($elementsNorm as $el) {
@@ -300,7 +437,6 @@ foreach ($elementsNorm as $el) {
         http_response_code(502);
         echo json_encode([
             'error' => 'モデル応答に id が欠落しています: ' . $eid,
-            'raw'   => $text,
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -332,7 +468,6 @@ if (count($byId) !== count($elementsNorm)) {
     http_response_code(502);
     echo json_encode([
         'error' => 'モデル応答の items 件数が入力と一致しません',
-        'raw'   => $text,
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -347,6 +482,7 @@ lp_reverse_api_usage_record([
         'model'           => 'claude-sonnet-4-6',
         'key_source'      => $serverKey !== '' ? 'server_env' : 'client_body',
         'element_count'   => count($elementsNorm),
+        'chunk_requests'  => $nChunks,
     ],
     'usage' => [
         'input_tokens'  => $inTok,
