@@ -64,6 +64,40 @@ if ($outputRoot === false || !is_dir($outputRoot)) {
 $candidateFs = str_replace('/', DIRECTORY_SEPARATOR, $inside);
 $target      = realpath($outputRoot . DIRECTORY_SEPARATOR . $candidateFs);
 
+/**
+ * upload のバグ等で legacy となる sites//custom_images/up_*.jpg が渡されたとき、同一 ws に
+ * そのファイルが1件だけあるなら復旧（複数クローンにある場合は 404）。
+ */
+$tryLegacyDoubleSlashSites = static function (
+    string $insidePath,
+    string $outputRootReal,
+) /* : string|false */ {
+    $unix = str_replace('\\', '/', $insidePath);
+    if (!preg_match('#^sites/+custom_images/([^/]+)$#', $unix, $m)) {
+        return false;
+    }
+    $basename = basename($m[1]);
+    if ($basename === '' || $basename !== $m[1]) {
+        return false;
+    }
+    $glob = glob(
+        $outputRootReal . DIRECTORY_SEPARATOR . 'sites'
+        . DIRECTORY_SEPARATOR . '*'
+        . DIRECTORY_SEPARATOR . 'custom_images'
+        . DIRECTORY_SEPARATOR . $basename,
+        GLOB_NOSORT,
+    );
+
+    return is_array($glob) && count($glob) === 1 ? $glob[0] : false;
+};
+
+if (($target === false || !is_file($target))) {
+    $alt = $tryLegacyDoubleSlashSites($inside, $outputRoot);
+    if (is_string($alt) && is_file($alt)) {
+        $target = realpath($alt);
+    }
+}
+
 if ($target === false || !is_file($target)) {
     http_response_code(404);
     exit;
