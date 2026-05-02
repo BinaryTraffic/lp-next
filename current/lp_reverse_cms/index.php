@@ -174,7 +174,7 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
                         <div id="prog_analyze_bar" class="progress-bar progress-bar-striped progress-bar-animated"
                              style="width: 0;"></div>
                       </div>
-                      <div class="small text-muted mt-1" id="prog_analyze_pct"></div>
+                      <div class="small fw-semibold text-body-secondary mt-1" id="prog_analyze_pct">0%/100%</div>
                     </div>
                   </div>
                 </div>

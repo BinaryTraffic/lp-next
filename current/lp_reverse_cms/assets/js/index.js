@@ -106,8 +106,9 @@
   function resetAnalyzeProgressUi() {
     if (!progAnalyzeBar || !progAnalyzePct) return;
     progAnalyzeBar.style.width = '0%';
-    progAnalyzePct.textContent = '';
+    progAnalyzePct.textContent = '0%/100%';
     progAnalyzeBarOuter?.setAttribute('aria-valuenow', '0');
+    progAnalyzeBarOuter?.setAttribute('aria-valuetext', '0%/100%');
   }
 
   /**
@@ -119,11 +120,14 @@
     if (r.type !== 'progress') return;
     const pctRaw = Number(r.pct);
     const pct = Number.isFinite(pctRaw) ? Math.max(0, Math.min(100, pctRaw)) : 0;
+    const pctRounded = Math.round(pct);
+    const pctLabel = `${pctRounded}%/100%`;
     if (progAnalyzeBar) progAnalyzeBar.style.width = `${pct}%`;
-    progAnalyzeBarOuter?.setAttribute('aria-valuenow', String(Math.round(pct)));
+    progAnalyzeBarOuter?.setAttribute('aria-valuenow', String(pctRounded));
+    progAnalyzeBarOuter?.setAttribute('aria-valuetext', pctLabel);
     const det = typeof r.detail_ja === 'string' ? r.detail_ja : '';
-    if (progAnalyzePct) progAnalyzePct.textContent = det || `${pct}%`;
-    if (progAnalyzeDetail && det) progAnalyzeDetail.textContent = det;
+    if (progAnalyzePct) progAnalyzePct.textContent = pctLabel;
+    if (progAnalyzeDetail) progAnalyzeDetail.textContent = det || pctLabel;
   }
 
   /** @returns {Promise<Record<string, unknown>>} */
