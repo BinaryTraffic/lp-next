@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-define('APP_VERSION', '1.2.0');
+define('APP_VERSION', '1.3.0');
 define('APP_BUILD',   date('Ymd', filemtime(__FILE__)));
 
 $dataDir        = __DIR__ . '/data/';
