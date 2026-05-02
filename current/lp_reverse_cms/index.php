@@ -4,6 +4,9 @@ declare(strict_types=1);
 define('APP_VERSION', '1.3.0');
 define('APP_BUILD',   date('Ymd', filemtime(__FILE__)));
 
+require_once __DIR__ . '/lib/LpWorkspace.php';
+$outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
+
 $dataDir        = __DIR__ . '/data/';
 $structureFile  = $dataDir . 'lp_structure.json';
 $clientFile     = $dataDir . 'client_data.json';
@@ -328,7 +331,8 @@ window.LP_CMS = {
   initialStep:  <?= $initialStep ?>,
   hasStructure: <?= $hasStructure ? 'true' : 'false' ?>,
   hasOutput:    <?= $hasOutput    ? 'true' : 'false' ?>,
-  sourceUrl:    <?= json_encode($sourceUrl) ?>,
+  sourceUrl:    <?= json_encode($sourceUrl, JSON_THROW_ON_ERROR) ?>,
+  outputWsPrefix: <?= json_encode($outputWsPrefix, JSON_THROW_ON_ERROR) ?>,
 };
 </script>
 

@@ -632,13 +632,39 @@
   function publicUrlFromApiPath(apiPath) {
     if (!apiPath) return '';
     const s = apiPath.trim();
-    if (/^https?:\/\//i.test(s)) return s;
+    if (/^https?:\/\//i.test(s) || /^data:/i.test(s)) return s;
     const raw = s.replace(/^\//, '');
     try {
       return new URL(raw, cmsRootBaseHref()).href;
     } catch {
       return s.startsWith('/') ? s : `/${s}`;
     }
+  }
+
+  /**
+   * <img> 用。本番で output/ws_* を静的配信できない場合は store プロキシを使う。
+   * フォームに保存する値は publicUrlFromApiPath のまま（セッション不要のパス）。
+   */
+  function workspaceImageBrowserHref(apiPath) {
+    if (!apiPath) return '';
+    const s = apiPath.trim();
+    if (/^https?:\/\//i.test(s) || /^data:/i.test(s)) return s;
+    const withSlash = s.startsWith('/') ? s : `/${s}`;
+    const pref =
+      typeof window !== 'undefined' &&
+      window.LP_CMS &&
+      typeof window.LP_CMS.outputWsPrefix === 'string'
+        ? window.LP_CMS.outputWsPrefix.trim()
+        : '';
+    if (pref && withSlash.startsWith(pref)) {
+      const q = `store/serve_workspace_output.php?p=${encodeURIComponent(withSlash)}`;
+      try {
+        return new URL(q.replace(/^\//, ''), cmsRootBaseHref()).href;
+      } catch {
+        return publicUrlFromApiPath(withSlash);
+      }
+    }
+    return publicUrlFromApiPath(withSlash);
   }
 
   /**
@@ -805,7 +831,7 @@
       const s = (pathOrUrl || '').trim();
       if (!s) return '';
       if (/^https?:\/\//i.test(s) || /^data:/i.test(s)) return s;
-      return publicUrlFromApiPath(s.startsWith('/') ? s : `/${s}`);
+      return workspaceImageBrowserHref(s.startsWith('/') ? s : `/${s}`);
     }
 
     function setRightSelection(path) {
@@ -913,7 +939,7 @@
       if (!form || !targetElemId || !selectedPath) return;
       const srcInp = form.querySelector(`[data-lp-id="${targetElemId}"][data-lp-field="src"]`);
       if (!(srcInp instanceof HTMLInputElement)) return;
-      srcInp.value = resolveDisplayUrl(selectedPath);
+      srcInp.value = publicUrlFromApiPath(selectedPath);
       srcInp.dispatchEvent(new Event('input', { bubbles: true }));
       srcInp.dispatchEvent(new Event('change', { bubbles: true }));
       modal.hide();
