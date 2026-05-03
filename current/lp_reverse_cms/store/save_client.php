@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../lib/LpWorkspace.php';
+
 header('Content-Type: application/json; charset=utf-8');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -26,7 +28,7 @@ try {
         }
     }
 
-    $dataDir = __DIR__ . '/../data/';
+    $dataDir = LpWorkspace::dataDir(dirname(__DIR__));
     if (!is_dir($dataDir)) {
         mkdir($dataDir, 0755, true);
     }

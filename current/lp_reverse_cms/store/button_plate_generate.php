@@ -22,6 +22,7 @@ declare(strict_types=1);
  * shape / style は lib/LpTheme.php の button_plate 定義に合わせて検証（未知は既定へ）。
  */
 require_once __DIR__ . '/../lib/LpTheme.php';
+require_once __DIR__ . '/../lib/LpWorkspace.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -29,6 +30,13 @@ header('Cache-Control: no-store');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Method Not Allowed'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$cmsRoot = realpath(dirname(__DIR__));
+if ($cmsRoot === false) {
+    http_response_code(500);
+    echo json_encode(['error' => 'CMS ルート解決エラー'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -141,15 +149,7 @@ if ($plateSs > 1) {
     $im = $small;
 }
 
-$cmsRoot = realpath(dirname(__DIR__));
-if ($cmsRoot === false) {
-    imagedestroy($im);
-    http_response_code(500);
-    echo json_encode(['error' => 'CMS ルート解決エラー'], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-$dir = $cmsRoot . DIRECTORY_SEPARATOR . 'output' . DIRECTORY_SEPARATOR . 'ai_images';
+$dir = LpWorkspace::outputDir($cmsRoot) . 'ai_images';
 if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
     imagedestroy($im);
     http_response_code(500);
@@ -167,7 +167,7 @@ if (!imagepng($im, $dest, 6)) {
 }
 imagedestroy($im);
 
-echo json_encode(['url' => '/output/ai_images/' . $fname], JSON_UNESCAPED_UNICODE);
+echo json_encode(['url' => LpWorkspace::outputWebAbsPrefix() . 'ai_images/' . $fname], JSON_UNESCAPED_UNICODE);
 
 // -------------------------------------------------------------------------
 /** @param array{0:int,1:int,2:int} $rgb */

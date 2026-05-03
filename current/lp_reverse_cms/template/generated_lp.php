@@ -9,7 +9,9 @@
  *   $generatedHtml : string  — full HTML of the generated LP
  */
 if (!isset($generatedHtml)) {
-    $outputFile    = __DIR__ . '/../output/index.html';
+    require_once __DIR__ . '/../lib/LpWorkspace.php';
+    $cmsRoot       = dirname(__DIR__);
+    $outputFile    = LpWorkspace::outputDir($cmsRoot) . 'index.html';
     $generatedHtml = file_exists($outputFile) ? (string) file_get_contents($outputFile) : '';
 }
 ?>
@@ -47,7 +49,7 @@ if (!isset($generatedHtml)) {
 <div class="preview-toolbar">
   <span class="text-white fw-bold small"><i class="bi bi-eye me-1"></i>LP Reverse CMS — プレビュー</span>
   <div class="sep"></div>
-  <a href="../index.php" class="btn btn-sm btn-outline-light">
+  <a href="../index.php?step=2&from_preview=1" class="btn btn-sm btn-outline-light">
     <i class="bi bi-pencil-square me-1"></i>編集に戻る
   </a>
   <a href="../export.php" class="btn btn-sm btn-success ms-auto">

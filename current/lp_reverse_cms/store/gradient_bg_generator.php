@@ -22,6 +22,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 lp_reverse_load_env();
 
+require_once __DIR__ . '/../lib/LpWorkspace.php';
+$cmsRoot = realpath(dirname(__DIR__));
+if ($cmsRoot === false) {
+    http_response_code(500);
+    echo json_encode(['error' => 'CMS ルートの解決に失敗しました'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $raw = file_get_contents('php://input');
 $in = json_decode($raw ?: '[]', true);
 if (!is_array($in)) {
@@ -46,14 +54,7 @@ if (!extension_loaded('gd') || !function_exists('imagecreatetruecolor')) {
     exit;
 }
 
-$cmsRoot = realpath(dirname(__DIR__));
-if ($cmsRoot === false) {
-    http_response_code(500);
-    echo json_encode(['error' => 'CMS ルートの解決に失敗しました'], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-$aiDir = $cmsRoot . DIRECTORY_SEPARATOR . 'output' . DIRECTORY_SEPARATOR . 'ai_images';
+$aiDir = LpWorkspace::outputDir($cmsRoot) . 'ai_images';
 if (!is_dir($aiDir) && !@mkdir($aiDir, 0755, true)) {
     http_response_code(500);
     echo json_encode(['error' => 'output/ai_images を作成できません'], JSON_UNESCAPED_UNICODE);
@@ -131,7 +132,7 @@ if ($gType === 'radial') {
 
 $fname = 'grad_' . bin2hex(random_bytes(8)) . '.jpg';
 $destAbs = $aiDir . DIRECTORY_SEPARATOR . $fname;
-$publicUrl = '/output/ai_images/' . $fname;
+$publicUrl = LpWorkspace::outputWebAbsPrefix() . 'ai_images/' . $fname;
 
 if (!imagejpeg($im, $destAbs, 92)) {
     imagedestroy($im);

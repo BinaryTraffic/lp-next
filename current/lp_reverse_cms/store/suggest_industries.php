@@ -12,6 +12,7 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/../lib/env_load.php';
 require_once __DIR__ . '/../lib/suggest_industries.php';
+require_once __DIR__ . '/../lib/LpWorkspace.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -28,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 lp_reverse_load_env();
 
-$path = dirname(__DIR__) . '/data/lp_structure.json';
+$path = LpWorkspace::dataDir(dirname(__DIR__)) . 'lp_structure.json';
 if (!is_readable($path)) {
     echo json_encode(['source_industry' => '', 'suggestions' => []], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     exit;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../lib/LpGenerator.php';
 require_once __DIR__ . '/../lib/LpOutputAudit.php';
+require_once __DIR__ . '/../lib/LpWorkspace.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -14,8 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
-    $dataDir       = __DIR__ . '/../data/';
-    $outputDir     = __DIR__ . '/../output/';
+    $cmsRoot       = dirname(__DIR__);
+    $dataDir       = LpWorkspace::dataDir($cmsRoot);
+    $outputDir     = LpWorkspace::outputDir($cmsRoot);
     $structureFile = $dataDir . 'lp_structure.json';
     $clientFile    = $dataDir . 'client_data.json';
 
@@ -37,7 +39,7 @@ try {
     }
 
     $generator = new LpGenerator();
-    $html      = $generator->generate($structure, $clientData);
+    $html      = $generator->generate($structure, $clientData, $dataDir);
 
     if (!is_dir($outputDir)) {
         mkdir($outputDir, 0755, true);
@@ -52,7 +54,7 @@ try {
         'success'  => true,
         'size'     => strlen($html),
         'message'  => 'LPを生成しました。',
-        'preview'  => 'output/index.html',
+        'preview'  => LpWorkspace::outputRelIndex(),
     ]);
 } catch (Throwable $e) {
     http_response_code(400);

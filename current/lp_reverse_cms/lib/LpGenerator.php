@@ -18,13 +18,14 @@ class LpGenerator
     private string $dataDir = '';
 
     /**
-     * @param array $structure   Contents of lp_structure.json
-     * @param array $clientData  Contents of client_data.json (may be empty)
-     * @return string            Complete HTML of the generated LP
+     * @param array  $structure   Contents of lp_structure.json
+     * @param array  $clientData  Contents of client_data.json (may be empty)
+     * @param string $dataDir     Workspace data directory (trailing slash optional)
+     * @return string             Complete HTML of the generated LP
      */
-    public function generate(array $structure, array $clientData): string
+    public function generate(array $structure, array $clientData, string $dataDir): string
     {
-        $this->dataDir = __DIR__ . '/../data/';
+        $this->dataDir = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
 
         $meta        = $structure['meta']       ?? [];
         $headExtra   = $structure['head_extra'] ?? '';
@@ -277,6 +278,18 @@ HTML;
                     $node->setAttribute('src', $newSrc);
                 }
                 $node->setAttribute('alt', $newAlt);
+
+                $memoStruct = trim((string) ($element['image_embedded_text_memo'] ?? ''));
+                if (is_array($override) && array_key_exists('image_embedded_text_memo', $override)) {
+                    $memoOut = trim((string) $override['image_embedded_text_memo']);
+                } else {
+                    $memoOut = $memoStruct;
+                }
+                if ($memoOut !== '') {
+                    $node->setAttribute('data-lp-image-text-memo', $memoOut);
+                } else {
+                    $node->removeAttribute('data-lp-image-text-memo');
+                }
 
                 $anchor = $node->parentNode;
                 while ($anchor !== null

@@ -22,6 +22,7 @@ function lp_storage_put(string $path, string $contents): void
 
 require_once __DIR__ . '/../lib/LpFetcher.php';
 require_once __DIR__ . '/../lib/LpAssetDownloader.php';
+require_once __DIR__ . '/../lib/LpWorkspace.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -48,8 +49,9 @@ try {
         throw new InvalidArgumentException('有効なURLを入力してください。');
     }
 
-    $dataDir   = __DIR__ . '/../data/';
-    $outputDir = __DIR__ . '/../output/';
+    $cmsRoot   = dirname(__DIR__);
+    $dataDir   = LpWorkspace::dataDir($cmsRoot);
+    $outputDir = LpWorkspace::outputDir($cmsRoot);
 
     foreach ([$dataDir, $outputDir] as $dir) {
         if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
@@ -67,6 +69,7 @@ try {
     lp_storage_put($dataDir . 'source.html', $html);
     lp_storage_put($dataDir . 'fetched.html', $html);
     lp_storage_put($dataDir . 'source_url.txt', $finalUrl);
+    lp_storage_put($dataDir . 'clone_id.txt', bin2hex(random_bytes(16)));
 
     // Reset previous asset map
     lp_storage_put($dataDir . 'asset_map.json', '{}');

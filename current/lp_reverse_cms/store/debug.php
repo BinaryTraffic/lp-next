@@ -3,12 +3,13 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../lib/LpAssetAudit.php';
 require_once __DIR__ . '/../lib/LpOutputAudit.php';
+require_once __DIR__ . '/../lib/LpWorkspace.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-$root      = __DIR__ . '/../';
-$dataDir   = $root . 'data/';
-$outputDir = $root . 'output/';
+$cmsRoot   = dirname(__DIR__);
+$dataDir   = LpWorkspace::dataDir($cmsRoot);
+$outputDir = LpWorkspace::outputDir($cmsRoot);
 
 function countFiles(string $dir): array {
     if (!is_dir($dir)) {
@@ -94,7 +95,7 @@ if (file_exists($outputDir . 'index.html')) {
     $outputUnreplaced['live_items'] = $outputUnreplaced['items'];
 }
 
-$appVersion = '1.2.0';
+$appVersion = '1.3.0';
 $idx = @file_get_contents(__DIR__ . '/../index.php');
 if ($idx !== false && preg_match("/define\\s*\\(\\s*'APP_VERSION'\\s*,\\s*'([^']+)'/", $idx, $vm)) {
     $appVersion = $vm[1];
@@ -104,6 +105,7 @@ $cssDiagnostics = LpOutputAudit::scanOutputCssForDiagnostics($outputDir);
 
 echo json_encode([
     'version' => $appVersion,
+    'workspace_id' => LpWorkspace::id(),
     'files'   => [
         'source_html'       => file_exists($dataDir . 'source.html'),
         'fetched_html'      => file_exists($dataDir . 'fetched.html'),
@@ -132,7 +134,7 @@ echo json_encode([
     /** HTTP 取得に失敗したURL（fetch 時） */
     'fetch_failures' => $fetchFailures,
 
-    /** 生成済み output/index.html に残る外部URL・不正スラッシュ等 */
+    /** 生成済みワークスペース内 index.html に残る外部URL・不正スラッシュ等 */
     'output_unreplaced' => $outputUnreplaced,
 
     /** v1.2+ output/assets/css 内の url() ・ @import 外部残存 */

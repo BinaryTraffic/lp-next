@@ -12,11 +12,12 @@ if (!isset($structure) || !is_array($structure)) {
     return;
 }
 
-require_once dirname(__DIR__) . '/lib/suggest_industries.php';
-$suggestBundle  = lp_reverse_suggest_industries_from_structure($structure);
-$sourceIndustry = (string) ($suggestBundle['source_industry'] ?? '');
-$suggestions    = $suggestBundle['suggestions'] ?? [];
-if (!is_array($suggestions)) {
+/** @var string $sourceIndustry 元LP業種（index.php で Haiku により1回だけ推定） */
+/** @var list<string> $suggestions */
+if (!isset($sourceIndustry)) {
+    $sourceIndustry = '';
+}
+if (!isset($suggestions) || !is_array($suggestions)) {
     $suggestions = [];
 }
 
@@ -50,11 +51,11 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
   <div id="ai-text-replace-panel" class="card shadow-sm mb-3 border-primary">
     <div class="card-header bg-primary text-white d-flex align-items-center gap-2 py-2 flex-wrap">
       <span><i class="bi bi-stars me-1" aria-hidden="true"></i><strong>AI テキスト自動生成</strong></span>
-      <small class="ms-md-auto opacity-75">業種を入力して全テキストを一括置換（保存は従来どおり）</small>
+      <small class="ms-md-auto opacity-75">元LP業種をターゲットに自動入力し、初回は AI 置換まで自動実行（保存は従来どおり）</small>
     </div>
     <div class="card-body py-3">
       <p class="small text-muted mb-2">
-        対象は <code>data-lp-field="text"</code> / <code>content</code> のみ。画像URL・リンクURLは変更しません。
+        対象は <code>data-lp-field="text"</code> / <code>content</code> のみ。画像URL・リンクURL・画像内テキストメモは対象外です。
       </p>
       <?php if ($sourceIndustry !== ''): ?>
         <p class="small text-muted mb-2">
@@ -83,7 +84,8 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
           <label class="form-label small mb-1" for="ai-industry">ターゲット業種 <span class="text-danger">*</span></label>
           <input type="text" id="ai-industry" class="form-control form-control-sm"
                  placeholder="例：ネイルサロン、歯科クリニック、学習塾" autocomplete="off"
-                 list="ai-industry-list">
+                 list="ai-industry-list"
+                 value="<?= $sourceIndustry !== '' ? htmlspecialchars($sourceIndustry, ENT_QUOTES, 'UTF-8') : '' ?>">
           <datalist id="ai-industry-list">
             <?php foreach ($suggestions as $s): ?>
               <?php $s = (string) $s; ?>
@@ -106,6 +108,10 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
         <div class="col-6 col-md-2 col-lg-2">
           <button type="button" id="ai-replace-undo" class="btn btn-sm btn-outline-secondary w-100" hidden>元に戻す</button>
         </div>
+      </div>
+      <div class="form-check form-switch mt-3 mb-1">
+        <input class="form-check-input" type="checkbox" id="ai-replace-no-limit" role="switch" autocomplete="off">
+        <label class="form-check-label small" for="ai-replace-no-limit">件数制限を解除（60件超を一度に処理。API 負荷・待ち時間に注意）</label>
       </div>
       <div id="ai-replace-status" class="mt-2 small text-muted" hidden></div>
     </div>
@@ -229,11 +235,20 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                         </div>
                       <?php endif; ?>
                       <label class="form-label small">画像URL</label>
-                      <input type="url" class="form-control form-control-sm mb-2"
-                             data-lp-id="<?= $elemId ?>"
-                             data-lp-field="src"
-                             placeholder="<?= htmlspecialchars($origSrc, ENT_QUOTES) ?>"
-                             value="<?= htmlspecialchars($currentSrc, ENT_QUOTES) ?>">
+                      <div class="input-group input-group-sm mb-2">
+                        <input type="url" class="form-control"
+                               data-lp-id="<?= $elemId ?>"
+                               data-lp-field="src"
+                               placeholder="<?= htmlspecialchars($origSrc, ENT_QUOTES) ?>"
+                               value="<?= htmlspecialchars($currentSrc, ENT_QUOTES) ?>">
+                        <button type="button"
+                                class="btn btn-outline-secondary lp-open-image-replace"
+                                data-lp-id="<?= $elemId ?>"
+                                data-lp-original-src="<?= htmlspecialchars($origSrc, ENT_QUOTES) ?>"
+                                title="モーダルで差し替え">
+                          <i class="bi bi-images"></i>
+                        </button>
+                      </div>
                       <label class="form-label small">alt テキスト</label>
                       <input type="text" class="form-control form-control-sm mb-2"
                              data-lp-id="<?= $elemId ?>"
@@ -246,7 +261,27 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                         $wrapHref = (string) ($elem['original_href'] ?? '');
                         $wrapTargetOrig = (string) ($elem['wrap_target'] ?? '');
                         $currentTarget = (string) ($clientElem['target'] ?? '');
+                        $memoOrig = (string) ($elem['image_embedded_text_memo'] ?? '');
+                        $memoVal = array_key_exists('image_embedded_text_memo', $clientElem)
+                          ? (string) $clientElem['image_embedded_text_memo']
+                          : $memoOrig;
+                        if (trim($memoVal) === '') {
+                          $memoVal = trim((string) ($origText ?? ''));
+                        }
                       ?>
+                      <label class="form-label small">画像内テキスト（メモ・解析結果）</label>
+                      <textarea class="form-control form-control-sm mb-1" rows="3"
+                                data-lp-id="<?= $elemId ?>"
+                                data-lp-field="image_embedded_text_memo"
+                                placeholder="解析時に Vision で抽出した文言が入ります。編集・追記して保存できます。"><?= htmlspecialchars($memoVal, ENT_QUOTES) ?></textarea>
+                      <button type="button"
+                              class="btn btn-sm btn-outline-primary mb-2 lp-refine-image-from-memo"
+                              data-lp-id="<?= $elemId ?>">
+                        メモの文言で画像を再生成（UI/合成・テキスト焼き込み）
+                      </button>
+                      <?php if ($memoOrig !== '' && $memoVal !== $memoOrig): ?>
+                        <div class="form-text text-muted mb-2 small" style="white-space:pre-wrap">解析時の元メモ：<?= htmlspecialchars(mb_substr($memoOrig, 0, 200), ENT_QUOTES) ?><?= mb_strlen($memoOrig) > 200 ? '…' : '' ?></div>
+                      <?php endif; ?>
                       <?php if ($wrapHref !== '' || $wrapTargetOrig !== ''): ?>
                         <label class="form-label small">囲みリンク先（親の &lt;a href&gt;）</label>
                         <input type="text" class="form-control form-control-sm mb-2"

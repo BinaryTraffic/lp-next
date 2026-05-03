@@ -27,7 +27,7 @@ cd lp-next/current
 | リポジトリルート＝DocumentRoot（`/current/` 入口） | [https://lp-next.jitan.app/current/](https://lp-next.jitan.app/current/) |
 | プロジェクトジャーナル（共同レビュー用） | [https://lp-next.jitan.app/current/journal.html](https://lp-next.jitan.app/current/journal.html)（素源: `current/JOURNAL.md`） |
 | 管理画面（LP Reverse CMS） | DocumentRoot により: [https://lp-next.jitan.app/lp_reverse_cms/](https://lp-next.jitan.app/lp_reverse_cms/) または [https://lp-next.jitan.app/current/lp_reverse_cms/](https://lp-next.jitan.app/current/lp_reverse_cms/)（リポジトリルートを Web ルートにした場合の後者） |
-| アプリ版 | **`1.2.0`**（`lp_reverse_cms/index.php` の `APP_VERSION`） |
+| アプリ版 | **`1.3.0`**（`lp_reverse_cms/index.php` の `APP_VERSION`） |
 | Git タグ | **`v1.2.0`**（`main` の本番想定）／過去: **`v1.1.0`**, **`v1.0.0`**。レガシー表記: `v1.1.11-stable` |
 
 主な内容（v1.2 以降想定）: 資産解決の強化（`@import` / `url` / `srcset`）、**`data` / `output` 書き込み失敗の明示**、デプロイ時の **所有権・権限**（[ENVIRONMENT_AND_OPERATIONS.md](ENVIRONMENT_AND_OPERATIONS.md)）、共同作業・運用ドキュメント。以降の更新は `main` および **`develop/v1.2.0`** ブランチの運用に従います。
