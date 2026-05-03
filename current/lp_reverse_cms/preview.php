@@ -1,16 +1,110 @@
 <?php
+
 declare(strict_types=1);
 
-require_once __DIR__ . '/lib/LpWorkspace.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-$cmsRoot    = __DIR__;
-$outputDir  = LpWorkspace::outputDir($cmsRoot);
-$outputFile = $outputDir . 'index.html';
+$cmsRootPreview = __DIR__;
+require_once $cmsRootPreview . '/lib/env_load.php';
+lp_reverse_load_env();
+require_once $cmsRootPreview . '/lib/LpWorkspace.php';
+require_once $cmsRootPreview . '/lib/UserRegistry.php';
 
-if (!file_exists($outputFile)) {
+$workspaceDataDirPv = LpWorkspace::dataDir($cmsRootPreview);
+$registryPv        = new UserRegistry($workspaceDataDirPv);
+
+$sessionAuthPv = isset($_SESSION['auth']) && is_array($_SESSION['auth']) ? $_SESSION['auth'] : null;
+
+if ($sessionAuthPv === null) {
+    require_once $cmsRootPreview . '/lib/GoogleAuth.php';
+    try {
+        (new GoogleAuth())->redirectToGoogle();
+    } catch (Throwable $e) {
+        header('Content-Type: text/html; charset=utf-8');
+        http_response_code(503);
+        echo '<!DOCTYPE html><html lang="ja"><meta charset="utf-8"><title>認証</title>'
+            . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">'
+            . '<body class="bg-dark text-white"><div class="container py-5"><h1>OAuth が利用できません</h1>'
+            . '<p class="text-secondary">' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</p></div></body></html>';
+        exit;
+    }
+}
+
+$sessMailPv = strtolower(trim((string) ($sessionAuthPv['email'] ?? '')));
+
+if ($sessMailPv === '') {
+    $_SESSION['auth'] = [];
+    unset($_SESSION['auth']);
+    require_once $cmsRootPreview . '/lib/GoogleAuth.php';
+
+    try {
+        (new GoogleAuth())->redirectToGoogle();
+    } catch (Throwable) {
+        header('Location: index.php');
+
+        exit;
+    }
+}
+
+$rolePv = $registryPv->getRole($sessMailPv);
+
+if ($rolePv === null) {
+    unset($_SESSION['auth']);
+    require_once $cmsRootPreview . '/lib/GoogleAuth.php';
+
+    try {
+        (new GoogleAuth())->redirectToGoogle();
+    } catch (Throwable) {
+        header('Location: index.php');
+
+        exit;
+    }
+}
+
+$_SESSION['auth']['role'] = $rolePv;
+
+// preview は admin/super を含む
+if (!in_array($rolePv, ['preview', 'admin', 'super_admin'], true)) {
     header('Location: index.php');
+
     exit;
 }
+
+$outputDir  = LpWorkspace::outputDir($cmsRootPreview);
+$outputFile = $outputDir . 'index.html';
+
+// 出力が無くても編集ユーザーは一覧へ。プレビュー専門ロールのみここで止める。
+if (!is_file($outputFile)) {
+    $strictPv = ($rolePv === 'preview');
+    // admin / super_admin はステップ編集へ
+    if (!$strictPv) {
+        header('Location: index.php');
+
+        exit;
+    }
+?>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>プレビュー待機 — LP Reverse CMS</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+<div class="container py-5" style="max-width:560px;">
+  <h1 class="h4 mb-3">プレビューする LP がありません</h1>
+  <p class="text-muted mb-4">管理者が LP を生成するまで、この画面のみ表示されます。</p>
+  <a class="btn btn-outline-secondary btn-sm me-2" href="store/auth_logout.php">ログアウト</a>
+</div>
+</body>
+</html>
+<?php
+exit;
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -195,11 +289,12 @@ if (!file_exists($outputFile)) {
 </div>
 
 <div class="preview-bar">
+  <?php if ($rolePv !== 'preview'): ?>
   <a href="index.php?step=2&from_preview=1" class="btn btn-sm btn-outline-light">
     <i class="bi bi-arrow-left me-1"></i>編集に戻る
   </a>
-
   <div class="sep"></div>
+  <?php endif; ?>
 
   <!-- Device switcher -->
   <div class="device-btns btn-group btn-group-sm" role="group">
@@ -225,13 +320,20 @@ if (!file_exists($outputFile)) {
     ?>
   </span>
 
-  <div class="ms-auto d-flex gap-2">
+  <span class="text-white-50 small text-truncate d-none d-sm-inline ms-2" title="<?= htmlspecialchars($sessMailPv, ENT_QUOTES, 'UTF-8') ?>">
+    <?= htmlspecialchars($sessMailPv, ENT_QUOTES, 'UTF-8') ?>
+  </span>
+
+  <div class="ms-auto d-flex gap-2 align-items-center">
     <button class="btn btn-sm btn-outline-light" id="btnRefresh" title="再読み込み">
       <i class="bi bi-arrow-clockwise"></i>
     </button>
+    <?php if ($rolePv !== 'preview'): ?>
     <a href="export.php" class="btn btn-sm btn-success" title="ZIP（最小構成）">
       <i class="bi bi-download me-1"></i>エクスポート
     </a>
+    <?php endif; ?>
+    <a href="store/auth_logout.php" class="btn btn-sm btn-outline-warning" title="ログアウト">ログアウト</a>
   </div>
 </div>
 

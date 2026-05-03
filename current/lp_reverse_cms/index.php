@@ -1,11 +1,168 @@
 <?php
 declare(strict_types=1);
 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+require_once __DIR__ . '/lib/env_load.php';
+lp_reverse_load_env();
+
+require_once __DIR__ . '/lib/LpWorkspace.php';
+require_once __DIR__ . '/lib/UserRegistry.php';
+
 define('APP_VERSION', '1.3.0');
 define('APP_BUILD',   date('Ymd', filemtime(__FILE__)));
 
-require_once __DIR__ . '/lib/LpWorkspace.php';
 $outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
+$cmsRootAuth    = __DIR__;
+$userDataDirUx  = LpWorkspace::dataDir($cmsRootAuth);
+$registryUx     = new UserRegistry($userDataDirUx);
+
+$googleConfigured = getenv('GOOGLE_CLIENT_ID') !== false
+  && getenv('GOOGLE_CLIENT_SECRET') !== false
+  && getenv('GOOGLE_REDIRECT_URI') !== false
+  && trim((string) getenv('GOOGLE_CLIENT_ID')) !== ''
+  && trim((string) getenv('GOOGLE_CLIENT_SECRET')) !== ''
+  && trim((string) getenv('GOOGLE_REDIRECT_URI')) !== '';
+
+if (!isset($_SESSION['auth']) || !is_array($_SESSION['auth'])) {
+    if (!$googleConfigured) {
+        ?>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ログイン設定 — LP Reverse CMS</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-dark text-white">
+<div class="container py-5" style="max-width:620px;">
+  <h1 class="h4">Google ログインが未設定です</h1>
+  <p class="text-secondary mb-3">lp_reverse_cms/.env に <code>GOOGLE_CLIENT_ID</code>・<code>GOOGLE_CLIENT_SECRET</code>・<code>GOOGLE_REDIRECT_URI</code>
+    と <code>CMS_SUPER_ADMIN</code> を設定してください。</p>
+  <p class="small text-muted mb-0">GOOGLE_REDIRECT_URI 例：<code>https://lp-next.jitan.app/current/lp_reverse_cms/store/auth_callback.php</code></p>
+</div>
+</body>
+</html>
+        <?php
+        exit;
+    }
+    require_once __DIR__ . '/lib/GoogleAuth.php';
+
+    try {
+        (new GoogleAuth())->redirectToGoogle();
+    } catch (Throwable $e) {
+        ?>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ログイン — LP Reverse CMS</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-dark text-white">
+<div class="container py-5">
+  <h1 class="h4">ログインに失敗しました</h1>
+  <p class="text-secondary"><?= htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') ?></p>
+</div>
+</body>
+</html>
+        <?php
+        exit;
+    }
+}
+
+$sessionAuthUx = $_SESSION['auth'];
+$sessEmailUx   = strtolower(trim((string) ($sessionAuthUx['email'] ?? '')));
+
+if ($sessEmailUx === '') {
+    unset($_SESSION['auth']);
+    require_once __DIR__ . '/lib/GoogleAuth.php';
+
+    try {
+        (new GoogleAuth())->redirectToGoogle();
+    } catch (Throwable) {
+        http_response_code(302);
+        header('Location: index.php');
+
+        exit;
+    }
+}
+
+$currentRoleUx = $registryUx->getRole($sessEmailUx);
+
+if ($currentRoleUx === null) {
+    unset($_SESSION['auth']);
+    require_once __DIR__ . '/lib/GoogleAuth.php';
+
+    try {
+        (new GoogleAuth())->redirectToGoogle();
+    } catch (Throwable) {
+        header('Location: index.php');
+
+        exit;
+    }
+}
+
+$_SESSION['auth']['role'] = $currentRoleUx;
+
+if ($currentRoleUx === 'pending') {
+?>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>承認待ち — LP Reverse CMS</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body class="bg-light">
+<div class="container py-5" style="max-width:560px;">
+  <h1 class="h4 mb-3"><i class="bi bi-hourglass-split"></i> 管理者の承認をお待ちください</h1>
+  <p class="text-muted mb-4">アカウント <?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?> は申請済みです。承認後に再度このページへアクセスしてください。</p>
+  <a href="store/auth_logout.php" class="btn btn-outline-secondary btn-sm">ログアウト</a>
+</div>
+</body>
+</html>
+<?php
+    exit;
+}
+
+if ($currentRoleUx === 'rejected') {
+?>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>アクセス拒否 — LP Reverse CMS</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+<div class="container py-5" style="max-width:560px;">
+  <h1 class="h4 mb-3 text-danger">アクセスが承認されていません</h1>
+  <p class="text-muted mb-4">運営にお問い合わせいただくか、別のアカウントでお試しください。</p>
+  <a href="store/auth_logout.php" class="btn btn-outline-secondary btn-sm">ログアウト</a>
+</div>
+</body>
+</html>
+<?php
+    exit;
+}
+
+if ($currentRoleUx === 'preview') {
+    header('Location: preview.php');
+
+    exit;
+}
+
+$authManageUsers = in_array($currentRoleUx, ['super_admin', 'admin'], true);
+$userPendingUx   = $authManageUsers ? $registryUx->getPending() : [];
+$userApprovedUx  = $authManageUsers ? $registryUx->getApproved() : [];
+$superAdminUx    = (string) getenv('CMS_SUPER_ADMIN');
+$superAdminLw    = strtolower(trim($superAdminUx));
 
 $dataDir        = __DIR__ . '/data/';
 $structureFile  = $dataDir . 'lp_structure.json';
@@ -16,6 +173,8 @@ $sourceUrlFile  = $dataDir . 'source_url.txt';
 $hasStructure = file_exists($structureFile);
 $hasOutput    = file_exists($outputFile);
 $sourceUrl    = file_exists($sourceUrlFile) ? trim((string) file_get_contents($sourceUrlFile)) : '';
+
+$authErrorUx = isset($_GET['auth_error']) ? trim((string) $_GET['auth_error']) : '';
 
 // Load data for edit template
 $structure  = [];
@@ -35,6 +194,7 @@ if (file_exists($clientFile)) {
 
 // Determine which step to show on initial load (1 = fetch, 2 = edit, 3 = done)
 $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
+
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -70,12 +230,134 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           <i class="bi bi-download me-1"></i>エクスポート
         </a>
       <?php endif; ?>
+      <?php if ($authManageUsers): ?>
+        <button type="button" class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#userMgmtModal">
+          <i class="bi bi-people-fill me-1"></i>ユーザー
+        </button>
+      <?php endif; ?>
+      <span class="text-white-50 small d-none d-xl-inline text-truncate" style="max-width:200px;"
+            title="<?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>">
+        <?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>
+      </span>
+      <a href="store/auth_logout.php" class="btn btn-sm btn-warning">ログアウト</a>
       <button class="btn btn-sm btn-outline-light" id="btnDiag" title="診断情報">
         <i class="bi bi-bug"></i>
       </button>
     </div>
   </div>
 </nav>
+
+<?php if ($authErrorUx !== ''): ?>
+<div class="container-fluid py-2 px-3 mx-auto" style="max-width:1200px">
+  <div class="alert alert-warning alert-dismissible fade show mb-0" role="alert">
+    <?= htmlspecialchars($authErrorUx, ENT_QUOTES, 'UTF-8') ?>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="閉じる"></button>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php if ($authManageUsers): ?>
+<!-- ===== USER MANAGEMENT MODAL ===== -->
+<div class="modal fade" id="userMgmtModal" tabindex="-1" aria-labelledby="userMgmtModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2 bg-dark text-white">
+        <h5 class="modal-title fs-6" id="userMgmtModalLabel"><i class="bi bi-people-fill me-2"></i>ユーザー承認・管理</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <h6 class="text-secondary small text-uppercase">承認待ち</h6>
+        <div class="table-responsive mb-4 border rounded">
+          <table class="table table-sm table-striped mb-0 align-middle">
+            <thead><tr><th>メール</th><th>名前</th><th>申請日時</th><th style="width:280px"></th></tr></thead>
+            <tbody>
+            <?php if ($userPendingUx === []): ?>
+              <tr><td colspan="4" class="text-muted small">該当なし</td></tr>
+            <?php endif; ?>
+            <?php foreach ($userPendingUx as $pu): ?>
+              <?php
+                $pem = strtolower((string) ($pu['email'] ?? ''));
+                if ($pem === '') {
+                    continue;
+                }
+                $pnm = (string) ($pu['name'] ?? '');
+              ?>
+              <tr>
+                <td><code><?= htmlspecialchars($pem, ENT_QUOTES, 'UTF-8') ?></code></td>
+                <td><?= htmlspecialchars($pnm, ENT_QUOTES, 'UTF-8') ?></td>
+                <td class="small text-muted"><?= htmlspecialchars((string) ($pu['requested_at'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                <td class="text-end">
+                  <div class="btn-group btn-group-sm flex-wrap gap-1">
+                    <button type="button" class="btn btn-outline-success btn-sm btn-um" data-um="pending-approve" data-email="<?= htmlspecialchars($pem, ENT_QUOTES, 'UTF-8') ?>" data-role="preview">preview で承認</button>
+                    <?php if ($currentRoleUx === 'super_admin'): ?>
+                      <button type="button" class="btn btn-outline-primary btn-sm btn-um" data-um="pending-approve" data-email="<?= htmlspecialchars($pem, ENT_QUOTES, 'UTF-8') ?>" data-role="admin">admin で承認</button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-outline-danger btn-sm btn-um" data-um="pending-reject" data-email="<?= htmlspecialchars($pem, ENT_QUOTES, 'UTF-8') ?>">拒否</button>
+                  </div>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+
+        <h6 class="text-secondary small text-uppercase">承認済み</h6>
+        <div class="table-responsive border rounded">
+          <table class="table table-sm table-striped mb-0 align-middle">
+            <thead><tr><th>メール</th><th>名前</th><th>ロール</th><th style="width:320px"></th></tr></thead>
+            <tbody>
+            <?php if ($userApprovedUx === []): ?>
+              <tr><td colspan="4" class="text-muted small">該当なし</td></tr>
+            <?php endif; ?>
+            <?php foreach ($userApprovedUx as $au): ?>
+              <?php
+                $aem = strtolower((string) ($au['email'] ?? ''));
+                $arl = strtolower((string) ($au['role'] ?? 'preview'));
+                $anm = (string) ($au['name'] ?? '');
+              ?>
+              <tr data-approved="<?= htmlspecialchars($aem, ENT_QUOTES, 'UTF-8') ?>">
+                <td><code><?= htmlspecialchars($aem, ENT_QUOTES, 'UTF-8') ?></code></td>
+                <td><?= htmlspecialchars($anm, ENT_QUOTES, 'UTF-8') ?></td>
+                <td>
+                  <?php
+                    $roleSelDisabled = $currentRoleUx !== 'super_admin' && $arl === 'admin';
+                  ?>
+                  <select class="form-select form-select-sm role-sel" style="max-width:120px"
+                    <?= $roleSelDisabled ? 'disabled' : '' ?>>
+                    <option value="preview" <?= $arl === 'preview' ? 'selected' : '' ?>>preview</option>
+                    <option value="admin" <?= $arl === 'admin' ? 'selected' : '' ?> <?= $currentRoleUx !== 'super_admin' ? 'disabled' : '' ?>>admin</option>
+                  </select>
+                </td>
+                <td class="text-end">
+                  <button type="button" class="btn btn-sm btn-outline-primary btn-um me-1"
+                          data-um="approved-role" data-email="<?= htmlspecialchars($aem, ENT_QUOTES, 'UTF-8') ?>"
+                          <?= $roleSelDisabled ? 'disabled' : '' ?>>
+                    ロールを保存
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-danger btn-um"
+                          data-um="approved-remove" data-email="<?= htmlspecialchars($aem, ENT_QUOTES, 'UTF-8') ?>">
+                    削除
+                  </button>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+
+        <?php if ($superAdminLw !== ''): ?>
+          <p class="small text-muted mt-3 mb-0">
+            Super admin（.env）は <code><?= htmlspecialchars((string) $superAdminUx, ENT_QUOTES, 'UTF-8') ?></code> です。この一覧には含まれません。
+          </p>
+        <?php endif; ?>
+      </div>
+      <div class="modal-footer py-2 bg-light">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 
 <!-- ===== DIAGNOSTIC MODAL ===== -->
 <div class="modal fade" id="diagModal" tabindex="-1">
@@ -335,6 +617,71 @@ window.LP_CMS = {
   outputWsPrefix: <?= json_encode($outputWsPrefix, JSON_THROW_ON_ERROR) ?>,
 };
 </script>
+
+<?php if ($authManageUsers): ?>
+<script>
+(function () {
+  async function pj(u, payload) {
+    try {
+      const r = await fetch(u, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify(payload),
+      });
+      const txt = await r.text();
+      let data = {};
+
+      try {
+        data = txt ? JSON.parse(txt) : {};
+      } catch {
+        window.alert('サーバ応答が JSON として解釈できません');
+
+        return;
+      }
+
+      if (!r.ok) {
+        window.alert((data && data.error) ? String(data.error) : ('HTTP ' + r.status));
+
+        return;
+      }
+
+      if (data.ok !== true) {
+        window.alert((data && data.error) ? String(data.error) : '操作に失敗しました');
+
+        return;
+      }
+      window.location.reload();
+    } catch {
+      window.alert('通信に失敗しました');
+    }
+  }
+
+  document.body.addEventListener('click', function (ev) {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('.btn-um') : null;
+    if (!btn || (btn.disabled)) return;
+    const um = btn.getAttribute('data-um');
+    const email = btn.getAttribute('data-email');
+    const role = btn.getAttribute('data-role');
+    const tr = btn.closest ? btn.closest('tr') : null;
+    const sel = tr ? tr.querySelector('.role-sel') : null;
+
+    if (um === 'pending-approve') {
+      void pj('store/user_approve.php', { action: 'approve', email: email, role: role || 'preview' });
+    } else if (um === 'pending-reject') {
+      void pj('store/user_approve.php', { action: 'reject', email: email });
+    } else if (um === 'approved-remove') {
+      if (!window.confirm('このユーザーを auth_users.json から削除します。よろしいですか？')) return;
+      void pj('store/user_manage.php', { action: 'remove', email: email });
+    } else if (um === 'approved-role') {
+      if (!sel || sel.disabled) return;
+      const nr = sel.value || 'preview';
+      void pj('store/user_manage.php', { action: 'change_role', email: email, role: nr });
+    }
+  });
+})();
+</script>
+<?php endif; ?>
 
 <script src="assets/js/index.js"></script>
 </body>
