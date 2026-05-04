@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/session_bootstrap.php';
+
 /**
  * Per-browser-session workspace: data/ws_{id}/ and output/ws_{id}/.
  * Isolates fetch / generate / assets on shared hosts so one user cannot
@@ -27,7 +29,7 @@ final class LpWorkspace
         }
 
         if (session_status() === PHP_SESSION_NONE) {
-            session_start();
+            lp_reverse_session_start();
         }
 
         $sid = $_SESSION['lp_reverse_ws'] ?? '';

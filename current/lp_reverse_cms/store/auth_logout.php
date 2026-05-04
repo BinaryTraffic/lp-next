@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/lib/session_bootstrap.php';
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    lp_reverse_session_start();
 }
 $_SESSION = [];
 

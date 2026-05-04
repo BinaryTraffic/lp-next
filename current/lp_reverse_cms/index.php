@@ -1,8 +1,9 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/lib/session_bootstrap.php';
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    lp_reverse_session_start();
 }
 
 require_once __DIR__ . '/lib/env_load.php';
