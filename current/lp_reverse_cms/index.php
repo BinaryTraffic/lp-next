@@ -9,11 +9,12 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/lib/env_load.php';
 lp_reverse_load_env();
 
+require_once __DIR__ . '/lib/app_release.php';
 require_once __DIR__ . '/lib/LpWorkspace.php';
 require_once __DIR__ . '/lib/UserRegistry.php';
 
-define('APP_VERSION', '1.3.0');
-define('APP_BUILD',   date('Ymd', filemtime(__FILE__)));
+define('APP_VERSION', '1.4.0');
+define('APP_BUILD', lp_reverse_app_build_label(__DIR__));
 
 $outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
 $cmsRootAuth    = __DIR__;
@@ -262,10 +263,11 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 <!-- ===== NAVBAR ===== -->
 <nav class="navbar navbar-dark bg-primary shadow-sm">
   <div class="container-fluid">
-    <span class="navbar-brand fw-bold">
+      <span class="navbar-brand fw-bold">
       <i class="bi bi-arrow-repeat me-2"></i>LP Reverse CMS
-      <span class="badge bg-white text-primary ms-2 fw-normal" style="font-size:.65rem;vertical-align:middle">
-        v<?= APP_VERSION ?>
+      <span class="badge bg-white text-primary ms-2 fw-normal" style="font-size:.65rem;vertical-align:middle"
+            title="バージョン / ビルド（Git 短ハッシュまたはソース更新日）">
+        v<?= htmlspecialchars(APP_VERSION, ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(APP_BUILD, ENT_QUOTES, 'UTF-8') ?>
       </span>
     </span>
     <div class="d-flex align-items-center gap-2">
@@ -453,7 +455,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header bg-dark text-white">
-        <h5 class="modal-title"><i class="bi bi-bug me-2"></i>診断情報 — v<?= APP_VERSION ?></h5>
+        <h5 class="modal-title"><i class="bi bi-bug me-2"></i>診断情報 — v<?= htmlspecialchars(APP_VERSION, ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(APP_BUILD, ENT_QUOTES, 'UTF-8') ?></h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -463,7 +465,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
         <div class="mt-3 p-3 bg-light rounded border small">
           <strong>スタイルが反映されない場合：</strong><br>
           Step 1 に戻り「<strong>解析する</strong>」をもう一度実行してください（CSS・画像が再ダウンロードされます）。<br>
-          その後 Step 2 で「<strong>保存＆LP生成</strong>」を実行してください。
+          その後 Step 2 で「<strong>保存＆サイト生成</strong>」を実行してください。
         </div>
       </div>
     </div>
@@ -510,12 +512,12 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
       <div class="col-lg-8">
         <div class="card shadow-sm">
           <div class="card-header bg-primary text-white">
-            <i class="bi bi-globe me-2"></i><strong>参照LPのURL入力</strong>
+            <i class="bi bi-globe me-2"></i><strong>参照サイトのURL入力</strong>
           </div>
           <div class="card-body p-4">
             <p class="text-muted mb-3">
-              コピーしたいLPのURLを入力してください。<br>
-              HTMLを取得・解析し、編集可能なコンテンツ要素を自動抽出します。
+              コピーしたいサイトのURLを入力してください。<br>
+              汎用サイト解析で HTML を取得し、編集可能なコンテンツ要素を自動抽出します。
             </p>
             <div class="input-group input-group-lg mb-3">
               <span class="input-group-text bg-white"><i class="bi bi-link-45deg"></i></span>
@@ -526,7 +528,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
                 data-bs-toggle="tooltip"
                 data-bs-placement="bottom"
                 data-bs-custom-class="lp-cms-tooltip"
-                title="<?= htmlspecialchars('入力した URL の HTML と CSS／画像・アセットを取得します。終わったら自動でページ構造の解析へ進みます。', ENT_QUOTES, 'UTF-8') ?>">
+                title="<?= htmlspecialchars('入力した URL の HTML と CSS／画像・アセットを取得します。終わったら自動でサイト構造の解析へ進みます。', ENT_QUOTES, 'UTF-8') ?>">
                 <button id="btnFetchAnalyze" type="button" class="btn btn-primary px-4 d-inline-flex align-items-center">
                   <i class="bi bi-search"></i><span class="ms-1">解析する</span>
                   <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
@@ -547,7 +549,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
                 <div class="list-group-item d-flex align-items-center gap-3 py-3 text-muted" id="prog_analyze">
                   <div class="text-secondary"><i class="bi bi-circle fs-5"></i></div>
                   <div class="flex-grow-1">
-                    <div class="fw-semibold">ページ構造を解析中…</div>
+                    <div class="fw-semibold">サイト構造を解析中…</div>
                     <div class="small text-muted" id="prog_analyze_detail"></div>
                     <div id="prog_analyze_bar_wrap" class="mt-2 d-none">
                       <div class="progress" style="height:8px;" role="progressbar"
@@ -571,9 +573,9 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           <div class="card-body">
             <h6 class="fw-bold mb-2"><i class="bi bi-lightbulb-fill text-warning me-1"></i>使い方</h6>
             <ol class="mb-0 small text-muted">
-              <li>コピー元LPのURLを入力して「解析する」をクリック</li>
+              <li>コピー元サイトのURLを入力して「解析する」をクリック</li>
               <li>抽出された各テキスト・画像を自社情報に書き換え</li>
-              <li>「保存＆LP生成」でHTMLを出力 → プレビュー・エクスポート</li>
+              <li>「保存＆サイト生成」で HTML を出力 → プレビュー・エクスポート</li>
             </ol>
           </div>
         </div>
@@ -629,7 +631,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           data-bs-placement="bottom"
           data-bs-custom-class="lp-cms-tooltip"
           title="<?= htmlspecialchars(
-              '編集後の ZIP で上書き。エクスポートと同じフォルダ構成にするか、同名画像が1つだけのときは ZIP 直下のファイル名のみでも可。終わったら（必要なら）右の「保存＆LP生成」で HTML に反映してください。',
+              '編集後の ZIP で上書き。エクスポートと同じフォルダ構成にするか、同名画像が1つだけのときは ZIP 直下のファイル名のみでも可。終わったら（必要なら）右の「保存＆サイト生成」で HTML に反映してください。',
               ENT_QUOTES,
               'UTF-8',
           ) ?>">
@@ -650,7 +652,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
               'UTF-8',
           ) ?>">
           <button type="button" class="btn btn-primary px-4 d-inline-flex align-items-center" id="btnSaveGenerate">
-            <i class="bi bi-lightning-charge-fill"></i><span class="ms-1">保存＆LP生成</span>
+            <i class="bi bi-lightning-charge-fill"></i><span class="ms-1">保存＆サイト生成</span>
             <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1 ps-1" aria-hidden="true"></i>
           </button>
         </span>
@@ -679,9 +681,9 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           <div class="mb-4">
             <i class="bi bi-check-circle-fill text-success" style="font-size:4rem"></i>
           </div>
-          <h3 class="fw-bold mb-2">LP生成が完了しました！</h3>
+          <h3 class="fw-bold mb-2">サイト生成が完了しました！</h3>
           <p class="text-muted mb-4">
-            参照LPの構成を保ったまま、新しいLPが生成されました。
+            参照サイトの構成を保ったまま、新しいサイトが生成されました。
           </p>
           <div class="d-flex justify-content-center gap-3 flex-wrap mb-4">
             <a href="preview.php" target="_blank" class="btn btn-lg btn-primary">
@@ -704,7 +706,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             <div class="mt-3 text-muted small">
               生成ファイル：<code>output/index.html</code>
               (<?= number_format(filesize($outputFile)) ?> bytes)
-              — v<?= APP_VERSION ?>
+              — v<?= htmlspecialchars(APP_VERSION, ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(APP_BUILD, ENT_QUOTES, 'UTF-8') ?>
             </div>
           <?php endif; ?>
         </div>

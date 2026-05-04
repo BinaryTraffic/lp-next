@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../lib/app_release.php';
 require_once __DIR__ . '/../lib/LpAssetAudit.php';
 require_once __DIR__ . '/../lib/LpOutputAudit.php';
 require_once __DIR__ . '/../lib/LpWorkspace.php';
@@ -86,7 +87,7 @@ if ($sourceUrl && file_exists($htmlPath)) {
 
 $outputUnreplaced = readJsonFile($dataDir . 'output_unreplaced.json');
 if ($outputUnreplaced === null) {
-    $outputUnreplaced = ['total' => 0, 'items' => [], 'note' => 'まだLP生成後のスキャンがありません'];
+    $outputUnreplaced = ['total' => 0, 'items' => [], 'note' => 'まだサイト生成後のスキャンがありません'];
 }
 if (file_exists($outputDir . 'index.html')) {
     // 常に実ファイルをスキャンして JSON を更新（古い generated_at / items のまま残る混乱を防ぐ）
@@ -95,16 +96,18 @@ if (file_exists($outputDir . 'index.html')) {
     $outputUnreplaced['live_items'] = $outputUnreplaced['items'];
 }
 
-$appVersion = '1.3.0';
+$appVersion = '1.4.0';
 $idx = @file_get_contents(__DIR__ . '/../index.php');
 if ($idx !== false && preg_match("/define\\s*\\(\\s*'APP_VERSION'\\s*,\\s*'([^']+)'/", $idx, $vm)) {
     $appVersion = $vm[1];
 }
+$appBuild = lp_reverse_app_build_label($cmsRoot);
 
 $cssDiagnostics = LpOutputAudit::scanOutputCssForDiagnostics($outputDir);
 
 echo json_encode([
     'version' => $appVersion,
+    'build'   => $appBuild,
     'workspace_id' => LpWorkspace::id(),
     'files'   => [
         'source_html'       => file_exists($dataDir . 'source.html'),

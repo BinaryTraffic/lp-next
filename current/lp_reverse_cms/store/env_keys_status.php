@@ -28,7 +28,7 @@ $gd = extension_loaded('gd');
 $imagick = extension_loaded('imagick');
 $freetype = $gd && function_exists('imagettfbbox');
 
-$appVersion = '1.3.0';
+$appVersion = '1.4.0';
 $idxPhp = dirname(__DIR__) . '/index.php';
 $idxSrc = @file_get_contents($idxPhp);
 if ($idxSrc !== false && preg_match("/define\\s*\\(\\s*'APP_VERSION'\\s*,\\s*'([^']+)'/", $idxSrc, $vm)) {

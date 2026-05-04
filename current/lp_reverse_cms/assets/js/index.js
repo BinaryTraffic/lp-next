@@ -243,7 +243,7 @@
   }
 
   // -----------------------------------------------------------------------
-  // LP構造解析: NDJSON 進捗（ツリー総ステップ基準）
+  // サイト構造解析: NDJSON 進捗（ツリー総ステップ基準）
   // -----------------------------------------------------------------------
 
   function resetAnalyzeProgressUi() {
@@ -495,7 +495,7 @@
       );
       resetAnalyzeProgressUi();
       progAnalyzeBarWrap?.classList.remove('d-none');
-      setProgState(progAnalyze, 'loading', 'HTMLを解析中…');
+      setProgState(progAnalyze, 'loading', 'サイト構造を解析中…');
 
       const analyzeRes = await apiPostAnalyzeStream('store/analyze_lp.php');
       if (!analyzeRes.success) throw new Error(analyzeRes.error ?? '解析に失敗しました。');
@@ -545,11 +545,11 @@
       const saveRes = await apiPost('store/save_client.php', clientData);
       if (!saveRes.success) throw new Error(saveRes.error ?? '保存に失敗しました。');
 
-      // -- Generate LP --
+      // -- Generate site HTML --
       const genRes = await apiPost('store/generate_lp.php', {});
-      if (!genRes.success) throw new Error(genRes.error ?? 'LP生成に失敗しました。');
+      if (!genRes.success) throw new Error(genRes.error ?? 'サイト生成に失敗しました。');
 
-      showToast(`LP生成完了！ (${(genRes.size / 1024).toFixed(1)} KB)`, 'success');
+      showToast(`サイト生成完了！ (${(genRes.size / 1024).toFixed(1)} KB)`, 'success');
 
       await sleep(500);
 
@@ -918,7 +918,7 @@
     const rel = workspaceRelFromImageSrc(srcInp.value.trim());
     if (!rel) {
       showToast(
-        '画像URLがワークスペース内（output/ws_…）ではありません。解析済みLPのアセットURLを使ってください。',
+        '画像URLがワークスペース内（output/ws_…）ではありません。解析済みサイトのアセットURLを使ってください。',
         'warning',
       );
       return;
@@ -973,7 +973,7 @@
       srcInp.value = publicUrlFromApiPath(finalUrl);
       srcInp.dispatchEvent(new Event('input', { bubbles: true }));
       srcInp.dispatchEvent(new Event('change', { bubbles: true }));
-      showToast('画像を更新しました。保存してからLP生成してください', 'success');
+      showToast('画像を更新しました。保存してからサイト生成してください', 'success');
     } catch (e) {
       showToast(String(e.message || e), 'danger');
     } finally {

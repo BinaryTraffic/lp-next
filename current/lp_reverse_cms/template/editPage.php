@@ -8,11 +8,11 @@
  */
 
 if (!isset($structure) || !is_array($structure)) {
-    echo '<div class="alert alert-danger">LP構造データが読み込めませんでした。</div>';
+    echo '<div class="alert alert-danger">サイト構造データが読み込めませんでした。</div>';
     return;
 }
 
-/** @var string $sourceIndustry 元LP業種（index.php で Haiku により1回だけ推定） */
+/** @var string $sourceIndustry 元サイト業種（index.php で Haiku により1回だけ推定） */
 /** @var list<string> $suggestions */
 if (!isset($sourceIndustry)) {
     $sourceIndustry = '';
@@ -51,7 +51,7 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
   <div id="ai-text-replace-panel" class="card shadow-sm mb-3 border-primary">
     <div class="card-header bg-primary text-white d-flex align-items-center gap-2 py-2 flex-wrap">
       <span><i class="bi bi-stars me-1" aria-hidden="true"></i><strong>AI テキスト自動生成</strong></span>
-      <small class="ms-md-auto opacity-75">元LP業種をターゲットに自動入力し、初回は AI 置換まで自動実行（保存は従来どおり）</small>
+      <small class="ms-md-auto opacity-75">元サイト業種をターゲットに自動入力し、初回は AI 置換まで自動実行（保存は従来どおり）</small>
     </div>
     <div class="card-body py-3">
       <p class="small text-muted mb-2">
@@ -59,7 +59,7 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
       </p>
       <?php if ($sourceIndustry !== ''): ?>
         <p class="small text-muted mb-2">
-          元LP業種: <strong class="text-body"><?= htmlspecialchars($sourceIndustry, ENT_QUOTES, 'UTF-8') ?></strong>
+          元サイト業種: <strong class="text-body"><?= htmlspecialchars($sourceIndustry, ENT_QUOTES, 'UTF-8') ?></strong>
         </p>
       <?php endif; ?>
       <?php if ($suggestions !== []): ?>

@@ -96,8 +96,8 @@ if (!is_file($outputFile)) {
 </head>
 <body class="bg-light">
 <div class="container py-5" style="max-width:560px;">
-  <h1 class="h4 mb-3">プレビューする LP がありません</h1>
-  <p class="text-muted mb-4">管理者が LP を生成するまで、この画面のみ表示されます。</p>
+  <h1 class="h4 mb-3">プレビューするサイトがありません</h1>
+  <p class="text-muted mb-4">管理者がサイトを生成するまで、この画面のみ表示されます。</p>
   <a class="btn btn-outline-secondary btn-sm me-2" href="store/auth_logout.php">ログアウト</a>
 </div>
 </body>
@@ -157,7 +157,7 @@ exit;
       transition: padding .3s ease;
     }
 
-    /* スプラッシュ終了後も LP の遅い描画・画像待ちの間、真っ白に見えないよう重ねる */
+    /* スプラッシュ終了後もサイトの遅い描画・画像待ちの間、真っ白に見えないよう重ねる */
     .iframe-load-curtain {
       position: absolute;
       inset: 0;
@@ -270,7 +270,7 @@ exit;
       <div class="spinner-border text-primary" role="status" style="width:2.5rem;height:2.5rem"></div>
     </div>
     <h2 class="text-center">プレビューを読み込んでいます</h2>
-    <p class="text-center small text-secondary mb-0">生成されたLPと画像・CSSの読み込みには時間がかかることがあります。</p>
+    <p class="text-center small text-secondary mb-0">生成されたサイトと画像・CSSの読み込みには時間がかかることがあります。</p>
     <ul class="preview-splash-steps" id="splashSteps">
       <li id="splashStep1" class="is-active"><i class="bi bi-check-circle-fill"></i><span>プレビュー画面を初期化</span></li>
       <li id="splashStep2" class="is-pending"><span class="spinner-border spinner-border-sm text-primary" role="status"></span><span>生成HTMLを取得・解析中</span></li>
@@ -339,11 +339,11 @@ exit;
 </div>
 
 <div class="iframe-container" id="iframeContainer">
-  <iframe id="previewFrame" src="<?= htmlspecialchars(LpWorkspace::outputRelIndex() . '?v=' . filemtime($outputFile), ENT_QUOTES, 'UTF-8') ?>" title="生成LP プレビュー"></iframe>
+  <iframe id="previewFrame" src="<?= htmlspecialchars(LpWorkspace::outputRelIndex() . '?v=' . filemtime($outputFile), ENT_QUOTES, 'UTF-8') ?>" title="生成サイトのプレビュー"></iframe>
   <div id="iframeLoadCurtain" class="iframe-load-curtain" aria-live="polite" aria-busy="false" hidden>
     <div class="iframe-load-curtain-inner">
       <div class="spinner-border text-light mb-3" role="status" style="width:2rem;height:2rem"></div>
-      <p class="text-white small mb-1 fw-semibold">プレビュー（LP）の描画・画像の読み込みを待っています</p>
+      <p class="text-white small mb-1 fw-semibold">プレビュー（サイト）の描画・画像の読み込みを待っています</p>
       <p class="text-secondary small mb-0">重いページや遅い画像では数十秒〜続くことがあります。</p>
     </div>
   </div>

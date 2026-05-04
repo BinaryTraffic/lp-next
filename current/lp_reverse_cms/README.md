@@ -1,8 +1,8 @@
 # LP Reverse CMS
 
-参照 LP の URL から HTML を取得し、DOM 解析で編集可能な構造を JSON 化。顧客向け文言を流し込み、同じ構成の LP を静的 HTML として再生成する PHP 製 MVP。
+参照サイトの URL から HTML を取得し、汎用サイト解析で編集可能な構造を JSON 化。顧客向け文言を流し込み、同じ構成のサイトを静的 HTML として再生成する PHP 製 MVP。
 
-**アプリバージョン:** `1.3.0`（`index.php` の `APP_VERSION` と同期）
+**アプリバージョン:** `1.4.0`（`index.php` の `APP_VERSION` と同期。**ビルド**は Git 短ハッシュ、取得できない環境では主要ソースの更新日 Ymd）
 
 **ドキュメント:** [開発経緯・成果とゼロからの構築手順（PROJECT_HISTORY_AND_SETUP.html）](docs/PROJECT_HISTORY_AND_SETUP.html)（`/lp_reverse_cms/docs/` でも同じページが開きます）  
 　※ ソースの Markdown は [PROJECT_HISTORY_AND_SETUP.md](docs/PROJECT_HISTORY_AND_SETUP.md)
@@ -165,7 +165,7 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 
 2. **Step 2 — 編集**  
    - セクション別にテキスト・画像 URL・リンクを編集。  
-   - 「保存＆LP生成」で `save_client.php` → `generate_lp.php`。
+   - 「保存＆サイト生成」で `save_client.php` → `generate_lp.php`。
 
 3. **Step 3 — 確認**  
    - プレビュー / エクスポート。  
@@ -184,7 +184,7 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 
 ## 既知の注意点
 
-- アセットの多い LP は **取得に数十秒** かかることがある。  
+- アセットの多いサイトは **取得に数十秒** かかることがある。  
 - 動的に挿入されるリソースのみのサイトは、静的取得では取りこぼしがある。  
 - 本番運用では Apache 等のドキュメントルートに配置し、`data/` の保護を維持すること。
 - クローン直後など **`data/` / `output/` の所有者**が、Web・PHP 実行ユーザー（例: `www-data`）と**ずれている**と解析が**書き込めない**（**v1.1.11** 以降は取得段階で**明示**）。[`ENVIRONMENT_AND_OPERATIONS.md`](../ENVIRONMENT_AND_OPERATIONS.md) の**留意点**を参照。
@@ -212,6 +212,7 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 | 1.1.11 | `store/fetch_lp.php`: `data/` への `file_put_contents` 失敗を検出し、書き込み不可時は明確にエラーを返す。Git タグ **`v1.1.11-stable`** ＆ [ルート README](../README.md) の**安定版（フィックス版）**で本番例（`lp-next.jitan.app`）のラインを指し示し |
 | 1.2.0 | アセット解像度: CSS 内 `@import` の再帰取得とローカル差し替え、CSS `url()` の除外強化・フラグメント除去、HTML 側相対 URL を `LpUrlContext` に一本化、`srcset` トークン解析の改善、`data-src` 明示、**`store/debug.php`** に `output_css_diagnostics`（保存済み CSS の外部 `url` / `@import` 残存） |
 | 1.2.1 | セッション別ワークスペース（`lib/LpWorkspace.php`、`data/ws_*` / `output/ws_*`）。**`preview.php`** スプラッシュ：`readyState === 'complete'` ＋ **`fonts.ready`**（タイムアウト付き）と描画猶予で白画面を低減。Step 3 診断を **`debug.php`** 応答形に合わせる。インポート後の業種推定・AI テキスト置換の単一路線化（`index.php` / `editPage.php` / `assets/js/index.js`）など。 |
+| 1.4.0 | UI を「サイト」「汎用サイト解析」に統一。**ビルド表示:** `APP_BUILD` は Git 短ハッシュ（取得できない環境では主要ソース更新日の Ymd）。 |
 | 1.3.0 | **マルチユーザー／clone:** `clone_id`（`data/clone_id.txt`）、`LpCloneContext`、`sites/<clone_id>/custom_images/` への手動画像。**エクスポート:** `LpExportBundle` で ZIP 既定、`export.php?type=html` で単一 HTML。**AI テキスト:** 要素数上限のトグルと `no_element_limit`（`store/text_replace.php`）。プレビュー復帰時の二重自動置換防止（`from_preview`）。**画像メモ:** 生成 HTML の `data-lp-image-text-memo` とパイプライン連携（`lp_image_memo_merge` / `lp_ai_image_pipeline` 等）。**Step1 プロフィール:** `lp_project_profile.json`（ZipCloud・SNS 等）、`?step=2` で編集再開。UI: 手動画像差し替えモーダル、`publicUrlFromApiPath` の `document.baseURI` 対応。詳細レポートは [current/JOURNAL.md](../JOURNAL.md#v130-要件と実装状況レポート) を参照。 |
 
 ---

@@ -22,12 +22,12 @@ try {
     $clientFile    = $dataDir . 'client_data.json';
 
     if (!file_exists($structureFile)) {
-        throw new RuntimeException('LP構造JSONが見つかりません。先にURLを解析してください。');
+        throw new RuntimeException('サイト構造JSONが見つかりません。先にURLを解析してください。');
     }
 
     $structure = json_decode((string) file_get_contents($structureFile), true);
     if (!is_array($structure)) {
-        throw new RuntimeException('LP構造JSONの読み込みに失敗しました。');
+        throw new RuntimeException('サイト構造JSONの読み込みに失敗しました。');
     }
 
     $clientData = [];
@@ -53,7 +53,7 @@ try {
     echo json_encode([
         'success'  => true,
         'size'     => strlen($html),
-        'message'  => 'LPを生成しました。',
+        'message'  => 'サイトを生成しました。',
         'preview'  => LpWorkspace::outputRelIndex(),
     ]);
 } catch (Throwable $e) {
