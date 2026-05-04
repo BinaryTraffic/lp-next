@@ -15,9 +15,20 @@ final class GoogleAuth
 
     public function __construct()
     {
-        $this->clientId     = (string) getenv('GOOGLE_CLIENT_ID');
-        $this->clientSecret = (string) getenv('GOOGLE_CLIENT_SECRET');
-        $this->redirectUri  = (string) getenv('GOOGLE_REDIRECT_URI');
+        $this->clientId     = self::envStr('GOOGLE_CLIENT_ID');
+        $this->clientSecret = self::envStr('GOOGLE_CLIENT_SECRET');
+        $this->redirectUri  = self::envStr('GOOGLE_REDIRECT_URI');
+    }
+
+    private static function envStr(string $k): string
+    {
+        $v = getenv($k);
+        if (is_string($v) && trim($v) !== '') {
+            return trim($v);
+        }
+        $e = $_ENV[$k] ?? null;
+
+        return (is_string($e) && trim($e) !== '') ? trim($e) : '';
     }
 
     /** @throws RuntimeException */

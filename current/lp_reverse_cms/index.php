@@ -19,12 +19,22 @@ $cmsRootAuth    = __DIR__;
 $userDataDirUx  = LpWorkspace::dataDir($cmsRootAuth);
 $registryUx     = new UserRegistry($userDataDirUx);
 
-$googleConfigured = getenv('GOOGLE_CLIENT_ID') !== false
-  && getenv('GOOGLE_CLIENT_SECRET') !== false
-  && getenv('GOOGLE_REDIRECT_URI') !== false
-  && trim((string) getenv('GOOGLE_CLIENT_ID')) !== ''
-  && trim((string) getenv('GOOGLE_CLIENT_SECRET')) !== ''
-  && trim((string) getenv('GOOGLE_REDIRECT_URI')) !== '';
+/** getenv が空でも .env が $_ENV に入っている環境向け（FPM の取り込み差異） */
+$envPeekUx = static function (string $k): string {
+    $v = getenv($k);
+    if (is_string($v) && trim($v) !== '') {
+        return trim($v);
+    }
+    $e = $_ENV[$k] ?? null;
+
+    return (is_string($e) && trim($e) !== '') ? trim($e) : '';
+};
+
+$googleConfigured = $envPeekUx('GOOGLE_CLIENT_ID') !== ''
+    && $envPeekUx('GOOGLE_CLIENT_SECRET') !== ''
+    && $envPeekUx('GOOGLE_REDIRECT_URI') !== '';
+
+$authErrorUx = isset($_GET['auth_error']) ? trim((string) $_GET['auth_error']) : '';
 
 if (!isset($_SESSION['auth']) || !is_array($_SESSION['auth'])) {
     if (!$googleConfigured) {
@@ -39,6 +49,10 @@ if (!isset($_SESSION['auth']) || !is_array($_SESSION['auth'])) {
 <body class="bg-dark text-white">
 <div class="container py-5" style="max-width:620px;">
   <h1 class="h4">Google ログインが未設定です</h1>
+  <?php if ($authErrorUx !== ''): ?>
+    <div class="alert alert-warning text-dark"><?= htmlspecialchars($authErrorUx, ENT_QUOTES, 'UTF-8') ?></div>
+    <p class="text-secondary small">Google でキャンセルした直後でも、サーバーが .env を読めていないとこのページになります。<code>/current/lp_reverse_cms/.env</code> の権限と <code>lib/env_load.php</code> の読み込みを確認してください。</p>
+  <?php endif; ?>
   <p class="text-secondary mb-3">lp_reverse_cms/.env に <code>GOOGLE_CLIENT_ID</code>・<code>GOOGLE_CLIENT_SECRET</code>・<code>GOOGLE_REDIRECT_URI</code>
     と <code>CMS_SUPER_ADMIN</code> を設定してください。</p>
   <p class="small text-muted mb-0">GOOGLE_REDIRECT_URI 例：<code>https://lp-next.jitan.app/current/lp_reverse_cms/store/auth_callback.php</code></p>
@@ -48,6 +62,32 @@ if (!isset($_SESSION['auth']) || !is_array($_SESSION['auth'])) {
         <?php
         exit;
     }
+
+    // 認証キャンセル／エラー後は無限ループにならないよう、まずメッセージを表示してからユーザーが「再ログイン」を選ぶ
+    if ($authErrorUx !== '') {
+        ?>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ログイン — LP Reverse CMS</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-dark text-white">
+<div class="container py-5" style="max-width:540px;">
+  <h1 class="h5 mb-3">Google ログイン</h1>
+  <div class="alert alert-warning text-dark"><?= htmlspecialchars($authErrorUx, ENT_QUOTES, 'UTF-8') ?></div>
+  <p class="text-secondary small mb-4">問題なければ下のボタンから再度 Google に進みます。</p>
+  <a class="btn btn-primary" href="index.php">ログインを再試行</a>
+  <p class="mt-4 small mb-0"><a class="text-secondary" href="store/auth_logout.php">ログアウト／セッションを消す</a></p>
+</div>
+</body>
+</html>
+        <?php
+        exit;
+    }
+
     require_once __DIR__ . '/lib/GoogleAuth.php';
 
     try {
@@ -174,9 +214,6 @@ $hasStructure = file_exists($structureFile);
 $hasOutput    = file_exists($outputFile);
 $sourceUrl    = file_exists($sourceUrlFile) ? trim((string) file_get_contents($sourceUrlFile)) : '';
 
-$authErrorUx = isset($_GET['auth_error']) ? trim((string) $_GET['auth_error']) : '';
-
-// Load data for edit template
 $structure  = [];
 $clientData = [];
 if ($hasStructure) {
