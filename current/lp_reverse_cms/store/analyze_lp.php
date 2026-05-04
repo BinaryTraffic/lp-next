@@ -23,13 +23,15 @@ $bodyIn  = ($bodyRaw !== false && trim($bodyRaw) !== '')
     ? json_decode($bodyRaw, true) : [];
 $streamProgress = is_array($bodyIn) && !empty($bodyIn['stream_progress']);
 
-if ($streamProgress) {
+    if ($streamProgress) {
     header('Content-Type: application/x-ndjson; charset=utf-8');
     header('X-Accel-Buffering: no');
     if (function_exists('apache_setenv')) {
         apache_setenv('no-gzip', '1');
     }
     ini_set('zlib.output_compression', '0');
+    ini_set('output_buffering', '0');
+    ini_set('implicit_flush', '1');
     while (ob_get_level() > 0) {
         ob_end_clean();
     }
@@ -112,7 +114,6 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         'detail_ja' => 'セクション詳細情報を整形しています',
     ]);
 
-    $mapper    = new LpMapper();
     $mapper    = new LpMapper();
     $structure = $mapper->enrich($structure);
 

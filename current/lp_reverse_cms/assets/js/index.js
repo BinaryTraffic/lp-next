@@ -130,6 +130,63 @@
     if (progAnalyzeDetail) progAnalyzeDetail.textContent = det || pctLabel;
   }
 
+  /**
+   * NDJSON をチャンク受信ごとに解釈し progress を即時反映する（レスポンス完了まで await text しない）。
+   *
+   * @param {ReadableStream<Uint8Array>} body
+   * @param {(row: Record<string, unknown>) => void} onProgress
+   */
+  async function parseAnalyzeNdjsonStream(body, onProgress) {
+    const reader = body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    /** @type {Record<string, unknown>|null} */
+    let payload = null;
+
+    const flushLine = (line) => {
+      const t = line.trim();
+      if (!t) return;
+      let row;
+      try {
+        row = JSON.parse(t);
+      } catch {
+        return;
+      }
+      if (!row || typeof row !== 'object') return;
+      const rec = /** @type {Record<string, unknown>} */ (row);
+      if (rec.type === 'progress') {
+        onProgress(rec);
+      } else if (rec.type === 'complete') {
+        payload = rec;
+      } else if (rec.type === 'error') {
+        throw new Error(String(rec.error || '解析エラー'));
+      }
+    };
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const nl = buf.indexOf('\n');
+      if (nl === -1) continue;
+      const parts = buf.split('\n');
+      buf = parts.pop() ?? '';
+      for (const ln of parts) {
+        flushLine(ln);
+      }
+    }
+
+    buf += dec.decode();
+    const tail = buf.split('\n');
+    for (const ln of tail) {
+      flushLine(ln);
+    }
+
+    if (!payload) throw new Error('解析応答が途中で終了しました。');
+    const { type, ...rest } = payload;
+    return rest;
+  }
+
   /** @returns {Promise<Record<string, unknown>>} */
   async function apiPostAnalyzeStream(endpoint) {
     const res = await fetch(endpoint, {
@@ -138,11 +195,18 @@
       body: JSON.stringify({ stream_progress: true }),
     });
     const ctype = (res.headers.get('Content-Type') || '').toLowerCase();
-    const text = await res.text();
+
     if (!res.ok) {
+      const text = await res.text();
       const msg = ndjsonFirstJsonError(text) || safeJsonParseError(text);
       throw new Error(msg || `HTTP ${res.status}`);
     }
+
+    if (ctype.includes('ndjson') && res.body?.getReader) {
+      return parseAnalyzeNdjsonStream(res.body, applyAnalyzeProgressRow);
+    }
+
+    const text = await res.text();
     if (ctype.includes('ndjson')) {
       return parseAnalyzeNdjsonResponse(text, applyAnalyzeProgressRow);
     }
