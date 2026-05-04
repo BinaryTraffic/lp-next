@@ -239,6 +239,9 @@ if ($stepQs >= 1 && $stepQs <= 3) {
     $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 }
 
+/** ワークスペース状態に応じて到達した最遠ステップ（ステップアイコン遷移の上限） */
+$maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
+
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -483,7 +486,7 @@ if ($stepQs >= 1 && $stepQs <= 3) {
         $active  = ($initialStep === $n);
         $cls     = $done ? 'step-done' : ($active ? 'step-active' : 'step-pending');
     ?>
-      <div class="step-item <?= $cls ?>" data-step="<?= $n ?>">
+      <div class="step-item <?= $cls ?>" data-step="<?= $n ?>" data-step-label="<?= htmlspecialchars($s['label'], ENT_QUOTES, 'UTF-8') ?>">
         <div class="step-circle">
           <?php if ($done): ?>
             <i class="bi bi-check-lg"></i>
@@ -760,6 +763,7 @@ if ($stepQs >= 1 && $stepQs <= 3) {
 <script>
 window.LP_CMS = {
   initialStep:  <?= $initialStep ?>,
+  maxReachableStep: <?= (int) $maxReachableStep ?>,
   hasStructure: <?= $hasStructure ? 'true' : 'false' ?>,
   hasOutput:    <?= $hasOutput    ? 'true' : 'false' ?>,
   sourceUrl:    <?= json_encode($sourceUrl, JSON_THROW_ON_ERROR) ?>,

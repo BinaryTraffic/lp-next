@@ -9,7 +9,28 @@ body {
   color: #212529;
 }
 
-/* ---------- Step indicator ---------- */
+/* Stepper — 処理済みステップ間のクリック遷移 */
+#stepIndicator .step-item-navigable {
+  cursor: pointer;
+  outline: none;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 12px;
+}
+
+#stepIndicator .step-item:not(.step-item-navigable) {
+  cursor: default;
+}
+
+#stepIndicator .step-item:focus-visible.step-item-navigable {
+  outline: 2px solid rgba(13, 110, 253, 0.55);
+  outline-offset: 4px;
+}
+
+#stepIndicator .step-item-navigable:hover .step-circle {
+  transform: scale(1.05);
+}
+
 .step-item {
   display: flex;
   flex-direction: column;

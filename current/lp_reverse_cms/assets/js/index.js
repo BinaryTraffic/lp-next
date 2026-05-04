@@ -46,6 +46,19 @@
   // Step 3
   const btnEditAgain = document.getElementById('btnEditAgain');
 
+  /** データ上到達した最遠ステップ。この範囲内のみステップアイコンクリックで遷移可 */
+  let maxReachableStep = Math.min(
+    3,
+    Math.max(
+      1,
+      typeof window.LP_CMS?.maxReachableStep === 'number'
+        ? Number(window.LP_CMS.maxReachableStep)
+        : (window.LP_CMS?.hasOutput ? 3 : window.LP_CMS?.hasStructure ? 2 : 1),
+    ),
+  );
+
+  const stepIndicatorEl = document.getElementById('stepIndicator');
+
   // -----------------------------------------------------------------------
   // Step navigation
   // -----------------------------------------------------------------------
@@ -68,6 +81,136 @@
     });
   }
 
+  function refreshStepNavigatorDom() {
+    if (!stepIndicatorEl) {
+      return;
+    }
+
+    stepIndicatorEl.querySelectorAll('.step-item[data-step]').forEach(raw => {
+      if (!(raw instanceof HTMLElement)) {
+        return;
+      }
+
+      const sn = parseInt(String(raw.dataset.step ?? ''), 10);
+      const ok = Number.isFinite(sn) && sn >= 1 && sn <= maxReachableStep;
+      raw.classList.toggle('step-item-navigable', ok);
+
+      if (ok) {
+        raw.setAttribute('role', 'button');
+        raw.setAttribute('tabindex', '0');
+        const lab = String(raw.dataset.stepLabel || '').trim() || ('ステップ' + sn);
+
+        raw.setAttribute('aria-label', lab + 'へ移動');
+      } else {
+        raw.removeAttribute('role');
+        raw.removeAttribute('tabindex');
+        raw.removeAttribute('aria-label');
+      }
+    });
+  }
+
+  function expandMaxReachable(n) {
+    const cap = Math.min(3, Math.max(1, n));
+
+    if (cap <= maxReachableStep) {
+      return false;
+    }
+
+    maxReachableStep = cap;
+
+    if (window.LP_CMS && typeof window.LP_CMS === 'object') {
+
+      window.LP_CMS.maxReachableStep = maxReachableStep;
+
+      if (cap >= 3) {
+        window.LP_CMS.hasOutput = true;
+
+        window.LP_CMS.hasStructure = true;
+      } else if (cap >= 2) {
+
+        window.LP_CMS.hasStructure = true;
+      }
+    }
+
+    refreshStepNavigatorDom();
+
+    return true;
+  }
+
+  function setUrlStepParam(n) {
+
+    const qs = new URLSearchParams(window.location.search);
+
+    qs.set('step', String(n));
+
+    const q = qs.toString();
+
+    window.history.replaceState({}, '', `${window.location.pathname}${q ? '?' + q : ''}`);
+  }
+
+  /**
+   * @returns {boolean} 許可済みステップのみ true
+   */
+  function tryNavigateToReachedStep(snRaw) {
+
+    const sn = parseInt(String(snRaw ?? ''), 10);
+
+    if (!Number.isFinite(sn) || sn < 1 || sn > 3 || sn > maxReachableStep) {
+
+      return false;
+    }
+    setUrlStepParam(sn);
+
+    goToStep(sn);
+
+    return true;
+  }
+
+  function bindStepIndicatorClickNav() {
+    if (!stepIndicatorEl) {
+      return;
+    }
+
+    stepIndicatorEl.addEventListener('click', ev => {
+      const t = /** @type {HTMLElement|null} */ (ev.target);
+      const item = /** @type {HTMLElement|null} */ (t.closest ? t.closest('.step-item-navigable') : null);
+
+      if (!item || !stepIndicatorEl.contains(item)) {
+        return;
+      }
+
+      const sn = parseInt(String(item.dataset.step ?? ''), 10);
+
+      if (!tryNavigateToReachedStep(sn)) {
+        return;
+      }
+
+      ev.preventDefault();
+    });
+
+    stepIndicatorEl.addEventListener('keydown', ev => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') {
+        return;
+      }
+
+      const active = /** @type {HTMLElement|null} */ (document.activeElement);
+
+      if (!active || active === document.body) {
+        return;
+      }
+
+      if (!stepIndicatorEl.contains(active) || !active.classList.contains('step-item-navigable')) {
+
+        return;
+      }
+
+      const sn = parseInt(String(active.dataset.step ?? ''), 10);
+
+      ev.preventDefault();
+
+      tryNavigateToReachedStep(sn);
+    });
+  }
   // -----------------------------------------------------------------------
   // Toast notification
   // -----------------------------------------------------------------------
@@ -401,8 +544,12 @@
       if (!genRes.success) throw new Error(genRes.error ?? 'LP生成に失敗しました。');
 
       showToast(`LP生成完了！ (${(genRes.size / 1024).toFixed(1)} KB)`, 'success');
+
       await sleep(500);
-      goToStep(3);
+
+      expandMaxReachable(3);
+
+      tryNavigateToReachedStep(3);
 
     } catch (err) {
       showError(generateError, err.message);
@@ -1231,7 +1378,12 @@
   // Init
   // -----------------------------------------------------------------------
   function init() {
+    bindStepIndicatorClickNav();
+
+    refreshStepNavigatorDom();
+
     const step = resolveInitialStep();
+
     goToStep(step);
     bindImagePreviews();
     bindImageMemoRefine();
