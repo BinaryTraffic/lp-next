@@ -61,9 +61,15 @@ function lp_reverse_load_env(?string $path = null): void
         } elseif ($v !== '' && str_starts_with($v, "'") && str_ends_with($v, "'")) {
             $v = substr($v, 1, -1);
         }
-        if (getenv($k) === false) {
-            putenv("{$k}={$v}");
-            $_ENV[$k] = $v;
+        // php-fpm 等で変数だけ空文字セットされていると getenv()!==false で .env が無視されるため、
+        // 「未設定または空」のときだけ .env の値を適用する（非空のプロセス環境は上書きしない）。
+        $prior = getenv($k);
+
+        if ($prior !== false && trim((string) $prior) !== '') {
+            continue;
         }
+
+        putenv("{$k}={$v}");
+        $_ENV[$k] = $v;
     }
 }
