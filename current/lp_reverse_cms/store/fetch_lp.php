@@ -90,35 +90,45 @@ try {
         json_encode($failedList, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
     );
 
-    // Count downloaded assets by type (unique local paths)
+    // Count downloaded assets by type (unique local paths in asset_map)
+    /** @var array{css:int,img:int,js:int,fonts:int} $counts */
     $counts = ['css' => 0, 'img' => 0, 'js' => 0, 'fonts' => 0];
     $seen   = [];
-    foreach ($assetMap as $localPath) {
-        $lp = (string) $localPath;
-        if (isset($seen[$lp])) {
+    $uncategorized = 0;
+    foreach ($assetMap as $_url => $localPath) {
+        $canon = strtolower(str_replace('\\', '/', trim((string) $localPath, '/')));
+        if ($canon === '' || isset($seen[$canon])) {
             continue;
         }
-        $seen[$lp] = true;
+        $seen[$canon] = true;
+        $norm         = '/' . $canon . '/';
+
+        $bucketed = false;
         foreach (array_keys($counts) as $t) {
-            if (str_contains($lp, '/assets/' . $t . '/')) {
-                $counts[$t]++;
+            if (preg_match('#/assets/' . preg_quote($t, '#') . '/#', $norm)) {
+                ++$counts[$t];
+                $bucketed = true;
                 break;
             }
+        }
+        if (!$bucketed) {
+            ++$uncategorized;
         }
     }
 
     echo json_encode([
-        'success'       => true,
-        'http_code'     => $result['http_code'],
-        'final_url'     => $finalUrl,
-        'html_size'     => strlen($html),
-        'asset_total'   => count($seen),
-        'asset_css'     => $counts['css'],
-        'asset_img'     => $counts['img'],
-        'asset_js'      => $counts['js'],
-        'asset_fonts'   => $counts['fonts'],
-        'fetch_failed'  => count($failedList),
-        'message'       => 'HTML・CSS・画像・フォントの取得が完了しました。',
+        'success'            => true,
+        'http_code'          => $result['http_code'],
+        'final_url'          => $finalUrl,
+        'html_size'          => strlen($html),
+        'asset_total'        => count($seen),
+        'asset_css'          => $counts['css'],
+        'asset_img'          => $counts['img'],
+        'asset_js'           => $counts['js'],
+        'asset_fonts'        => $counts['fonts'],
+        'asset_uncategorized'=> $uncategorized,
+        'fetch_failed'       => count($failedList),
+        'message'            => 'HTML・CSS・画像・フォントの取得が完了しました。',
     ]);
 
 } catch (Throwable $e) {

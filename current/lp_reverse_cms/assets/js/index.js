@@ -479,13 +479,19 @@
       const img     = fetchRes.asset_img    ?? 0;
       const js      = fetchRes.asset_js     ?? 0;
       const fonts   = fetchRes.asset_fonts  ?? 0;
+      const uncat   = fetchRes.asset_uncategorized ?? 0;
       const failed  = fetchRes.fetch_failed ?? 0;
       const total   = fetchRes.asset_total  ?? 0;
 
+      const buckets = `CSS ${css} / 画像 ${img} / JS ${js} / フォント ${fonts}${
+        Number(uncat) > 0 ? ` / 未分類 ${uncat}` : ''
+      }`;
       const failNote = failed > 0 ? ` / 失敗 ${failed}件（debug.php で確認）` : '';
+      const totalExplain =
+        '（計 ' + total + '＝重複省略後のアセットファイル保存先の一意数）';
       setProgState(
         progFetch, 'done',
-        `HTML ${htmlKb} KB | CSS ${css} / 画像 ${img} / JS ${js} / フォント ${fonts}（計 ${total}）${failNote}`
+        `HTML ${htmlKb} KB | ${buckets}${totalExplain}${failNote}`
       );
       resetAnalyzeProgressUi();
       progAnalyzeBarWrap?.classList.remove('d-none');
