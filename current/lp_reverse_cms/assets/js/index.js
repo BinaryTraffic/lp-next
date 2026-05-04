@@ -1123,6 +1123,68 @@
     }
   }
 
+  function bindCloneImageZipPanel() {
+    const dl = document.getElementById('btnCloneImagesZipDl');
+    const btnUp = document.getElementById('btnCloneImagesZipUpload');
+    const inp = document.getElementById('cloneImagesZipUploadInp');
+    if (!dl && !btnUp && !inp) {
+      return;
+    }
+
+    dl?.addEventListener('click', () => {
+      window.location.href = 'store/export_clone_images_zip.php';
+    });
+
+    btnUp?.addEventListener('click', () => inp?.click());
+
+    inp?.addEventListener('change', async () => {
+      const file = inp.files && inp.files[0];
+      inp.value = '';
+      if (!file) {
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('pack', file);
+
+      try {
+        const res = await fetch('store/import_clone_images_zip.php', {
+          method: 'POST',
+          credentials: 'same-origin',
+          body: fd,
+        });
+        let data = {};
+
+        try {
+          data = await res.json();
+        } catch {
+          showToast('サーバ応答を解釈できません', 'danger');
+
+          return;
+        }
+
+        if (!data.ok) {
+          showToast(String(data.error || `HTTP ${res.status}`), 'danger');
+
+          return;
+        }
+
+        const n = typeof data.applied === 'number' ? data.applied : 0;
+        const errs = Array.isArray(data.errors) ? data.errors.filter(Boolean) : [];
+        let msg = `${n} 件の画像を置き換えました。`;
+        if (errs.length > 0) {
+          msg += ` 警告あり: ${errs.slice(0, 3).join(' — ')}${errs.length > 3 ? '…' : ''}`;
+          showToast(msg, 'warning');
+        } else {
+          showToast(msg, 'success');
+        }
+      } catch {
+
+        showToast('通信に失敗しました', 'danger');
+      }
+    });
+  }
+
   function openDiagModal() {
     const diagContent = document.getElementById('diagContent');
     if (!diagContent) return;
@@ -1151,6 +1213,7 @@
     bindImagePreviews();
     bindImageMemoRefine();
     bindImageReplaceModal();
+    bindCloneImageZipPanel();
 
     // Diagnostic modal button
     const btnDiag = document.getElementById('btnDiag');
