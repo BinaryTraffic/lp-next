@@ -580,29 +580,36 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           <i class="bi bi-arrow-counterclockwise me-1"></i>リセット
         </button>
         <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCloneImagesZipDl"
-          title="クローン由来の画像（assets/img と custom_images）を Deflate ZIP でダウンロード"
+          title="<?= htmlspecialchars(
+              '外部編集用。assets/img/… と、このクローンの sites/<clone>/custom_images/… を、ワークスペースと同じ相対パスで Deflate ZIP にまとめます。clone_images_manifest.json にファイル一覧が入ります。',
+              ENT_QUOTES,
+              'UTF-8',
+          ) ?>"
           <?= !$hasStructure ? 'disabled' : '' ?>>
           <i class="bi bi-file-earmark-zip me-1"></i>画像ZIP
         </button>
         <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCloneImagesZipUpload"
-          title="ZIP を展開済み同等の構造・またはユニークなファイル名のみで上書き。保存後「保存＆LP生成」を実行してください。"
+          title="<?= htmlspecialchars(
+              '編集後の ZIP で上書き。エクスポートと同じフォルダ構成にするか、同名画像が1つだけのときは ZIP 直下のファイル名のみでも可。終わったら（必要なら）右の「保存＆LP生成」で HTML に反映してください。',
+              ENT_QUOTES,
+              'UTF-8',
+          ) ?>"
           <?= !$hasStructure ? 'disabled' : '' ?>>
           <i class="bi bi-upload me-1"></i>ZIP反映
         </button>
         <input type="file" id="cloneImagesZipUploadInp" accept=".zip,application/zip" class="d-none">
-        <button class="btn btn-primary px-4" id="btnSaveGenerate">
+        <button class="btn btn-primary px-4" id="btnSaveGenerate"
+          title="<?= htmlspecialchars(
+              '入力を保存し output/index.html を生成。画像 ZIP を差し替えたあと、変更を HTML に反映する場合も実行してください。',
+              ENT_QUOTES,
+              'UTF-8',
+          ) ?>">
           <i class="bi bi-lightning-charge-fill me-1"></i>保存＆LP生成
         </button>
       </div>
     </div>
 
     <!-- Edit form (rendered by PHP template) -->
-    <?php if ($hasStructure): ?>
-    <div class="small text-muted border rounded px-3 py-2 mb-3 bg-white">
-      <strong>外部編集用画像一式：</strong>「画像ZIP」で <code>assets/img/…</code> とこのクローンの <code>sites/&lt;clone&gt;/custom_images/…</code> を名前付きで取得できます。<br>
-      ZIP 差し替え後は<strong>ZIP反映</strong>→（必要なら）<strong>保存＆LP生成</strong>で HTML に反映させてください。
-    </div>
-    <?php endif; ?>
     <div id="editFormWrapper">
       <?php if ($hasStructure): ?>
         <?php include __DIR__ . '/template/editPage.php'; ?>
