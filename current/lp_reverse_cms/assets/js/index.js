@@ -1063,6 +1063,29 @@
   }
 
   // -----------------------------------------------------------------------
+  // Bootstrap dark tooltips (wrap + tabindex for disabled-safe hover)
+  // -----------------------------------------------------------------------
+  function initLpCmsBootstrapTooltips() {
+    if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip) {
+      return;
+    }
+
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(raw => {
+      if (!(raw instanceof HTMLElement)) {
+        return;
+      }
+      try {
+        bootstrap.Tooltip.getOrCreateInstance(raw, {
+          boundary: document.body,
+          trigger: 'hover focus',
+        });
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------------
   // Diagnostics
   // -----------------------------------------------------------------------
   async function loadDiagnostics(targetEl) {
@@ -1214,6 +1237,7 @@
     bindImageMemoRefine();
     bindImageReplaceModal();
     bindCloneImageZipPanel();
+    initLpCmsBootstrapTooltips();
 
     // Diagnostic modal button
     const btnDiag = document.getElementById('btnDiag');

@@ -154,3 +154,43 @@ body {
   .step-label { display: none; }
   .step-connector { margin-bottom: 14px; }
 }
+
+/* ---------- Dark balloon tooltips (Bootstrap 5 / Popper) ---------- */
+.tooltip.lp-cms-tooltip .tooltip-inner {
+  max-width: min(360px, 90vw);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #f8f9fa;
+  background-color: #343a40;
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
+}
+
+.tooltip.lp-cms-tooltip.bs-tooltip-top .tooltip-arrow::before {
+  border-top-color: #343a40;
+}
+.tooltip.lp-cms-tooltip.bs-tooltip-bottom .tooltip-arrow::before {
+  border-bottom-color: #343a40;
+}
+.tooltip.lp-cms-tooltip.bs-tooltip-start .tooltip-arrow::before {
+  border-left-color: #343a40;
+}
+.tooltip.lp-cms-tooltip.bs-tooltip-end .tooltip-arrow::before {
+  border-right-color: #343a40;
+}
+
+.lp-cms-btn-icon {
+  font-size: 0.75rem;
+  opacity: 0.82;
+}
+
+.lp-reverse-tooltip-outline:focus {
+  outline: none;
+}
+.lp-reverse-tooltip-outline:focus-visible {
+  outline: 2px solid rgba(13, 110, 253, 0.6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

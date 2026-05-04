@@ -246,7 +246,7 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
   <!-- Custom admin styles -->
-  <link rel="stylesheet" href="assets/css/index.css">
+  <link rel="stylesheet" href="assets/css/index.css?v=<?= rawurlencode(APP_BUILD) ?>">
 </head>
 <body class="bg-light">
 
@@ -513,9 +513,16 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
               <input type="url" id="lpUrlInput" class="form-control"
                      placeholder="https://example.com/lp"
                      value="<?= htmlspecialchars($sourceUrl, ENT_QUOTES) ?>">
-              <button id="btnFetchAnalyze" class="btn btn-primary px-4">
-                <i class="bi bi-search me-1"></i>解析する
-              </button>
+              <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
+                data-bs-toggle="tooltip"
+                data-bs-placement="bottom"
+                data-bs-custom-class="lp-cms-tooltip"
+                title="<?= htmlspecialchars('入力した URL の HTML と CSS／画像・アセットを取得します。終わったら自動でページ構造の解析へ進みます。', ENT_QUOTES, 'UTF-8') ?>">
+                <button id="btnFetchAnalyze" type="button" class="btn btn-primary px-4 d-inline-flex align-items-center">
+                  <i class="bi bi-search"></i><span class="ms-1">解析する</span>
+                  <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
+                </button>
+              </span>
             </div>
 
             <!-- Progress steps inside fetch flow -->
@@ -572,40 +579,72 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 
     <!-- Toolbar -->
     <div class="d-flex align-items-center justify-content-between mb-3">
-      <button class="btn btn-sm btn-outline-secondary" id="btnBackToStep1">
-        <i class="bi bi-arrow-left me-1"></i>別のURLを解析
-      </button>
-      <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-secondary" id="btnResetClient">
-          <i class="bi bi-arrow-counterclockwise me-1"></i>リセット
+      <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
+        data-bs-toggle="tooltip"
+        data-bs-placement="bottom"
+        data-bs-custom-class="lp-cms-tooltip"
+        title="<?= htmlspecialchars('Step1 に戻り、別の URL で HTML を取り直します（現在ワークスペースの取得データは置き換わります）。', ENT_QUOTES, 'UTF-8') ?>">
+        <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" id="btnBackToStep1">
+          <i class="bi bi-arrow-left"></i><span class="ms-1">別のURLを解析</span>
+          <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
         </button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCloneImagesZipDl"
+      </span>
+      <div class="d-flex gap-2 align-items-center flex-wrap">
+        <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
+          data-bs-toggle="tooltip"
+          data-bs-placement="bottom"
+          data-bs-custom-class="lp-cms-tooltip"
+          title="<?= htmlspecialchars('画面上の入力欄を空にします。サーバー側の解析結果や保存済み client_data は自動では元に戻りません。', ENT_QUOTES, 'UTF-8') ?>">
+          <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" id="btnResetClient">
+            <i class="bi bi-arrow-counterclockwise"></i><span class="ms-1">リセット</span>
+            <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
+          </button>
+        </span>
+        <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
+          data-bs-toggle="tooltip"
+          data-bs-placement="bottom"
+          data-bs-custom-class="lp-cms-tooltip"
           title="<?= htmlspecialchars(
               '外部編集用。assets/img/… と、このクローンの sites/<clone>/custom_images/… を、ワークスペースと同じ相対パスで Deflate ZIP にまとめます。clone_images_manifest.json にファイル一覧が入ります。',
               ENT_QUOTES,
               'UTF-8',
-          ) ?>"
-          <?= !$hasStructure ? 'disabled' : '' ?>>
-          <i class="bi bi-file-earmark-zip me-1"></i>画像ZIP
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCloneImagesZipUpload"
+          ) ?>">
+          <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" id="btnCloneImagesZipDl"
+            <?= !$hasStructure ? 'disabled' : '' ?>>
+            <i class="bi bi-file-earmark-zip"></i><span class="ms-1">画像ZIP</span>
+            <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
+          </button>
+        </span>
+        <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
+          data-bs-toggle="tooltip"
+          data-bs-placement="bottom"
+          data-bs-custom-class="lp-cms-tooltip"
           title="<?= htmlspecialchars(
               '編集後の ZIP で上書き。エクスポートと同じフォルダ構成にするか、同名画像が1つだけのときは ZIP 直下のファイル名のみでも可。終わったら（必要なら）右の「保存＆LP生成」で HTML に反映してください。',
               ENT_QUOTES,
               'UTF-8',
-          ) ?>"
-          <?= !$hasStructure ? 'disabled' : '' ?>>
-          <i class="bi bi-upload me-1"></i>ZIP反映
-        </button>
+          ) ?>">
+          <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" id="btnCloneImagesZipUpload"
+            <?= !$hasStructure ? 'disabled' : '' ?>>
+            <i class="bi bi-upload"></i><span class="ms-1">ZIP反映</span>
+            <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
+          </button>
+        </span>
         <input type="file" id="cloneImagesZipUploadInp" accept=".zip,application/zip" class="d-none">
-        <button class="btn btn-primary px-4" id="btnSaveGenerate"
+        <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
+          data-bs-toggle="tooltip"
+          data-bs-placement="bottom"
+          data-bs-custom-class="lp-cms-tooltip"
           title="<?= htmlspecialchars(
               '入力を保存し output/index.html を生成。画像 ZIP を差し替えたあと、変更を HTML に反映する場合も実行してください。',
               ENT_QUOTES,
               'UTF-8',
           ) ?>">
-          <i class="bi bi-lightning-charge-fill me-1"></i>保存＆LP生成
-        </button>
+          <button type="button" class="btn btn-primary px-4 d-inline-flex align-items-center" id="btnSaveGenerate">
+            <i class="bi bi-lightning-charge-fill"></i><span class="ms-1">保存＆LP生成</span>
+            <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1 ps-1" aria-hidden="true"></i>
+          </button>
+        </span>
       </div>
     </div>
 
