@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 /**
- * data/ws_* 単位で auth_users.json を保持（クローンとは独立したセッションワークスペース）。
+ * CMS 直下 data/auth_users.json にユーザーを保持（全ブラウザセッションで共有）。
+ * 旧実装の data/ws_{id}/auth_users.json は初回読込時に自動マイグレーションする。
  */
 final class UserRegistry
 {
@@ -320,6 +321,8 @@ final class UserRegistry
     /** @return array{users: list<mixed>} */
     private function load(): array
     {
+        $this->migrateLegacyPerWorkspaceRegistriesIfNeeded();
+
         $dir = dirname($this->filePath);
 
         if (!is_dir($dir)) {
@@ -333,6 +336,51 @@ final class UserRegistry
         $raw = json_decode((string) file_get_contents($this->filePath), true);
 
         return is_array($raw) ? $this->normalizeRoot($raw) : ['users' => []];
+    }
+
+    /**
+     * 旧: data/ws_{session}/auth_users.json → 共有 data/auth_users.json へ一度だけ集約。
+     */
+    private function migrateLegacyPerWorkspaceRegistriesIfNeeded(): void
+    {
+        if (is_file($this->filePath)) {
+            $probe = json_decode((string) file_get_contents($this->filePath), true);
+            if (is_array($probe) && isset($probe['users']) && is_array($probe['users']) && $probe['users'] !== []) {
+                return;
+            }
+        }
+
+        $parent = dirname($this->filePath);
+        $files  = glob($parent . '/ws_*/auth_users.json') ?: [];
+        if ($files === []) {
+            return;
+        }
+
+        /** @var array<string, array<string, mixed>> $byEmail */
+        $byEmail = [];
+
+        foreach ($files as $path) {
+            $raw = json_decode((string) file_get_contents($path), true);
+            if (!is_array($raw) || !isset($raw['users']) || !is_array($raw['users'])) {
+                continue;
+            }
+            foreach ($raw['users'] as $u) {
+                if (!is_array($u)) {
+                    continue;
+                }
+                $em = strtolower(trim((string) ($u['email'] ?? '')));
+                if ($em === '') {
+                    continue;
+                }
+                $byEmail[$em] = $u;
+            }
+        }
+
+        if ($byEmail === []) {
+            return;
+        }
+
+        $this->save(['users' => array_values($byEmail)]);
     }
 
     /**

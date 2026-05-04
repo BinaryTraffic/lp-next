@@ -17,7 +17,7 @@ define('APP_BUILD',   date('Ymd', filemtime(__FILE__)));
 
 $outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
 $cmsRootAuth    = __DIR__;
-$userDataDirUx  = LpWorkspace::dataDir($cmsRootAuth);
+$userDataDirUx  = LpWorkspace::authRegistryDir($cmsRootAuth);
 $registryUx     = new UserRegistry($userDataDirUx);
 
 /** getenv が空でも .env が $_ENV に入っている環境向け（FPM の取り込み差異） */

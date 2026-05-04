@@ -24,7 +24,7 @@ function lp_reverse_resolve_workspace_editor(string $cmsRoot)
         return false;
     }
 
-    $reg = new UserRegistry(LpWorkspace::dataDir($cmsRoot));
+    $reg = new UserRegistry(LpWorkspace::authRegistryDir($cmsRoot));
     $r   = $reg->getRole($em);
 
     return ($r === 'super_admin' || $r === 'admin') ? $em : false;

@@ -81,7 +81,7 @@ if ($action === 'add_user') {
         }
     }
 
-    $dataDir  = LpWorkspace::dataDir($cmsRoot);
+    $dataDir  = LpWorkspace::authRegistryDir($cmsRoot);
     $registry = new UserRegistry($dataDir);
 
     $roleApproved = ($addStatus === 'approved')
@@ -132,7 +132,7 @@ if ($action !== 'change_role' && $action !== 'remove') {
     exit;
 }
 
-$dataDir  = LpWorkspace::dataDir($cmsRoot);
+$dataDir  = LpWorkspace::authRegistryDir($cmsRoot);
 $registry = new UserRegistry($dataDir);
 
 if ($action === 'change_role') {

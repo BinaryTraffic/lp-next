@@ -75,7 +75,7 @@ if ($superAdminLower !== '' && $email === $superAdminLower) {
     exit;
 }
 
-$dataDir  = LpWorkspace::dataDir($cmsRoot);
+$dataDir  = LpWorkspace::authRegistryDir($cmsRoot);
 $registry = new UserRegistry($dataDir);
 
 if ($action === 'approve') {

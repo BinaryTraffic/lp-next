@@ -13,7 +13,7 @@ lp_reverse_load_env();
 require_once $cmsRootPreview . '/lib/LpWorkspace.php';
 require_once $cmsRootPreview . '/lib/UserRegistry.php';
 
-$workspaceDataDirPv = LpWorkspace::dataDir($cmsRootPreview);
+$workspaceDataDirPv = LpWorkspace::authRegistryDir($cmsRootPreview);
 $registryPv        = new UserRegistry($workspaceDataDirPv);
 
 $sessionAuthPv = isset($_SESSION['auth']) && is_array($_SESSION['auth']) ? $_SESSION['auth'] : null;

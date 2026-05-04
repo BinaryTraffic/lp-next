@@ -66,6 +66,17 @@ final class LpWorkspace
             . DIRECTORY_SEPARATOR;
     }
 
+    /**
+     * auth_users.json の所在（ワークスペース ws_* とは別。全セッションで共有）。
+     */
+    public static function authRegistryDir(string $cmsRoot): string
+    {
+        return rtrim($cmsRoot, DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR
+            . 'data'
+            . DIRECTORY_SEPARATOR;
+    }
+
     public static function outputDir(string $cmsRoot): string
     {
         self::bootstrap();

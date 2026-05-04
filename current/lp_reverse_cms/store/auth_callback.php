@@ -16,7 +16,7 @@ require_once $cmsRoot . '/lib/UserRegistry.php';
 require_once $cmsRoot . '/lib/LpWorkspace.php';
 
 $auth     = new GoogleAuth();
-$dataDir  = LpWorkspace::dataDir($cmsRoot);
+$dataDir  = LpWorkspace::authRegistryDir($cmsRoot);
 $registry = new UserRegistry($dataDir);
 
 $code   = isset($_GET['code']) ? (string) $_GET['code'] : '';
