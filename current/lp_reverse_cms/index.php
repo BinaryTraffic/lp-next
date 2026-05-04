@@ -721,6 +721,6 @@ window.LP_CMS = {
 </script>
 <?php endif; ?>
 
-<script src="assets/js/index.js"></script>
+<script src="assets/js/index.js?v=<?= rawurlencode(APP_BUILD) ?>"></script>
 </body>
 </html>
