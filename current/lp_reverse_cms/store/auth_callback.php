@@ -24,7 +24,7 @@ $state  = isset($_GET['state']) ? (string) $_GET['state'] : '';
 $error  = isset($_GET['error']) ? (string) $_GET['error'] : '';
 
 if ($error !== '' || $code === '') {
-    header('Location: ../index.php?auth_error=' . rawurlencode('認証がキャンセルされました'));
+    header('Location: ../index.php?step=1&auth_error=' . rawurlencode('認証がキャンセルされました'));
 
     exit;
 }
@@ -50,14 +50,15 @@ try {
 
     if ($effective === 'preview') {
         header('Location: ../preview.php');
-    } elseif ($effective === 'pending' || $effective === 'rejected') {
-        header('Location: ../index.php');
-    } else {
-        header('Location: ../index.php');
+
+        exit;
     }
+
+    header('Location: ../index.php?step=1');
+
     exit;
 
 } catch (RuntimeException $e) {
-    header('Location: ../index.php?auth_error=' . rawurlencode($e->getMessage()));
+    header('Location: ../index.php?step=1&auth_error=' . rawurlencode($e->getMessage()));
     exit;
 }

@@ -231,7 +231,13 @@ if (file_exists($clientFile)) {
 }
 
 // Determine which step to show on initial load (1 = fetch, 2 = edit, 3 = done)
-$initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
+// ?step=1–3 があれば最優先（OAuth 復帰で Step1 に固定したい場合など）。
+$stepQs = isset($_GET['step']) ? (int) $_GET['step'] : 0;
+if ($stepQs >= 1 && $stepQs <= 3) {
+    $initialStep = $stepQs;
+} else {
+    $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
+}
 
 ?>
 <!DOCTYPE html>
