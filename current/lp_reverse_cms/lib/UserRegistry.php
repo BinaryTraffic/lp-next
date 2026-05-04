@@ -14,7 +14,12 @@ final class UserRegistry
     public function __construct(string $dataDir)
     {
         $this->filePath   = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR . 'auth_users.json';
-        $this->superAdmin = (string) getenv('CMS_SUPER_ADMIN');
+        $v                = getenv('CMS_SUPER_ADMIN');
+        $this->superAdmin = (is_string($v) && trim($v) !== '') ? trim($v) : '';
+        if ($this->superAdmin === '') {
+            $e = $_ENV['CMS_SUPER_ADMIN'] ?? null;
+            $this->superAdmin = (is_string($e) && trim($e) !== '') ? trim($e) : '';
+        }
     }
 
     /**
@@ -71,6 +76,76 @@ final class UserRegistry
             'requested_at' => gmdate('c'),
         ];
         $this->save($data);
+    }
+
+    /**
+     * 管理者によるアカウント事前登録（OAuth 履歴なし）。
+     *
+     * @param 'pending'|'approved' $status
+     * @param ?'admin'|'preview'    $roleForApproved approved のときのみ必須
+     *
+     * @return 'ok'|'invalid_email'|'duplicate'|'super_admin_conflict'|'invalid_role'|'invalid_status'
+     */
+    public function addManualUser(string $email, string $displayName, string $status, ?string $roleForApproved, string $addedBy): string
+    {
+        $emailNorm = strtolower(trim($email));
+
+        if ($emailNorm === '' || !filter_var($emailNorm, FILTER_VALIDATE_EMAIL)) {
+            return 'invalid_email';
+        }
+
+        if ($this->superAdmin !== '' && $emailNorm === strtolower(trim($this->superAdmin))) {
+            return 'super_admin_conflict';
+        }
+
+        if ($this->findUser($emailNorm) !== null) {
+            return 'duplicate';
+        }
+
+        $st = strtolower(trim($status));
+
+        if ($st === 'pending') {
+            $name = trim($displayName) !== '' ? trim($displayName) : $emailNorm;
+            $data = $this->load();
+            $data['users'][] = [
+                'email'        => $emailNorm,
+                'name'         => $name,
+                'role'         => null,
+                'status'       => 'pending',
+                'requested_at' => gmdate('c'),
+                'added_via'    => 'manual',
+                'added_by'     => strtolower(trim($addedBy)),
+            ];
+            $this->save($data);
+
+            return 'ok';
+        }
+
+        if ($st !== 'approved') {
+            return 'invalid_status';
+        }
+
+        if ($roleForApproved === null || !in_array($roleForApproved, ['admin', 'preview'], true)) {
+            return 'invalid_role';
+        }
+
+        $name = trim($displayName) !== '' ? trim($displayName) : $emailNorm;
+        $who  = strtolower(trim($addedBy));
+        $data = $this->load();
+
+        $data['users'][] = [
+            'email'        => $emailNorm,
+            'name'         => $name,
+            'role'         => $roleForApproved,
+            'status'       => 'approved',
+            'requested_at' => gmdate('c'),
+            'approved_at'  => gmdate('c'),
+            'approved_by'  => $who,
+            'added_via'    => 'manual',
+        ];
+        $this->save($data);
+
+        return 'ok';
     }
 
     /** @param 'admin'|'preview' $role */

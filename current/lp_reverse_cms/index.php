@@ -304,6 +304,48 @@ $initialStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
+        <div class="card border-secondary mb-4">
+          <div class="card-header py-2 bg-light small fw-semibold">
+            <i class="bi bi-person-plus me-1"></i>アカウントを追加（事前登録）
+          </div>
+          <div class="card-body py-3">
+            <p class="small text-muted mb-3 mb-md-2">
+              Google で初回ログインする前にメールで登録できます。承認済みならログイン後すぐ利用、「承認待ち」なら一覧から承認します。
+            </p>
+            <div class="row g-2 align-items-end flex-wrap">
+              <div class="col-12 col-md-4">
+                <label class="form-label small mb-0 text-secondary" for="umAddEmail">メール<span class="text-danger">*</span></label>
+                <input type="email" id="umAddEmail" class="form-control form-control-sm" placeholder="user@example.com" autocomplete="off">
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label small mb-0 text-secondary" for="umAddName">表示名（任意）</label>
+                <input type="text" id="umAddName" class="form-control form-control-sm" placeholder="名前" autocomplete="off">
+              </div>
+              <div class="col-6 col-md-2">
+                <label class="form-label small mb-0 text-secondary" for="umAddStatus">状態</label>
+                <select id="umAddStatus" class="form-select form-select-sm">
+                  <option value="approved" selected>承認済み</option>
+                  <option value="pending">承認待ち</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-2" id="umAddRoleWrap">
+                <label class="form-label small mb-0 text-secondary" for="umAddRole">ロール</label>
+                <select id="umAddRole" class="form-select form-select-sm">
+                  <option value="preview" selected>preview</option>
+                  <?php if ($currentRoleUx === 'super_admin'): ?>
+                  <option value="admin">admin</option>
+                  <?php endif; ?>
+                </select>
+              </div>
+              <div class="col-12 col-md-auto">
+                <button type="button" class="btn btn-sm btn-primary btn-um" id="btnUmAdd" data-um="manual-add">
+                  <i class="bi bi-plus-lg me-1"></i>追加
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <h6 class="text-secondary small text-uppercase">承認待ち</h6>
         <div class="table-responsive mb-4 border rounded">
           <table class="table table-sm table-striped mb-0 align-middle">
@@ -704,6 +746,30 @@ window.LP_CMS = {
     const tr = btn.closest ? btn.closest('tr') : null;
     const sel = tr ? tr.querySelector('.role-sel') : null;
 
+    if (um === 'manual-add') {
+      const emEl = document.getElementById('umAddEmail');
+      const nmEl = document.getElementById('umAddName');
+      const stEl = document.getElementById('umAddStatus');
+      const rlEl = document.getElementById('umAddRole');
+      const em = emEl ? String(emEl.value || '').trim() : '';
+      if (!em) {
+        window.alert('メールアドレスを入力してください');
+
+        return;
+      }
+      const payload = {
+        action: 'add_user',
+        email: em,
+        name: nmEl ? String(nmEl.value || '').trim() : '',
+        status: stEl ? (stEl.value || 'approved') : 'approved',
+        role: rlEl ? (rlEl.value || 'preview') : 'preview',
+      };
+
+      void pj('store/user_manage.php', payload);
+
+      return;
+    }
+
     if (um === 'pending-approve') {
       void pj('store/user_approve.php', { action: 'approve', email: email, role: role || 'preview' });
     } else if (um === 'pending-reject') {
@@ -717,6 +783,20 @@ window.LP_CMS = {
       void pj('store/user_manage.php', { action: 'change_role', email: email, role: nr });
     }
   });
+
+  (function syncUmAddForm() {
+    const umSt = document.getElementById('umAddStatus');
+    const umRw = document.getElementById('umAddRoleWrap');
+    const umRl = document.getElementById('umAddRole');
+    function sync() {
+      if (!umSt || !umRw || !umRl) return;
+      const pen = umSt.value === 'pending';
+      umRw.hidden = pen;
+      umRl.disabled = pen;
+    }
+    if (umSt) umSt.addEventListener('change', sync);
+    sync();
+  })();
 })();
 </script>
 <?php endif; ?>

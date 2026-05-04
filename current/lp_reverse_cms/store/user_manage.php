@@ -32,12 +32,81 @@ if ($sessRole === '' || !in_array($sessRole, ['super_admin', 'admin'], true)) {
     exit;
 }
 
-$superAdminLower = strtolower(trim((string) getenv('CMS_SUPER_ADMIN')));
+$superRaw        = getenv('CMS_SUPER_ADMIN');
+$superRaw        = (is_string($superRaw) && trim($superRaw) !== '') ? trim($superRaw) : '';
+if ($superRaw === '') {
+    $e = $_ENV['CMS_SUPER_ADMIN'] ?? null;
+    $superRaw = (is_string($e) && trim($e) !== '') ? trim($e) : '';
+}
+$superAdminLower = strtolower($superRaw);
 $payload         = (array) (json_decode((string) file_get_contents('php://input'), true) ?? []);
 /** @phpstan-ignore-next-line */
 $action  = (string) ($payload['action'] ?? '');
 $email   = strtolower(trim((string) ($payload['email'] ?? '')));
 $newRole = strtolower(trim((string) ($payload['role'] ?? '')));
+
+if ($action === 'add_user') {
+    $name      = trim((string) ($payload['name'] ?? ''));
+    $addStatus = strtolower(trim((string) ($payload['status'] ?? 'approved')));
+    $addRole   = strtolower(trim((string) ($payload['role'] ?? 'preview')));
+
+    if ($email === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'email required'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($superAdminLower !== '' && $email === $superAdminLower) {
+        http_response_code(403);
+        echo json_encode(['error' => 'super_admin メールには追加できません'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if (!in_array($addStatus, ['pending', 'approved'], true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'status は pending または approved です'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($addStatus === 'approved') {
+        if (!in_array($addRole, ['admin', 'preview'], true)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'invalid role'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ($addRole === 'admin' && $sessRole !== 'super_admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'admin として追加できるのは super_admin のみです'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    }
+
+    $dataDir  = LpWorkspace::dataDir($cmsRoot);
+    $registry = new UserRegistry($dataDir);
+
+    $roleApproved = ($addStatus === 'approved')
+        ? (($addRole === 'admin') ? 'admin' : 'preview')
+        : null;
+
+    $code = $registry->addManualUser($email, $name, $addStatus, $roleApproved, $sessEmail !== '' ? $sessEmail : 'system');
+
+    if ($code !== 'ok') {
+        $map = [
+            'invalid_email'         => [400, 'メールアドレスの形式が正しくありません'],
+            'duplicate'             => [409, '既に登録されています'],
+            'super_admin_conflict'  => [403, 'super_admin メールには追加できません'],
+            'invalid_role'          => [400, 'invalid role'],
+            'invalid_status'        => [400, 'invalid status'],
+        ];
+        [$stat, $msg] = $map[$code] ?? [400, '追加に失敗しました'];
+        http_response_code($stat);
+        echo json_encode(['ok' => false, 'error' => $msg], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 if ($email === '') {
     http_response_code(400);
