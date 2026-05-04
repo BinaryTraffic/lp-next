@@ -85,8 +85,8 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
             return;
         }
         $den = max(1, $total);
-        /** 書き込み直前まで 92% までをツリー割当 */
-        $pct = min(92, round(92 * ($done / $den), 2));
+        /** 書き込み直前まで 50% までをツリー割当（残りは Mapper・画像メモ・保存で細分化） */
+        $pct = min(50, round(50 * ($done / $den), 2));
         $emitNd([
             'type'           => 'progress',
             'phase'          => $phase,
@@ -110,19 +110,12 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
     $emitNd([
         'type'      => 'progress',
         'phase'     => 'mapper',
-        'pct'       => 93,
+        'pct'       => 52,
         'detail_ja' => 'セクション詳細情報を整形しています',
     ]);
 
     $mapper    = new LpMapper();
     $structure = $mapper->enrich($structure);
-
-    $emitNd([
-        'type'      => 'progress',
-        'phase'     => 'memos',
-        'pct'       => 96,
-        'detail_ja' => '画像メモ付与を処理しています',
-    ]);
 
     lp_reverse_load_env();
     $assetMapPath = $dataDir . 'asset_map.json';
@@ -135,8 +128,49 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         }
     }
 
+    /** 画像メモは 52〜96% を対象枚数で進捗表示（固定96%に張り付かない） */
+    $memoPctLow  = 52;
+    $memoPctHigh = 96;
+    $memoSpan    = $memoPctHigh - $memoPctLow;
+
+    $memoProgressEmitted = false;
+    $memoProgressCb = function (int $memoDone, int $memoTotalIn) use (
+        $emitNd,
+        $streamProgress,
+        &$memoProgressEmitted,
+        $memoPctLow,
+        $memoSpan,
+        $memoPctHigh,
+    ): void {
+        if (!$streamProgress) {
+            return;
+        }
+        $memoProgressEmitted = true;
+        $denIn               = max(1, $memoTotalIn);
+        $pct                 = $memoPctLow + (int) round($memoSpan * ($memoDone / $denIn));
+        $pct                 = min($memoPctHigh, max($memoPctLow, $pct));
+        $emitNd([
+            'type'        => 'progress',
+            'phase'       => 'memos',
+            'pct'         => $pct,
+            'detail_ja'   => sprintf(
+                '画像メモ付与… %s / %s 件',
+                number_format($memoDone),
+                number_format($memoTotalIn)
+            ),
+            'memo_done'   => $memoDone,
+            'memo_total'  => $memoTotalIn,
+        ]);
+    };
+
     try {
-        $structure = lp_reverse_enrich_structure_image_text_memos($structure, dirname(__DIR__), $dataDir, $assetMap);
+        $structure = lp_reverse_enrich_structure_image_text_memos(
+            $structure,
+            dirname(__DIR__),
+            $dataDir,
+            $assetMap,
+            $memoProgressCb
+        );
     } catch (Throwable $e) {
         lp_reverse_analyze_append_log($dataDir, 'warning', 'lp_reverse_enrich_structure_image_text_memos failed', [
             'exception' => $e::class,
@@ -149,6 +183,15 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
                 'message' => $e::class . ': ' . $e->getMessage(),
             ];
         }
+    }
+
+    if ($streamProgress && !$memoProgressEmitted) {
+        $emitNd([
+            'type'      => 'progress',
+            'phase'     => 'memos',
+            'pct'       => 96,
+            'detail_ja' => '画像メモ（対象なしまたはスキップ）',
+        ]);
     }
 
     $diag = $structure['parse_diagnostics'] ?? null;

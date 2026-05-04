@@ -11,6 +11,7 @@ require_once __DIR__ . '/claude_vision_analyze.php';
 
 /**
  * @param array<string, string> $assetMap LpAssetDownloader の map（絶対URL => output 相対）
+ * @param (callable(int, int): void)|null $memoProgressCb 画像メモ処理の進捗（処理済み件数 / 対象総数）
  *
  * @return array<string, mixed> 変更後の $structure
  */
@@ -19,6 +20,7 @@ function lp_reverse_enrich_structure_image_text_memos(
     string $cmsRoot,
     string $dataDir,
     array $assetMap,
+    ?callable $memoProgressCb = null,
 ): array {
     $apiKey = trim((string) (getenv('ANTHROPIC_API_KEY') ?: ''));
     if ($apiKey === '' || getenv('LP_IMAGE_TEXT_MEMO_DISABLE') === '1') {
@@ -38,6 +40,26 @@ function lp_reverse_enrich_structure_image_text_memos(
         ? max(50_000, min(500_000_000, (int) $rawMemoBytes))
         : 500_000_000;
 
+    $memoTotal = 0;
+    foreach ($structure['sections'] ?? [] as $secCount) {
+        foreach ($secCount['elements'] ?? [] as $elCount) {
+            if (($elCount['type'] ?? '') !== 'image') {
+                continue;
+            }
+            $srcCount = trim((string) ($elCount['original_src'] ?? ''));
+            if ($srcCount === '' || preg_match('#favicon\\.ico#i', $srcCount)) {
+                continue;
+            }
+            $memoTotal++;
+        }
+    }
+
+    $denMemo       = max(1, $memoTotal);
+    $memoProcessed = 0;
+    if ($memoProgressCb !== null && $memoTotal > 0) {
+        $memoProgressCb(0, $denMemo);
+    }
+
     $done = 0;
     foreach ($structure['sections'] ?? [] as &$section) {
         foreach ($section['elements'] ?? [] as &$el) {
@@ -47,22 +69,34 @@ function lp_reverse_enrich_structure_image_text_memos(
             if (!isset($el['image_embedded_text_memo'])) {
                 $el['image_embedded_text_memo'] = '';
             }
-            if ($done >= $maxImages) {
-                continue;
-            }
 
             $src = trim((string) ($el['original_src'] ?? ''));
             if ($src === '' || preg_match('#favicon\\.ico#i', $src)) {
                 continue;
             }
 
+            $bumpMemo = static function () use (&$memoProcessed, $denMemo, $memoProgressCb): void {
+                if ($memoProgressCb === null) {
+                    return;
+                }
+                $memoProcessed++;
+                $memoProgressCb($memoProcessed, $denMemo);
+            };
+
+            if ($done >= $maxImages) {
+                $bumpMemo();
+                continue;
+            }
+
             $resolved = lp_reverse_load_image_bin_for_memo($src, $outputDir, $assetMap, $maxBytes, $cmsRoot);
             if ($resolved === null) {
+                $bumpMemo();
                 continue;
             }
 
             $mime = $resolved['mime'];
             if (!in_array($mime, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)) {
+                $bumpMemo();
                 continue;
             }
 
@@ -110,6 +144,8 @@ function lp_reverse_enrich_structure_image_text_memos(
                     'estimated_usd' => 0.0,
                 ]);
             }
+
+            $bumpMemo();
         }
         unset($el);
     }
