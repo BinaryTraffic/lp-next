@@ -1,4 +1,4 @@
-# LP Reverse CMS — root .htaccess
+# Site Reverse CMS — root .htaccess
 
 # Deny access to PHP lib files directly
 <FilesMatch "^(LpFetcher|LpAnalyzer|LpMapper|LpGenerator|GoogleAuth|UserRegistry|session_bootstrap|LpCloneImagePack|cms_editor_auth)\.php$">

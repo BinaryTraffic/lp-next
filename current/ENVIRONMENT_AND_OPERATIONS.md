@@ -1,4 +1,4 @@
-# 環境・起動・セキュリティ・運用（LP Reverse CMS / LP-NEXT）
+# 環境・起動・セキュリティ・運用（Site Reverse CMS / LP-NEXT）
 
 [LP-NEXT ルート README](README.md) の補足として、**本番・共同開発・障害切り分け**に使う要点を集約しています。Markdown は [GitHub 上](https://github.com/BinaryTraffic/lp-next) かエディタで読む習慣にするとよいです。
 

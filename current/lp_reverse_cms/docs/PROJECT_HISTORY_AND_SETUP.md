@@ -1,9 +1,9 @@
-# LP Reverse CMS — 開発経緯・成果とゼロからの構築手順
+# Site Reverse CMS — 開発経緯・成果とゼロからの構築手順
 
 本ドキュメントは、これまでの実装の経緯と成果を整理し、**新しい環境にゼロから同じスタックを再現する**ための手順書です。  
 アプリの技術概要とディレクトリ説明は [README.md](../README.md) にあります。
 
-**バージョン管理:** 公式リポジトリは **<https://github.com/BinaryTraffic/lp-next>**（クローン: `https://github.com/BinaryTraffic/lp-next.git`）。プロジェクト表示名は LP-NEXT、製品名は「LP Reverse CMS」。
+**バージョン管理:** 公式リポジトリは **<https://github.com/BinaryTraffic/lp-next>**（クローン: `https://github.com/BinaryTraffic/lp-next.git`）。プロジェクト表示名は LP-NEXT、製品名は「Site Reverse CMS」。
 
 **DocumentRoot = リポジトリのルート**のとき: 本ファイルの Web 上の例パスは `/lp_reverse_cms/docs/PROJECT_HISTORY_AND_SETUP.md`。**本番**の環境・セキュリティ・切り分けの一覧は [ENVIRONMENT_AND_OPERATIONS.md](../../ENVIRONMENT_AND_OPERATIONS.md) も併せて参照。
 
@@ -208,4 +208,4 @@ git ls-remote origin refs/heads/main
 
 ---
 
-*この文書は LP Reverse CMS の「経緯・成果・再構築手順」を 1 か所に集約したものです。*
+*この文書は Site Reverse CMS の「経緯・成果・再構築手順」を 1 か所に集約したものです。*

@@ -23,7 +23,7 @@
 
 ```text
 lp-next/
-├── current/         ← 現在の作業・デプロイ対象（LP Reverse CMS 本体）
+├── current/         ← 現在の作業・デプロイ対象（Site Reverse CMS 本体）
 ├── releases/        ← 版取得の手順（README のみ。実体の固定は Git タグで行う）
 └── README.md        ← 本ファイル
 ```

@@ -1,6 +1,6 @@
 # LP-NEXT
 
-**LP Reverse CMS** のソースを置く Git リポジトリです。
+**Site Reverse CMS** のソースを置く Git リポジトリです。
 
 **リモート:** [https://github.com/BinaryTraffic/lp-next](https://github.com/BinaryTraffic/lp-next)
 
@@ -26,7 +26,7 @@ cd lp-next/current
 | 入口（DocumentRoot＝**`current/`**） | [https://lp-next.jitan.app/](https://lp-next.jitan.app/)（`current/index.html`） |
 | リポジトリルート＝DocumentRoot（`/current/` 入口） | [https://lp-next.jitan.app/current/](https://lp-next.jitan.app/current/) |
 | プロジェクトジャーナル（共同レビュー用） | [https://lp-next.jitan.app/current/journal.html](https://lp-next.jitan.app/current/journal.html)（素源: `current/JOURNAL.md`） |
-| 管理画面（LP Reverse CMS） | DocumentRoot により: [https://lp-next.jitan.app/lp_reverse_cms/](https://lp-next.jitan.app/lp_reverse_cms/) または [https://lp-next.jitan.app/current/lp_reverse_cms/](https://lp-next.jitan.app/current/lp_reverse_cms/)（リポジトリルートを Web ルートにした場合の後者） |
+| 管理画面（Site Reverse CMS） | DocumentRoot により: [https://lp-next.jitan.app/lp_reverse_cms/](https://lp-next.jitan.app/lp_reverse_cms/) または [https://lp-next.jitan.app/current/lp_reverse_cms/](https://lp-next.jitan.app/current/lp_reverse_cms/)（リポジトリルートを Web ルートにした場合の後者） |
 | アプリ版 | **`1.3.0`**（`lp_reverse_cms/index.php` の `APP_VERSION`） |
 | Git タグ | **`v1.2.0`**（`main` の本番想定）／過去: **`v1.1.0`**, **`v1.0.0`**。レガシー表記: `v1.1.11-stable` |
 

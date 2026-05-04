@@ -1,4 +1,4 @@
-# LP Reverse CMS — Google OAuth2 認証実装指示書
+# Site Reverse CMS — Google OAuth2 認証実装指示書
 
 ## 前提・環境
 

@@ -45,7 +45,7 @@ if (!isset($_SESSION['auth']) || !is_array($_SESSION['auth'])) {
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>ログイン設定 — LP Reverse CMS</title>
+  <title>ログイン設定 — Site Reverse CMS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 </head>
 <body class="bg-dark text-white">
@@ -73,7 +73,7 @@ if (!isset($_SESSION['auth']) || !is_array($_SESSION['auth'])) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ログイン — LP Reverse CMS</title>
+  <title>ログイン — Site Reverse CMS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 </head>
 <body class="bg-dark text-white">
@@ -100,7 +100,7 @@ if (!isset($_SESSION['auth']) || !is_array($_SESSION['auth'])) {
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>ログイン — LP Reverse CMS</title>
+  <title>ログイン — Site Reverse CMS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 </head>
 <body class="bg-dark text-white">
@@ -156,7 +156,7 @@ if ($currentRoleUx === 'pending') {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>承認待ち — LP Reverse CMS</title>
+  <title>承認待ち — Site Reverse CMS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
@@ -179,7 +179,7 @@ if ($currentRoleUx === 'rejected') {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>アクセス拒否 — LP Reverse CMS</title>
+  <title>アクセス拒否 — Site Reverse CMS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 </head>
 <body class="bg-light">
@@ -249,7 +249,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LP Reverse CMS</title>
+  <title>Site Reverse CMS</title>
 
   <!-- Bootstrap 5 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
@@ -264,7 +264,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 <nav class="navbar navbar-dark bg-primary shadow-sm">
   <div class="container-fluid">
       <span class="navbar-brand fw-bold">
-      <i class="bi bi-arrow-repeat me-2"></i>LP Reverse CMS
+      <i class="bi bi-arrow-repeat me-2"></i>Site Reverse CMS
       <span class="badge bg-white text-primary ms-2 fw-normal" style="font-size:.65rem;vertical-align:middle"
             title="バージョン / ビルド（Git 短ハッシュまたはソース更新日）">
         v<?= htmlspecialchars(APP_VERSION, ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(APP_BUILD, ENT_QUOTES, 'UTF-8') ?>

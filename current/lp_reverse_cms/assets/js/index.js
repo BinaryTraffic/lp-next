@@ -1,5 +1,5 @@
 /**
- * LP Reverse CMS — Admin UI controller
+ * Site Reverse CMS — Admin UI controller
  */
 (() => {
   'use strict';

@@ -1,4 +1,4 @@
-# LP Reverse CMS
+# Site Reverse CMS
 
 参照サイトの URL から HTML を取得し、汎用サイト解析で編集可能な構造を JSON 化。顧客向け文言を流し込み、同じ構成のサイトを静的 HTML として再生成する PHP 製 MVP。
 

@@ -20,7 +20,7 @@ if (!isset($generatedHtml)) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>生成サイトのプレビュー — LP Reverse CMS</title>
+  <title>生成サイトのプレビュー — Site Reverse CMS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
@@ -47,7 +47,7 @@ if (!isset($generatedHtml)) {
 <body>
 
 <div class="preview-toolbar">
-  <span class="text-white fw-bold small"><i class="bi bi-eye me-1"></i>LP Reverse CMS — プレビュー</span>
+  <span class="text-white fw-bold small"><i class="bi bi-eye me-1"></i>Site Reverse CMS — プレビュー</span>
   <div class="sep"></div>
   <a href="../index.php?step=2&from_preview=1" class="btn btn-sm btn-outline-light">
     <i class="bi bi-pencil-square me-1"></i>編集に戻る

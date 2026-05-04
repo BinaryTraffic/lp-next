@@ -22,7 +22,7 @@ class LpAnalyzer
     private const CONTAINER_TAGS = ['div', 'ul', 'ol', 'li', 'figure', 'figcaption', 'picture', 'source', 'blockquote', 'table', 'tr', 'td', 'th', 'span', 'strong', 'em'];
 
     /**
-     * Analyse fetched HTML and return a structured array for LP Reverse CMS.
+     * Analyse fetched HTML and return a structured array for Site Reverse CMS.
      *
      * @param callable(int $doneSteps, int $totalSteps, string $phase, array<string, mixed> $ctx): void|null $onWalkProgress
      *        Called during DOM ツリー走査（進捗可視化用。throttle は呼び出し側でも可）。
