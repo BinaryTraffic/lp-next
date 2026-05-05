@@ -289,11 +289,7 @@ HTML;
 
         // Strip inline <script> content — JS template literals with HTML inside are
         // misread as DOM nodes by libxml, re-injecting garbled text on every generate().
-        $originalHtml = (string) preg_replace_callback(
-            '#(<script(?:\s[^>]*)?>).*?(</script>)#si',
-            static fn(array $m): string => $m[1] . $m[2],
-            $originalHtml
-        );
+        $originalHtml = LpDomScriptCleanup::stripInlineScriptBodiesFromHtml($originalHtml);
 
         libxml_use_internal_errors(true);
         $dom = new DOMDocument('1.0', 'UTF-8');

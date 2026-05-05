@@ -35,13 +35,8 @@ class LpAnalyzer
         $this->baseUrl   = $this->urlCtx->schemeHost;
 
         // Strip inline <script> content before libxml parsing.
-        // JS template literals containing <div> etc. are misread as DOM nodes by libxml's
-        // HTML parser, causing backtick/ternary text to leak into section HTML output.
-        $htmlForDom = (string) preg_replace_callback(
-            '#(<script(?:\s[^>]*)?>).*?(</script>)#si',
-            static fn(array $m): string => $m[1] . $m[2],
-            $html
-        );
+        // Use a linear scanner to avoid PCRE backtracking limits on large pages.
+        $htmlForDom = LpDomScriptCleanup::stripInlineScriptBodiesFromHtml($html);
 
         libxml_use_internal_errors(true);
         $dom = new DOMDocument('1.0', 'UTF-8');

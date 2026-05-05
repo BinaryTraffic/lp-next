@@ -9,6 +9,53 @@ declare(strict_types=1);
 final class LpDomScriptCleanup
 {
     /**
+     * Preprocess raw HTML before libxml parsing: keep <script ...></script> tags
+     * but remove inline script bodies in O(n) scan to avoid regex backtracking blowups.
+     */
+    public static function stripInlineScriptBodiesFromHtml(string $html): string
+    {
+        if ($html === '' || stripos($html, '<script') === false) {
+            return $html;
+        }
+
+        $out = '';
+        $pos = 0;
+        $len = strlen($html);
+        while ($pos < $len) {
+            $open = stripos($html, '<script', $pos);
+            if ($open === false) {
+                $out .= substr($html, $pos);
+                break;
+            }
+
+            $out .= substr($html, $pos, $open - $pos);
+            $tagEnd = strpos($html, '>', $open);
+            if ($tagEnd === false) {
+                $out .= substr($html, $open);
+                break;
+            }
+
+            $startTag = substr($html, $open, $tagEnd - $open + 1);
+            $closePos = stripos($html, '</script>', $tagEnd + 1);
+            if ($closePos === false) {
+                $out .= $startTag;
+                break;
+            }
+
+            // keep external script tags untouched
+            if (preg_match('/\ssrc\s*=/i', $startTag) === 1) {
+                $out .= substr($html, $open, ($closePos + 9) - $open);
+            } else {
+                $out .= $startTag . '</script>';
+            }
+
+            $pos = $closePos + 9;
+        }
+
+        return $out;
+    }
+
+    /**
      * &lt;script&gt; 要素を削除し、パース崩れで露出した JS らしいテキストノードも削除する。
      */
     public static function stripScriptsAndJsSpills(DOMElement $root): void
