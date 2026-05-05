@@ -114,12 +114,36 @@ class LpAssetDownloader
             }
         }
 
-        // @import inside <style> blocks
+        // @import / url(...) inside <style> blocks
         foreach ($xpath->query('//style') ?? [] as $style) {
+            $styleText = (string) $style->textContent;
+
             preg_match_all('/@import\s+(?:url\()?["\']?([^"\')\s;]+)["\']?\)?/i',
-                $style->textContent, $m);
+                $styleText, $m);
             foreach ($m[1] as $url) {
                 $this->downloadUrl(trim($url), 'css');
+            }
+
+            preg_match_all('/url\(\s*["\']?([^)"\']+)["\']?\s*\)/i', $styleText, $u);
+            foreach ($u[1] as $url) {
+                $url = trim($url);
+                if ($url === ''
+                    || str_starts_with($url, 'data:')
+                    || str_starts_with($url, '#')
+                    || str_starts_with($url, 'javascript:')
+                    || self::isUnresolvedJsTemplateUrl($url)
+                ) {
+                    continue;
+                }
+
+                $ext = strtolower(pathinfo(parse_url($url, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION));
+                if (in_array($ext, self::IMAGE_EXTENSIONS, true) || $ext === '') {
+                    $this->downloadUrl($url, 'img');
+                    continue;
+                }
+                if (in_array($ext, self::FONT_EXTENSIONS, true)) {
+                    $this->downloadUrl($url, 'fonts');
+                }
             }
         }
     }
