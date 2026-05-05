@@ -89,9 +89,23 @@ $outputUnreplaced = readJsonFile($dataDir . 'output_unreplaced.json');
 if ($outputUnreplaced === null) {
     $outputUnreplaced = ['total' => 0, 'items' => [], 'note' => 'まだサイト生成後のスキャンがありません'];
 }
-if (file_exists($outputDir . 'index.html')) {
-    // 常に実ファイルをスキャンして JSON を更新（古い generated_at / items のまま残る混乱を防ぐ）
-    $outputUnreplaced = LpOutputAudit::persist($outputDir . 'index.html', $dataDir);
+$htmlOut = $outputDir . 'index.html';
+if (file_exists($htmlOut)) {
+    $jsonPath = $dataDir . 'output_unreplaced.json';
+    $mtHtml   = (int) (@filemtime($htmlOut) ?: 0);
+    $mtJson   = is_file($jsonPath) ? (int) (@filemtime($jsonPath) ?: 0) : 0;
+    // generate_lp が直前に persist 済みなら JSON は HTML 以上に新しい → 再スキャン省略（Step3 診断連打と二重化しない）
+    $useCache = $mtJson >= $mtHtml && $mtJson > 0 && is_readable($jsonPath);
+    if ($useCache) {
+        $cached = readJsonFile($jsonPath);
+        if (is_array($cached) && array_key_exists('total', $cached)) {
+            $outputUnreplaced = $cached;
+        } else {
+            $outputUnreplaced = LpOutputAudit::persist($htmlOut, $dataDir);
+        }
+    } else {
+        $outputUnreplaced = LpOutputAudit::persist($htmlOut, $dataDir);
+    }
     $outputUnreplaced['live_total'] = $outputUnreplaced['total'];
     $outputUnreplaced['live_items'] = $outputUnreplaced['items'];
 }

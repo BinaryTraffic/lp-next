@@ -273,7 +273,7 @@ exit;
     <p class="text-center small text-secondary mb-0">生成されたサイトと画像・CSSの読み込みには時間がかかることがあります。</p>
     <ul class="preview-splash-steps" id="splashSteps">
       <li id="splashStep1" class="is-active"><i class="bi bi-check-circle-fill"></i><span>プレビュー画面を初期化</span></li>
-      <li id="splashStep2" class="is-pending"><span class="spinner-border spinner-border-sm text-primary" role="status"></span><span>生成HTMLを取得・解析中</span></li>
+      <li id="splashStep2" class="is-pending"><span class="spinner-border spinner-border-sm text-primary" role="status"></span><span>ブラウザが生成済み HTML を読み込み中（再生成はしていません）</span></li>
       <li id="splashStep3" class="is-pending"><i class="bi bi-circle text-secondary"></i><span>ページの描画を待機</span></li>
     </ul>
     <div class="progress mt-2" style="height:6px;background:rgba(255,255,255,.08)">
@@ -543,7 +543,7 @@ exit;
 
     step2.classList.remove('is-pending');
     step2.classList.add('is-active');
-    step2.innerHTML = '<i class="bi bi-check-circle-fill"></i><span>生成HTMLの読み込み完了</span>';
+    step2.innerHTML = '<i class="bi bi-check-circle-fill"></i><span>HTML の読み込み完了</span>';
 
     if (skipSettle) {
       step3.classList.remove('is-pending');
@@ -667,7 +667,7 @@ exit;
     splash.setAttribute('aria-busy', 'true');
     step2.classList.remove('is-active');
     step2.classList.add('is-pending');
-    step2.innerHTML = '<span class="spinner-border spinner-border-sm text-primary" role="status"></span><span>生成HTMLを再読み込み中…</span>';
+    step2.innerHTML = '<span class="spinner-border spinner-border-sm text-primary" role="status"></span><span>HTML を再読み込み中…</span>';
     step3.classList.remove('is-active');
     step3.classList.add('is-pending');
     step3.innerHTML = '<i class="bi bi-circle text-secondary"></i><span>ページの描画を待機</span>';
