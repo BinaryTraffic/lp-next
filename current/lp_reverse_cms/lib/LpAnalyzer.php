@@ -274,29 +274,34 @@ class LpAnalyzer
             try {
                 $this->findEditableElements($element, $sectionId, $elemIndex, $elements, $onWalkVisit);
 
-                if ($elements !== []) {
-                    $html = $this->buildSectionHtml($element, $dom);
-                    if ($html === '' && $diagnosticsOut !== null) {
-                        $diagnosticsOut['warnings'][] = [
-                            'section_id' => $sectionId,
-                            'message'    => 'セクション saveHTML が空でした',
-                        ];
-                    }
+                $html = $this->buildSectionHtml($element, $dom);
 
-                    $sections[] = [
-                        'id'            => $sectionId,
-                        'type'          => $this->classifySection($element),
-                        'label'         => $this->generateLabel($element, $writtenIndex),
-                        'outer_tag'     => strtolower($element->tagName),
-                        'html'          => $html,
-                        'elements'      => $elements,
-                        'element_count' => count($elements),
+                // 編集要素がなくても、背景のみのヒーロー空 div など視覚ブロックは HTML として保持する
+                if ($elements === [] && trim($html) === '') {
+                    $candidateIndex++;
+                    continue;
+                }
+
+                if ($html === '' && $diagnosticsOut !== null) {
+                    $diagnosticsOut['warnings'][] = [
+                        'section_id' => $sectionId,
+                        'message'    => 'セクション saveHTML が空でした',
                     ];
-                    $writtenIndex++;
+                }
 
-                    if ($diagnosticsOut !== null) {
-                        $diagnosticsOut['sections_written']++;
-                    }
+                $sections[] = [
+                    'id'            => $sectionId,
+                    'type'          => $this->classifySection($element),
+                    'label'         => $this->generateLabel($element, $writtenIndex),
+                    'outer_tag'     => strtolower($element->tagName),
+                    'html'          => $html,
+                    'elements'      => $elements,
+                    'element_count' => count($elements),
+                ];
+                $writtenIndex++;
+
+                if ($diagnosticsOut !== null) {
+                    $diagnosticsOut['sections_written']++;
                 }
             } catch (Throwable $e) {
                 if ($diagnosticsOut !== null) {

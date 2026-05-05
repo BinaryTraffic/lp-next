@@ -147,32 +147,6 @@ final class LpDomScriptCleanup
             }
         }
 
-        // Empty predictive grid shells sometimes appear with no real content after script removal.
-        $grid = $xp->query(
-            './/div[contains(concat(\' \', normalize-space(@class), \' \'), \' wd_predictive_pages_grid \')]',
-            $root
-        );
-        if ($grid) {
-            foreach ($grid as $node) {
-                if (!($node instanceof DOMElement)) {
-                    continue;
-                }
-                $hasElementChild = false;
-                foreach ($node->childNodes as $ch) {
-                    if ($ch instanceof DOMElement) {
-                        $hasElementChild = true;
-                        break;
-                    }
-                }
-                if ($hasElementChild) {
-                    continue;
-                }
-                if (trim((string) $node->textContent) === '') {
-                    $removeEls[] = $node;
-                }
-            }
-        }
-
         foreach ($removeEls as $el) {
             $el->parentNode?->removeChild($el);
         }
