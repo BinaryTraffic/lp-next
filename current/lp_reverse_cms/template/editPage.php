@@ -51,7 +51,7 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
   <div id="ai-text-replace-panel" class="card shadow-sm mb-3 border-primary">
     <div class="card-header bg-primary text-white d-flex align-items-center gap-2 py-2 flex-wrap">
       <span><i class="bi bi-stars me-1" aria-hidden="true"></i><strong>AI テキスト自動生成</strong></span>
-      <small class="ms-md-auto opacity-75">元サイト業種をターゲットに自動入力し、初回は AI 置換まで自動実行（保存は従来どおり）</small>
+      <small class="ms-md-auto opacity-75">ターゲット業種はページのメタ（title / description）から自動推定。初回は AI 置換まで自動実行（保存は従来どおり）</small>
     </div>
     <div class="card-body py-3">
       <p class="small text-muted mb-2">

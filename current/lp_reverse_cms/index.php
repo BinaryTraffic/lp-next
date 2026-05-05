@@ -231,6 +231,50 @@ if (file_exists($clientFile)) {
     }
 }
 
+/** AI テキスト置換: メタ由来の業種・関連候補（analyze 時に industry_suggest.json へ保存） */
+$sourceIndustry = '';
+$suggestions    = [];
+$industrySuggestPath = $workspaceDataDir . 'industry_suggest.json';
+if ($hasStructure && is_readable($industrySuggestPath)) {
+    $indRaw = json_decode((string) file_get_contents($industrySuggestPath), true);
+    if (is_array($indRaw)) {
+        $sourceIndustry = trim((string) ($indRaw['source_industry'] ?? ''));
+        $sugRaw           = $indRaw['suggestions'] ?? [];
+        if (is_array($sugRaw)) {
+            foreach ($sugRaw as $s) {
+                $t = trim((string) $s);
+                if ($t !== '') {
+                    $suggestions[] = $t;
+                }
+            }
+        }
+    }
+}
+// 旧ワークスペースで industry_suggest.json が無い場合のみサーバで補完（以降はファイルを使用）
+if ($hasStructure && !is_file($industrySuggestPath)) {
+    require_once __DIR__ . '/lib/suggest_industries.php';
+    $computed = lp_reverse_suggest_industries_from_structure($structure);
+    $sourceIndustry = trim((string) ($computed['source_industry'] ?? ''));
+    $sugNew           = $computed['suggestions'] ?? [];
+    $suggestions      = [];
+    if (is_array($sugNew)) {
+        foreach ($sugNew as $s) {
+            $t = trim((string) $s);
+            if ($t !== '') {
+                $suggestions[] = $t;
+            }
+        }
+    }
+    file_put_contents(
+        $industrySuggestPath,
+        json_encode(
+            ['source_industry' => $sourceIndustry, 'suggestions' => $suggestions],
+            JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES,
+        ),
+        LOCK_EX,
+    );
+}
+
 // Determine which step to show on initial load (1 = fetch, 2 = edit, 3 = done)
 // ?step=1–3 があれば最優先（OAuth 復帰で Step1 に固定したい場合など）。
 $stepQs = isset($_GET['step']) ? (int) $_GET['step'] : 0;

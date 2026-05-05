@@ -65,6 +65,7 @@ try {
         'lp_structure.json',
         'output_unreplaced.json',
         'lp_project_profile.json',
+        'industry_suggest.json',
     ] as $leaf) {
         $p = $dataDir . $leaf;
         if (is_file($p)) {

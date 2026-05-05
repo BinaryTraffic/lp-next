@@ -37,12 +37,12 @@ function lp_reverse_suggest_industries_from_structure(array $structure): array
     }
 
     $prompt = <<<PROMPT
-以下はLPのページ情報です。
+以下はサイトのページ情報（メタ）です。
 タイトル: {$title}
 説明: {$desc}
 
-このLPの業種を10文字以内の日本語で答えてください（source_industry）。
-次に、同じターゲット（個人・店舗向けサービス業）で、このLPの構成や訴求が流用しやすい別業種を5つ、日本語の短文で挙げてください（suggestions）。
+このサイトの業種を10文字以内の日本語で答えてください（source_industry）。
+次に、同じターゲット（個人・店舗向けサービス業）で、このサイトの構成や訴求が流用しやすい別業種を5つ、日本語の短文で挙げてください（suggestions）。
 
 応答は次のJSONオブジェクトのみ（説明文・マークダウン・コードフェンス禁止）:
 {"source_industry":"...","suggestions":["...","...","...","...","..."]}

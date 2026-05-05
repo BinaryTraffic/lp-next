@@ -217,6 +217,30 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         throw new RuntimeException('lp_structure.json の保存に失敗しました。ディレクトリ権限を確認してください。');
     }
 
+    if ($streamProgress) {
+        $emitNd([
+            'type'      => 'progress',
+            'phase'     => 'industry',
+            'pct'       => 99,
+            'detail_ja' => 'ページのメタ情報から業種候補を推定しています…',
+        ]);
+    }
+
+    try {
+        require_once dirname(__DIR__) . '/lib/suggest_industries.php';
+        $industrySuggest = lp_reverse_suggest_industries_from_structure($structure);
+        file_put_contents(
+            $dataDir . 'industry_suggest.json',
+            json_encode($industrySuggest, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            LOCK_EX,
+        );
+    } catch (Throwable $e) {
+        lp_reverse_analyze_append_log($dataDir, 'warning', 'industry_suggest failed', [
+            'exception' => $e::class,
+            'message'   => $e->getMessage(),
+        ]);
+    }
+
     $emitNd([
         'type'             => 'progress',
         'phase'            => 'complete',
