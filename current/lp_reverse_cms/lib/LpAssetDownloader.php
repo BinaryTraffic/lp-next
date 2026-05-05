@@ -225,48 +225,76 @@ class LpAssetDownloader
             return null;
         }
 
-        // Already handled — just ensure original variant is also mapped
-        if (isset($this->done[$absUrl])) {
-            $existing = $this->urlMap[$absUrl] ?? null;
-            if ($existing && $url !== $absUrl && !isset($this->urlMap[$url])) {
-                $this->urlMap[$url] = $existing;
+        $fetchKey = LpUrlContext::canonicalHttpUrlForFetch($absUrl);
+
+        // Already handled —同一リソースをパーセント/Unicode別の絶対URLで二度fetchしない
+        if (isset($this->done[$fetchKey])) {
+            $existing = $this->urlMap[$fetchKey] ?? null;
+            if ($existing === null) {
+                foreach (LpUrlContext::httpHttpsAssetUrlVariants($absUrl) as $variant) {
+                    if (isset($this->urlMap[$variant])) {
+                        $existing = $this->urlMap[$variant];
+                        break;
+                    }
+                }
             }
+            if ($existing !== null) {
+                $this->registerAssetUrlAliases($absUrl, $url, $existing);
+            }
+
             return $existing;
         }
-        $this->done[$absUrl] = true;
+        $this->done[$fetchKey] = true;
 
-        $content = $this->curlGet($absUrl);
+        $curlUrl = str_starts_with($absUrl, 'http://') || str_starts_with($absUrl, 'https://')
+            ? $fetchKey
+            : $absUrl;
+
+        $content = $this->curlGet($curlUrl);
         if ($content === null) {
-            $this->failedFetches[$absUrl] = $absUrl;
+            $this->failedFetches[$curlUrl] = $curlUrl;
             return null;
         }
 
-        $filename = $this->allocateFilename($absUrl, $type);
+        $filename = $this->allocateFilename($curlUrl, $type);
         $savePath = $this->outputDir . '/assets/' . $type . '/' . $filename;
 
         if ($type === 'css') {
-            $content = $this->processCssContentFull((string) $content, $absUrl, $savePath);
+            $content = $this->processCssContentFull((string) $content, $curlUrl, $savePath);
         }
 
         file_put_contents($savePath, $content);
 
         $localPath = 'assets/' . $type . '/' . $filename;
 
-        $this->urlMap[$absUrl] = $localPath;
-        if ($url !== $absUrl) {
-            $this->urlMap[$url] = $localPath;
-        }
-
-        // Also map protocol-relative form
-        if (str_starts_with($absUrl, 'https://')) {
-            $protoRel = '//' . substr($absUrl, 8);
-            $this->urlMap[$protoRel] = $localPath;
-        } elseif (str_starts_with($absUrl, 'http://')) {
-            $protoRel = '//' . substr($absUrl, 7);
-            $this->urlMap[$protoRel] = $localPath;
-        }
+        $this->registerAssetUrlAliases($absUrl, $url, $localPath);
 
         return $localPath;
+    }
+
+    /**
+     * asset_map / applyAssetMap が CSS と HTML の表記ゆれ（%エンコード vs 日本語パス）の両方にマッチするよう登録する。
+     */
+    private function registerAssetUrlAliases(string $absUrl, string $originalUrl, string $localPath): void
+    {
+        $seen = [];
+        foreach (array_merge(
+            LpUrlContext::httpHttpsAssetUrlVariants($absUrl),
+            LpUrlContext::httpHttpsAssetUrlVariants(LpUrlContext::canonicalHttpUrlForFetch($absUrl)),
+        ) as $variant) {
+            $seen[$variant] = true;
+            $this->urlMap[$variant] = $localPath;
+
+            if (str_starts_with($variant, 'https://')) {
+                $this->urlMap['//' . substr($variant, 8)] = $localPath;
+            } elseif (str_starts_with($variant, 'http://')) {
+                $this->urlMap['//' . substr($variant, 7)] = $localPath;
+            }
+        }
+
+        if ($originalUrl !== '' && $originalUrl !== $absUrl && !isset($seen[$originalUrl])) {
+            $this->urlMap[$originalUrl] = $localPath;
+        }
     }
 
     // -----------------------------------------------------------------------

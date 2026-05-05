@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/LpDomScriptCleanup.php';
+require_once __DIR__ . '/LpUrlContext.php';
 
 /**
  * LpGenerator — rebuilds a complete HTML page from lp_structure + client_data.
@@ -137,7 +138,20 @@ HTML;
                 || str_starts_with((string) $originalUrl, 'https://')
                 || str_starts_with((string) $originalUrl, '//');
             if ($isAbs) {
-                $absoluteExpanded[(string) $originalUrl] = (string) $localPath;
+                $aliases = array_unique(array_merge(
+                    LpUrlContext::httpHttpsAssetUrlVariants((string) $originalUrl),
+                    LpUrlContext::httpHttpsAssetUrlVariants(
+                        LpUrlContext::canonicalHttpUrlForFetch((string) $originalUrl)
+                    ),
+                ));
+                foreach ($aliases as $alias) {
+                    $absoluteExpanded[$alias] = (string) $localPath;
+                    if (str_starts_with($alias, 'https://')) {
+                        $absoluteExpanded['//' . substr($alias, 8)] = (string) $localPath;
+                    } elseif (str_starts_with($alias, 'http://')) {
+                        $absoluteExpanded['//' . substr($alias, 7)] = (string) $localPath;
+                    }
+                }
             } else {
                 $relativeExpanded[(string) $originalUrl] = (string) $localPath;
             }

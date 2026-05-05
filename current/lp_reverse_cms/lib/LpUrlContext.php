@@ -184,4 +184,89 @@ final class LpUrlContext
 
         return $scheme . '://' . $host . '/' . implode('/', $stack);
     }
+
+    /**
+     * Percent-decode each path segment (IRI-style). Root and empty path unchanged.
+     */
+    public static function decodeHttpUrlPathSegments(string $path): string
+    {
+        if ($path === '' || $path === '/') {
+            return $path;
+        }
+        $parts = explode('/', $path);
+
+        return implode('/', array_map(static fn(string $seg): string => rawurldecode($seg), $parts));
+    }
+
+    /**
+     * Canonical path encoding: decode then re-encode each segment (UTF-8 → %XX).
+     * Leaves ASCII-only paths without "%" unchanged for speed.
+     */
+    public static function normalizeHttpUrlPathEncoding(string $path): string
+    {
+        if ($path === '' || $path === '/') {
+            return $path;
+        }
+        if (!str_contains($path, '%') && preg_match('/[^\x00-\x7F]/', $path) === 0) {
+            return $path;
+        }
+        $parts = explode('/', $path);
+
+        return implode('/', array_map(
+            static fn(string $seg): string => rawurlencode(rawurldecode($seg)),
+            $parts
+        ));
+    }
+
+    /**
+     * http(s) URL suitable for dedupe + curl: normalized percent-encoding on path.
+     */
+    public static function canonicalHttpUrlForFetch(string $absUrl): string
+    {
+        if (!str_starts_with($absUrl, 'http://') && !str_starts_with($absUrl, 'https://')) {
+            return $absUrl;
+        }
+        $p = parse_url($absUrl);
+        if ($p === false || empty($p['host'])) {
+            return $absUrl;
+        }
+        $scheme = $p['scheme'] ?? 'https';
+        $host   = $p['host'];
+        $port   = isset($p['port']) ? ':' . $p['port'] : '';
+        $path   = self::normalizeHttpUrlPathEncoding($p['path'] ?? '');
+        $query  = isset($p['query']) ? '?' . $p['query'] : '';
+        $frag   = isset($p['fragment']) ? '#' . $p['fragment'] : '';
+
+        return $scheme . '://' . $host . $port . $path . $query . $frag;
+    }
+
+    /**
+     * Equivalent absolute URLs differing only by path percent-encoding (e.g. 新 vs %E6%96%B0).
+     *
+     * @return list<string>
+     */
+    public static function httpHttpsAssetUrlVariants(string $absUrl): array
+    {
+        if (!str_starts_with($absUrl, 'http://') && !str_starts_with($absUrl, 'https://')) {
+            return [$absUrl];
+        }
+        $p = parse_url($absUrl);
+        if ($p === false || empty($p['host'])) {
+            return [$absUrl];
+        }
+        $scheme = $p['scheme'] ?? 'https';
+        $host   = $p['host'];
+        $port   = isset($p['port']) ? ':' . $p['port'] : '';
+        $path   = $p['path'] ?? '';
+        $query  = isset($p['query']) ? '?' . $p['query'] : '';
+        $frag   = isset($p['fragment']) ? '#' . $p['fragment'] : '';
+
+        $encodedPath = self::normalizeHttpUrlPathEncoding($path);
+        $decodedPath = self::decodeHttpUrlPathSegments($path);
+
+        $a = $scheme . '://' . $host . $port . $encodedPath . $query . $frag;
+        $b = $scheme . '://' . $host . $port . $decodedPath . $query . $frag;
+
+        return array_values(array_unique(array_filter([$absUrl, $a, $b], static fn(string $u): bool => $u !== '')));
+    }
 }
