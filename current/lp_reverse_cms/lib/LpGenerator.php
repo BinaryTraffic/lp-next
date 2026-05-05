@@ -287,10 +287,6 @@ HTML;
             return '';
         }
 
-        // Strip inline <script> content — JS template literals with HTML inside are
-        // misread as DOM nodes by libxml, re-injecting garbled text on every generate().
-        $originalHtml = LpDomScriptCleanup::stripInlineScriptBodiesFromHtml($originalHtml);
-
         libxml_use_internal_errors(true);
         $dom = new DOMDocument('1.0', 'UTF-8');
 
