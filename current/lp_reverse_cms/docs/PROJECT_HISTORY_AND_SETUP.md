@@ -94,6 +94,28 @@
   **対応:** `LpDomScriptCleanup` で `${...}` / `%24%7B...` を含む URL 属性を除去し、`img[src]` は要素ごと除去。  
   **コミット:** `97a0944`
 
+### 2.9 背景画像がオリジナル URL から落ちない理由と対処
+
+- **理由1: `<style>` 内 `background-image:url(...)` が収集対象外だった**  
+  `link rel="stylesheet"` と `@import` は拾えても、body/head に埋め込まれた `<style>` の `url(...)` を見落とすと、背景画像が `asset_map` に登録されない。  
+  **対処:** `LpAssetDownloader::collectStylesheets` で `<style>` 内 `url(...)` を画像/フォントとして収集。  
+  **コミット:** `6c751e4`
+
+- **理由2: URL 表記ゆれ（日本語パスと `%` エンコード）で map 置換が外れる**  
+  取得できても `asset_map` のキーと生成 HTML/CSS の文字列表記が一致せず、背景画像 URL がローカルへ置換されない。  
+  **対処:** `LpUrlContext` の canonical 化＋バリアント展開、`LpGenerator::applyAssetMap` 側でも alias 展開。  
+  **コミット:** `f462a95`
+
+- **理由3: オリジン側のパス揺れ（`/app/assets/` は 404、`/assets/` は 200）**  
+  参照元 HTML が `/app/assets/...` を出しても実配信が `/assets/...` の場合、初回取得が失敗する。  
+  **対処:** 404 時のみ `/app/assets/` → `/assets/` へフォールバック再試行。  
+  **コミット:** `34be318`
+
+- **理由4: そもそもオリジン実体が 404（壊れリンク）**  
+  参照元が死んでいると `curl 200` にはならず、ローカル化も不可能。  
+  **対処:** `fetch_failures` を正として扱い、必要時は手動差し替え。`debug.php` で workspace 単位に確認。  
+  **補助診断コミット:** `df55742`
+
 ---
 
 ## 3. 成果物（何ができれば完成か）
