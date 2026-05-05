@@ -185,6 +185,37 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
       </div>
       <div id="collapse_<?= $secId ?>" class="collapse show">
         <div class="card-body">
+          <?php
+            $bgHints = $section['css_background_hints'] ?? [];
+          ?>
+          <?php if ($bgHints !== []): ?>
+            <div class="alert alert-light border small mb-3">
+              <div class="fw-semibold mb-2">
+                <i class="bi bi-aspect-ratio me-1" aria-hidden="true"></i>CSS 背景画像（参照）
+              </div>
+              <ul class="mb-0 ps-3">
+                <?php foreach ($bgHints as $h): ?>
+                  <?php
+                    $tok = (string) ($h['token'] ?? '');
+                    $u   = (string) ($h['url'] ?? '');
+                    $short = $u;
+                    if (mb_strlen($short) > 96) {
+                        $short = mb_substr($short, 0, 93) . '…';
+                    }
+                  ?>
+                  <li class="mb-1">
+                    <code><?= htmlspecialchars($tok, ENT_QUOTES, 'UTF-8') ?></code>
+                    <?php if ($u !== ''): ?>
+                      → <a href="<?= htmlspecialchars($u, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer"><?= htmlspecialchars($short, ENT_QUOTES, 'UTF-8') ?></a>
+                    <?php endif; ?>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+              <p class="mb-0 text-muted mt-2 small">
+                スタイルシート由来のため一覧は参照用です。プレビューでは生成時に asset_map でローカルパスへ置換されます。
+              </p>
+            </div>
+          <?php endif; ?>
           <?php if (empty($section['elements'])): ?>
             <p class="text-muted small">このセクションに編集可能な要素はありません。</p>
           <?php else: ?>

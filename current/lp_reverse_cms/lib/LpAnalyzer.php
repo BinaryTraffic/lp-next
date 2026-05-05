@@ -83,7 +83,11 @@ class LpAnalyzer
             $throttleVisit();
         };
 
-        $sections = $this->extractSections($dom, $xpath, $onVisit, $diag);
+        $headExtra = $this->extractHeadExtra($xpath);
+        $bodySnip  = $this->extractBodyDirectChildHeadSnippets($xpath);
+        $meta      = array_merge($this->extractMeta($xpath), $this->extractBodyRootAttributes($xpath));
+
+        $sections = $this->extractSections($dom, $xpath, $onVisit, $diag, $headExtra, $bodySnip);
 
         $walkPct = $diag['walk_total_steps'] > 0
             ? round(100.0 * $diag['walk_completed_steps'] / $diag['walk_total_steps'], 2)
@@ -92,10 +96,10 @@ class LpAnalyzer
         return [
             'source_url'          => $sourceUrl,
             'analyzed_at'         => date('Y-m-d H:i:s'),
-            'meta'                => $this->extractMeta($xpath),
-            'head_extra'          => $this->extractHeadExtra($xpath),
+            'meta'                => $meta,
+            'head_extra'          => $headExtra,
             /** body 直下の style / stylesheet link（ヒーロー直前のページ固有 CSS 等。セクション HTML に含まれないため別途保持） */
-            'body_head_snippets'  => $this->extractBodyDirectChildHeadSnippets($xpath),
+            'body_head_snippets'  => $bodySnip,
             'sections'            => $sections,
             'parse_diagnostics'   => [
                 'walk_total_steps'      => $diag['walk_total_steps'],
@@ -149,6 +153,31 @@ class LpAnalyzer
         }
 
         return $meta;
+    }
+
+    /**
+     * @return array{body_id?: string, body_class?: string}
+     */
+    private function extractBodyRootAttributes(DOMXPath $xpath): array
+    {
+        $bodyList = $xpath->query('//body');
+        if (!$bodyList || $bodyList->length === 0) {
+            return [];
+        }
+        /** @var DOMElement $b */
+        $b = $bodyList->item(0);
+
+        $out = [];
+        $id = trim($b->getAttribute('id'));
+        if ($id !== '') {
+            $out['body_id'] = $id;
+        }
+        $cls = trim($b->getAttribute('class'));
+        if ($cls !== '') {
+            $out['body_class'] = $cls;
+        }
+
+        return $out;
     }
 
     private function extractHeadExtra(DOMXPath $xpath): string
@@ -247,6 +276,157 @@ class LpAnalyzer
         return '<link' . $attrs . '>';
     }
 
+    /**
+     * head / body 直下 CSS 内の url() を、セクション DOM の id/class に近い位置から拾う（編集 UI の参照用。編集値とは別）。
+     *
+     * @return list<array{token:string, url:string}>
+     */
+    private function extractCssBackgroundHints(DOMElement $sectionRoot, string $headExtra, string $bodySnippets): array
+    {
+        $inline = $this->extractInlineBackgroundUrlsFromSubtree($sectionRoot);
+        $haystack = $headExtra . "\n" . $bodySnippets;
+        if ($haystack === '') {
+            return $this->dedupeCssHintsByUrl($inline);
+        }
+
+        $tokens = $this->collectCssHintTokens($sectionRoot);
+        usort($tokens, static fn(string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        $found = [];
+        foreach ($tokens as $tok) {
+            $pos    = 0;
+            $tokLen = strlen($tok);
+            while (($p = strpos($haystack, $tok, $pos)) !== false) {
+                $window = substr($haystack, $p, 8000);
+                if (preg_match_all('/url\(\s*["\']?([^)"\'\\\\]+)["\']?\s*\)/i', $window, $m)) {
+                    foreach ($m[1] as $u) {
+                        $u = trim($u);
+                        if ($u === '' || str_starts_with(strtolower($u), 'data:')) {
+                            continue;
+                        }
+                        if (!preg_match('#^https?://#i', $u)) {
+                            $u = $this->absolutizeUrl($u);
+                        }
+                        $found[] = ['token' => $tok, 'url' => $u];
+                    }
+                }
+                $pos = $p + max(1, $tokLen);
+            }
+        }
+
+        foreach ($inline as &$row) {
+            if (!preg_match('#^https?://#i', $row['url'])) {
+                $row['url'] = $this->absolutizeUrl($row['url']);
+            }
+        }
+        unset($row);
+
+        return $this->dedupeCssHintsByUrl(array_merge($found, $inline));
+    }
+
+    /**
+     * @param list<array{token:string, url:string}> $hints
+     * @return list<array{token:string, url:string}>
+     */
+    private function dedupeCssHintsByUrl(array $hints): array
+    {
+        $seen = [];
+        $out  = [];
+        foreach ($hints as $row) {
+            $u = $row['url'];
+            if (isset($seen[$u])) {
+                continue;
+            }
+            $seen[$u] = true;
+            $out[]    = $row;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function collectCssHintTokens(DOMElement $root): array
+    {
+        $tokens = [];
+        $doc    = $root->ownerDocument;
+        if ($doc === null) {
+            return [];
+        }
+
+        $take = function (DOMElement $n) use (&$tokens): void {
+            $id = trim($n->getAttribute('id'));
+            if ($id !== '') {
+                $tokens['#' . $id] = true;
+            }
+            foreach (preg_split('/\s+/u', trim($n->getAttribute('class'))) as $c) {
+                if ($c === '') {
+                    continue;
+                }
+                // 短いユーティリティクラスは CSS 全体に散在し url を大量に拾うため除外（数字・アンダースコアを含むものは残す）
+                if (mb_strlen($c) < 7 && !preg_match('/[0-9_]/', $c)) {
+                    continue;
+                }
+                $tokens['.' . $c] = true;
+            }
+        };
+
+        $take($root);
+
+        $xp = new DOMXPath($doc);
+        $nodes = $xp->query('.//*', $root);
+        $nWalk = 0;
+        if ($nodes) {
+            foreach ($nodes as $n) {
+                if ($nWalk++ > 160) {
+                    break;
+                }
+                if ($n instanceof DOMElement) {
+                    $take($n);
+                }
+            }
+        }
+
+        return array_keys($tokens);
+    }
+
+    /**
+     * @return list<array{token:string, url:string}>
+     */
+    private function extractInlineBackgroundUrlsFromSubtree(DOMElement $root): array
+    {
+        $doc = $root->ownerDocument;
+        if ($doc === null) {
+            return [];
+        }
+        $xp    = new DOMXPath($doc);
+        $nodes = $xp->query('.//*[@style]', $root);
+        $out   = [];
+        if (!$nodes) {
+            return [];
+        }
+        foreach ($nodes as $n) {
+            if (!($n instanceof DOMElement)) {
+                continue;
+            }
+            $st = $n->getAttribute('style');
+            if ($st === '' || !preg_match('/url\(/i', $st)) {
+                continue;
+            }
+            if (preg_match_all('/url\(\s*["\']?([^)"\'\\\\]+)["\']?\s*\)/i', $st, $m)) {
+                foreach ($m[1] as $u) {
+                    $u = trim($u);
+                    if ($u !== '') {
+                        $out[] = ['token' => '(inline style)', 'url' => $u];
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+
     // -----------------------------------------------------------------------
     // Section extraction
     // -----------------------------------------------------------------------
@@ -259,7 +439,9 @@ class LpAnalyzer
         DOMDocument $dom,
         DOMXPath $xpath,
         ?callable $onWalkVisit = null,
-        ?array &$diagnosticsOut = null
+        ?array &$diagnosticsOut = null,
+        string $headExtra = '',
+        string $bodySnippets = ''
     ): array {
         $sections       = [];
         $candidateIndex = 0;
@@ -290,13 +472,14 @@ class LpAnalyzer
                 }
 
                 $sections[] = [
-                    'id'            => $sectionId,
-                    'type'          => $this->classifySection($element),
-                    'label'         => $this->generateLabel($element, $writtenIndex),
-                    'outer_tag'     => strtolower($element->tagName),
-                    'html'          => $html,
-                    'elements'      => $elements,
-                    'element_count' => count($elements),
+                    'id'                   => $sectionId,
+                    'type'                 => $this->classifySection($element),
+                    'label'                => $this->generateLabel($element, $writtenIndex),
+                    'outer_tag'            => strtolower($element->tagName),
+                    'html'                 => $html,
+                    'elements'             => $elements,
+                    'element_count'        => count($elements),
+                    'css_background_hints' => $this->extractCssBackgroundHints($element, $headExtra, $bodySnippets),
                 ];
                 $writtenIndex++;
 

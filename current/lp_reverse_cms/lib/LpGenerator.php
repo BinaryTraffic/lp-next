@@ -56,6 +56,16 @@ class LpGenerator
         $charset     = htmlspecialchars($charset,     ENT_QUOTES, 'UTF-8');
         $viewport    = htmlspecialchars($viewport,    ENT_QUOTES, 'UTF-8');
 
+        $bodyId    = trim((string) ($meta['body_id'] ?? ''));
+        $bodyClass = trim((string) ($meta['body_class'] ?? ''));
+        $bodyAttr  = '';
+        if ($bodyId !== '') {
+            $bodyAttr .= ' id="' . htmlspecialchars($bodyId, ENT_QUOTES, 'UTF-8') . '"';
+        }
+        if ($bodyClass !== '') {
+            $bodyAttr .= ' class="' . htmlspecialchars($bodyClass, ENT_QUOTES, 'UTF-8') . '"';
+        }
+
         $stackFixCss = '<style id="lp-reverse-stack-context">'
             . '.lp-reverse-section-root{isolation:isolate;z-index:0;position:relative;width:100%;box-sizing:border-box}'
             . '</style>';
@@ -83,7 +93,7 @@ class LpGenerator
 {$bodySnip}
 {$stackFixCss}
 </head>
-<body>
+<body{$bodyAttr}>
 {$sectionsHtml}
 </body>
 </html>
