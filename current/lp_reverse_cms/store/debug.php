@@ -5,6 +5,7 @@ require_once __DIR__ . '/../lib/app_release.php';
 require_once __DIR__ . '/../lib/LpAssetAudit.php';
 require_once __DIR__ . '/../lib/LpOutputAudit.php';
 require_once __DIR__ . '/../lib/LpWorkspace.php';
+require_once __DIR__ . '/../lib/LpUrlContext.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -26,6 +27,126 @@ function readJsonFile(string $path): ?array {
     }
     $d = json_decode((string) file_get_contents($path), true);
     return is_array($d) ? $d : null;
+}
+
+/**
+ * @return list<string>
+ */
+function extractHeroBackgroundUrlsFromText(string $text): array {
+    if ($text === '') {
+        return [];
+    }
+    preg_match_all(
+        '#https?://[^\s"\'()<>]+(?:FV_250724_pc\.webp)(?:\?[^\s"\'()<>]*)?#u',
+        $text,
+        $m
+    );
+
+    return array_values(array_unique(array_map('trim', $m[0] ?? [])));
+}
+
+/**
+ * @param array<string,string> $assetMap
+ * @param list<string> $fetchFailures
+ * @return array{
+ *   probe_urls:list<string>,
+ *   probes:list<array{
+ *     input:string,
+ *     variants:list<string>,
+ *     map_hits:list<array{key:string,local:string,exists:bool}>,
+ *     in_fetch_failures:bool
+ *   }>,
+ *   output_background_urls:list<string>
+ * }
+ */
+function buildHeroBackgroundProbe(
+    array $assetMap,
+    array $fetchFailures,
+    string $sourceHtmlText,
+    string $outputHtmlText,
+    string $outputDir
+): array {
+    $seed = [
+        'https://www.otakaraya.jp/app/wp-content/uploads/2025/07/%E6%96%B0FV_250724_pc.webp',
+        'https://www.otakaraya.jp/app/wp-content/uploads/2025/07/新FV_250724_pc.webp',
+    ];
+    $sourceFound = extractHeroBackgroundUrlsFromText($sourceHtmlText);
+    $outputFound = extractHeroBackgroundUrlsFromText($outputHtmlText);
+    $probeUrls = array_values(array_unique(array_merge($seed, $sourceFound, $outputFound)));
+
+    $failSet = [];
+    foreach ($fetchFailures as $f) {
+        if (is_string($f) && $f !== '') {
+            $failSet[$f] = true;
+        }
+    }
+
+    $probes = [];
+    foreach ($probeUrls as $u) {
+        $variants = array_values(array_unique(array_merge(
+            [$u],
+            LpUrlContext::httpHttpsAssetUrlVariants($u),
+            [LpUrlContext::canonicalHttpUrlForFetch($u)]
+        )));
+        $variantSet = [];
+        foreach ($variants as $v) {
+            $variantSet[$v] = true;
+            if (str_starts_with($v, 'https://')) {
+                $variantSet['//' . substr($v, 8)] = true;
+            } elseif (str_starts_with($v, 'http://')) {
+                $variantSet['//' . substr($v, 7)] = true;
+            }
+        }
+
+        $hits = [];
+        foreach (array_keys($variantSet) as $k) {
+            if (!isset($assetMap[$k])) {
+                continue;
+            }
+            $local = (string) $assetMap[$k];
+            $full  = rtrim($outputDir, '/\\') . '/' . ltrim($local, '/\\');
+            $hits[] = [
+                'key'    => $k,
+                'local'  => $local,
+                'exists' => is_file($full),
+            ];
+        }
+
+        $inFailures = false;
+        foreach (array_keys($variantSet) as $k) {
+            if (isset($failSet[$k])) {
+                $inFailures = true;
+                break;
+            }
+        }
+
+        $probes[] = [
+            'input'            => $u,
+            'variants'         => array_keys($variantSet),
+            'map_hits'         => $hits,
+            'in_fetch_failures'=> $inFailures,
+        ];
+    }
+
+    preg_match_all(
+        '/background-image\s*:\s*url\(\s*["\']?([^)"\']+)["\']?\s*\)/iu',
+        $outputHtmlText,
+        $bm
+    );
+    $bgUrls = [];
+    foreach (($bm[1] ?? []) as $raw) {
+        $raw = trim((string) $raw);
+        if ($raw === '' || !str_contains($raw, 'FV_250724_pc.webp')) {
+            continue;
+        }
+        $bgUrls[] = $raw;
+    }
+
+    return [
+        'probe_urls' => $probeUrls,
+        'probes' => $probes,
+        'output_background_urls' => array_values(array_unique($bgUrls)),
+    ];
 }
 
 $assetMap = readJsonFile($dataDir . 'asset_map.json') ?? [];
@@ -85,11 +206,18 @@ if ($sourceUrl && file_exists($htmlPath)) {
     );
 }
 
+$sourceHtmlText = file_exists($htmlPath)
+    ? (string) file_get_contents($htmlPath)
+    : '';
+$htmlOut = $outputDir . 'index.html';
+$outputHtmlText = file_exists($htmlOut)
+    ? (string) file_get_contents($htmlOut)
+    : '';
+
 $outputUnreplaced = readJsonFile($dataDir . 'output_unreplaced.json');
 if ($outputUnreplaced === null) {
     $outputUnreplaced = ['total' => 0, 'items' => [], 'note' => 'まだサイト生成後のスキャンがありません'];
 }
-$htmlOut = $outputDir . 'index.html';
 if (file_exists($htmlOut)) {
     $jsonPath = $dataDir . 'output_unreplaced.json';
     $mtHtml   = (int) (@filemtime($htmlOut) ?: 0);
@@ -118,6 +246,13 @@ if ($idx !== false && preg_match("/define\\s*\\(\\s*'APP_VERSION'\\s*,\\s*'([^']
 $appBuild = lp_reverse_app_build_label($cmsRoot);
 
 $cssDiagnostics = LpOutputAudit::scanOutputCssForDiagnostics($outputDir);
+$heroBgProbe = buildHeroBackgroundProbe(
+    $assetMap,
+    is_array($fetchFailures) ? $fetchFailures : [],
+    $sourceHtmlText,
+    $outputHtmlText,
+    $outputDir
+);
 
 echo json_encode([
     'version' => $appVersion,
@@ -156,4 +291,7 @@ echo json_encode([
 
     /** v1.2+ output/assets/css 内の url() ・ @import 外部残存 */
     'output_css_diagnostics' => $cssDiagnostics,
+
+    /** Otakaraya FV 背景画像の source→asset_map→output 到達確認 */
+    'hero_bg_probe' => $heroBgProbe,
 ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
