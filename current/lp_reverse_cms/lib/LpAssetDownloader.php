@@ -595,34 +595,24 @@ class LpAssetDownloader
         return $this->urlCtx->resolve($url);
     }
 
+    /**
+     * Percent-encode any raw non-ASCII (e.g. Japanese) characters in a URL while
+     * leaving already-encoded sequences and ASCII punctuation untouched.
+     * Used to register the encoded alias for URLs containing raw Unicode filenames.
+     */
+    private function percentEncodeNonAsciiInUrl(string $url): string
+    {
+        return (string) preg_replace_callback(
+            '/[^\x00-\x7F]+/u',
+            static fn(array $m) => rawurlencode($m[0]),
+            $url
+        );
+    }
+
     private function extractBase(string $url): string
     {
         $p = parse_url($url);
         return ($p['scheme'] ?? 'https') . '://' . ($p['host'] ?? '');
-    }
-
-    private function percentEncodeNonAsciiInUrl(string $url): string
-    {
-        if (!str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
-            return $url;
-        }
-        $p = parse_url($url);
-        if ($p === false || empty($p['host'])) {
-            return $url;
-        }
-        $scheme = $p['scheme'] ?? 'https';
-        $host   = $p['host'];
-        $port   = isset($p['port']) ? ':' . $p['port'] : '';
-        $path   = (string) ($p['path'] ?? '');
-        $query  = isset($p['query']) ? '?' . $p['query'] : '';
-        $frag   = isset($p['fragment']) ? '#' . $p['fragment'] : '';
-
-        $encodedPath = implode('/', array_map(
-            static fn(string $seg): string => rawurlencode(rawurldecode($seg)),
-            explode('/', $path)
-        ));
-
-        return $scheme . '://' . $host . $port . $encodedPath . $query . $frag;
     }
 
     // -----------------------------------------------------------------------
