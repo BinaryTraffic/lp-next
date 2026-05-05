@@ -330,6 +330,16 @@ class LpAssetDownloader
             } elseif (str_starts_with($variant, 'http://')) {
                 $this->urlMap['//' . substr($variant, 7)] = $localPath;
             }
+
+            // インライン <style> などで URL の表記ゆれ（生Unicode / %エンコード）が混在しても置換できるよう補完
+            $decoded = rawurldecode($variant);
+            if ($decoded !== $variant && !isset($this->urlMap[$decoded])) {
+                $this->urlMap[$decoded] = $localPath;
+            }
+            $encoded = $this->percentEncodeNonAsciiInUrl($variant);
+            if ($encoded !== $variant && !isset($this->urlMap[$encoded])) {
+                $this->urlMap[$encoded] = $localPath;
+            }
         }
 
         if ($originalUrl !== '' && $originalUrl !== $absUrl && !isset($seen[$originalUrl])) {
@@ -589,6 +599,30 @@ class LpAssetDownloader
     {
         $p = parse_url($url);
         return ($p['scheme'] ?? 'https') . '://' . ($p['host'] ?? '');
+    }
+
+    private function percentEncodeNonAsciiInUrl(string $url): string
+    {
+        if (!str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
+            return $url;
+        }
+        $p = parse_url($url);
+        if ($p === false || empty($p['host'])) {
+            return $url;
+        }
+        $scheme = $p['scheme'] ?? 'https';
+        $host   = $p['host'];
+        $port   = isset($p['port']) ? ':' . $p['port'] : '';
+        $path   = (string) ($p['path'] ?? '');
+        $query  = isset($p['query']) ? '?' . $p['query'] : '';
+        $frag   = isset($p['fragment']) ? '#' . $p['fragment'] : '';
+
+        $encodedPath = implode('/', array_map(
+            static fn(string $seg): string => rawurlencode(rawurldecode($seg)),
+            explode('/', $path)
+        ));
+
+        return $scheme . '://' . $host . $port . $encodedPath . $query . $frag;
     }
 
     // -----------------------------------------------------------------------
