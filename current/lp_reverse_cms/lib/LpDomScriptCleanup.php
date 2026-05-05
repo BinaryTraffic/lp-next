@@ -101,7 +101,81 @@ final class LpDomScriptCleanup
             $tn->parentNode?->removeChild($tn);
         }
 
+        self::stripLibxmlTemplateLiteralArtifactNodes($root);
+
         self::stripTemplatePlaceholderUrlAttributes($root);
+    }
+
+    /**
+     * libxml が &lt;script&gt; 内のテンプレートリテラルに含まれた HTML を実ノードとして解釈したときに
+     * 残るゴミ（例: wd_no_icon の IMG のみの div、` : ` 周りのバッククォート）を除去する。
+     * 事前の script body 削除は大きなページで構造抽出を壊すため、確実なノード単位のみ後処理する。
+     */
+    private static function stripLibxmlTemplateLiteralArtifactNodes(DOMElement $root): void
+    {
+        $doc = $root->ownerDocument;
+        if ($doc === null) {
+            return;
+        }
+
+        $xp = new DOMXPath($doc);
+
+        // `<div class="wd_no_icon">IMG</div>` from inline JS template literals (search widget clones).
+        $wd = $xp->query(
+            './/div[contains(concat(\' \', normalize-space(@class), \' \'), \' wd_no_icon \')]',
+            $root
+        );
+        $removeEls = [];
+        if ($wd) {
+            foreach ($wd as $node) {
+                if (!($node instanceof DOMElement)) {
+                    continue;
+                }
+                $hasElementChild = false;
+                foreach ($node->childNodes as $ch) {
+                    if ($ch instanceof DOMElement) {
+                        $hasElementChild = true;
+                        break;
+                    }
+                }
+                if ($hasElementChild) {
+                    continue;
+                }
+                if (preg_replace('/\s+/u', '', (string) $node->textContent) === 'IMG') {
+                    $removeEls[] = $node;
+                }
+            }
+        }
+
+        // Empty predictive grid shells sometimes appear with no real content after script removal.
+        $grid = $xp->query(
+            './/div[contains(concat(\' \', normalize-space(@class), \' \'), \' wd_predictive_pages_grid \')]',
+            $root
+        );
+        if ($grid) {
+            foreach ($grid as $node) {
+                if (!($node instanceof DOMElement)) {
+                    continue;
+                }
+                $hasElementChild = false;
+                foreach ($node->childNodes as $ch) {
+                    if ($ch instanceof DOMElement) {
+                        $hasElementChild = true;
+                        break;
+                    }
+                }
+                if ($hasElementChild) {
+                    continue;
+                }
+                if (trim((string) $node->textContent) === '') {
+                    $removeEls[] = $node;
+                }
+            }
+        }
+
+        foreach ($removeEls as $el) {
+            $el->parentNode?->removeChild($el);
+        }
     }
 
     private static function stripTemplatePlaceholderUrlAttributes(DOMElement $root): void
@@ -156,6 +230,25 @@ final class LpDomScriptCleanup
     private static function textLooksLikeJavaScriptSpill(string $t): bool
     {
         $len = strlen($t);
+        if ($len < 1) {
+            return false;
+        }
+
+        // Stray punctuation from ternary / template glue: ` : ` or `?`...`:` next to leaked tags
+        if (str_contains($t, '`')) {
+            if ($len <= 40 && preg_match('/[?:]/', $t) === 1) {
+                return true;
+            }
+            if ($len <= 32) {
+                return true;
+            }
+        }
+
+        // Tiny comma/quote-only scraps next to mis-parsed scripts
+        if ($len <= 16 && preg_match('/^[\s`,\'":;|&]+$/', $t) === 1) {
+            return true;
+        }
+
         if ($len < 8) {
             return false;
         }
