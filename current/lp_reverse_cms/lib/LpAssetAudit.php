@@ -93,8 +93,12 @@ final class LpAssetAudit
             if ($raw === '' || str_starts_with($raw, 'data:') || str_starts_with($raw, '#')) {
                 continue;
             }
+            if (LpUrlContext::looksLikeJsTemplatePlaceholder($raw)) {
+                continue;
+            }
             $abs = LpUrlContext::resolveAgainstCssFile($raw, $cssAbsoluteUrl);
-            if ($abs && !str_starts_with($abs, 'data:')) {
+            if ($abs && !str_starts_with($abs, 'data:')
+                && !LpUrlContext::looksLikeJsTemplatePlaceholder($abs)) {
                 $urls[] = $abs;
             }
         }
@@ -105,8 +109,11 @@ final class LpAssetAudit
             if ($raw === '') {
                 continue;
             }
+            if (LpUrlContext::looksLikeJsTemplatePlaceholder($raw)) {
+                continue;
+            }
             $abs = LpUrlContext::resolveAgainstCssFile($raw, $cssAbsoluteUrl);
-            if ($abs) {
+            if ($abs && !LpUrlContext::looksLikeJsTemplatePlaceholder($abs)) {
                 $urls[] = $abs;
             }
         }
@@ -271,6 +278,9 @@ final class LpAssetAudit
             if (str_starts_with($u, 'mailto:') || str_starts_with($u, 'tel:') || str_starts_with($u, 'javascript:')) {
                 continue;
             }
+            if (LpUrlContext::looksLikeJsTemplatePlaceholder($u)) {
+                continue;
+            }
 
             if (self::isUrlMapped($u, $assetMap)) {
                 continue;
@@ -348,8 +358,12 @@ final class LpAssetAudit
         if ($raw === '' || str_starts_with($raw, 'data:') || str_starts_with($raw, '#')) {
             return;
         }
+        if (LpUrlContext::looksLikeJsTemplatePlaceholder($raw)) {
+            return;
+        }
         $abs = $ctx->resolve($raw);
-        if ($abs && !str_starts_with($abs, 'data:')) {
+        if ($abs && !str_starts_with($abs, 'data:')
+            && !LpUrlContext::looksLikeJsTemplatePlaceholder($abs)) {
             $urls[] = $abs;
         }
     }

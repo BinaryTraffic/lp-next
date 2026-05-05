@@ -531,15 +531,7 @@ class LpAssetDownloader
 
     private static function isUnresolvedJsTemplateUrl(string $url): bool
     {
-        if (str_contains($url, '${')) {
-            return true;
-        }
-        // encoded `$` + `{`
-        if (stripos($url, '%24%7B') !== false) {
-            return true;
-        }
-
-        return false;
+        return LpUrlContext::looksLikeJsTemplatePlaceholder($url);
     }
 
     /**

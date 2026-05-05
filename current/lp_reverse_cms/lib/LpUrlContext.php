@@ -269,4 +269,21 @@ final class LpUrlContext
 
         return array_values(array_unique(array_filter([$absUrl, $a, $b], static fn(string $u): bool => $u !== '')));
     }
+
+    /**
+     * JS テンプレートのプレースホルダ（例: ${item.i}）がそのまま HTML/CSS に載っている URL。
+     * HTTP では取得できないためダウンロード・監査の参照リストから除外する。
+     */
+    public static function looksLikeJsTemplatePlaceholder(string $url): bool
+    {
+        if (str_contains($url, '${')) {
+            return true;
+        }
+        // encoded `$` + `{`
+        if (stripos($url, '%24%7B') !== false) {
+            return true;
+        }
+
+        return false;
+    }
 }
