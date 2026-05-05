@@ -250,17 +250,33 @@ class LpAssetDownloader
             ? $fetchKey
             : $absUrl;
 
-        $content = $this->curlGet($curlUrl);
+        $content           = $this->curlGet($curlUrl);
+        $effectiveFetchUrl = $curlUrl;
+
+        if ($content === null) {
+            $stripApp = LpUrlContext::alternateUrlStripAppAssetsPrefix($curlUrl);
+            if ($stripApp !== null && $stripApp !== $curlUrl) {
+                $stripCanon = LpUrlContext::canonicalHttpUrlForFetch($stripApp);
+                if ($stripCanon !== $curlUrl) {
+                    $retry = $this->curlGet($stripCanon);
+                    if ($retry !== null) {
+                        $content           = $retry;
+                        $effectiveFetchUrl = $stripCanon;
+                    }
+                }
+            }
+        }
+
         if ($content === null) {
             $this->failedFetches[$curlUrl] = $curlUrl;
             return null;
         }
 
-        $filename = $this->allocateFilename($curlUrl, $type);
+        $filename = $this->allocateFilename($effectiveFetchUrl, $type);
         $savePath = $this->outputDir . '/assets/' . $type . '/' . $filename;
 
         if ($type === 'css') {
-            $content = $this->processCssContentFull((string) $content, $curlUrl, $savePath);
+            $content = $this->processCssContentFull((string) $content, $effectiveFetchUrl, $savePath);
         }
 
         file_put_contents($savePath, $content);

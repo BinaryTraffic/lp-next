@@ -271,6 +271,40 @@ final class LpUrlContext
     }
 
     /**
+     * 参照パスが `/app/assets/...` のまま書かれ実体だけ `/assets/...` が配信されているサイト向けの別 URL。
+     * 取得が 404 のときのみ {@see LpAssetDownloader} が試す。該当しなければ null。
+     */
+    public static function alternateUrlStripAppAssetsPrefix(string $httpUrl): ?string
+    {
+        if (!str_starts_with($httpUrl, 'http://') && !str_starts_with($httpUrl, 'https://')) {
+            return null;
+        }
+        $p = parse_url($httpUrl);
+        if ($p === false || empty($p['path'])) {
+            return null;
+        }
+        $path   = $p['path'];
+        $needle = '/app/assets/';
+        $pos    = strpos($path, $needle);
+        if ($pos === false) {
+            return null;
+        }
+
+        $newPath = substr_replace($path, '/assets/', $pos, strlen($needle));
+
+        $scheme = $p['scheme'] ?? 'https';
+        $host   = $p['host'] ?? '';
+        if ($host === '') {
+            return null;
+        }
+        $port  = isset($p['port']) ? ':' . $p['port'] : '';
+        $query = isset($p['query']) ? '?' . $p['query'] : '';
+        $frag  = isset($p['fragment']) ? '#' . $p['fragment'] : '';
+
+        return $scheme . '://' . $host . $port . $newPath . $query . $frag;
+    }
+
+    /**
      * JS テンプレートのプレースホルダ（例: ${item.i}）がそのまま HTML/CSS に載っている URL。
      * HTTP では取得できないためダウンロード・監査の参照リストから除外する。
      */
