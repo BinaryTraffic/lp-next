@@ -72,6 +72,18 @@
 - **v1.1.11** 前後: `lp_reverse_cms` の **`data` / `output` 書き込み**を厳格化（取得失敗の明示）、デプロイ時の**所有・権限**のドキュメント化（ルート [ENVIRONMENT_AND_OPERATIONS.md](../../ENVIRONMENT_AND_OPERATIONS.md)）。
 - 本番例（リポジトリルート＝DocumentRoot）: 入口 <https://lp-next.jitan.app/> ／ 管理 <https://lp-next.jitan.app/lp_reverse_cms/> 。揃いは Git タグ **`v1.1.11-stable`** と [ルート README.md](../../README.md) の**安定版（フィックス版）の指し示し**。
 
+### 2.8 アセット URL の留意点（コミット参照）
+
+- **パスに日本語／パーセントエンコードが混在する URL**  
+  同一実体でも HTML/CSS 上で `%E6%96%B0…` と UTF-8 明文が混在すると、`asset_map` のキーと生成 HTML の文字列がずれて **置換漏れ**になることがある。  
+  **対応:** `LpUrlContext` でパス正規化・別表記バリアント、`LpAssetDownloader` は canonical URL で dedupe・取得、`LpGenerator::applyAssetMap` でも別表記を展開。  
+  **コミット:** `f462a95`
+
+- **`${item.i}` のような JS テンプレートがそのまま載った URL**（例: `https://www.otakaraya.jp/${item.i}`）  
+  実行時のみ意味があるため **静的 HTTP では取得不可**。`LpAssetDownloader` ではもともと curl をかけないが、`LpAssetAudit` が参照一覧に載せ **「未取得／読み取りエラー」に見える**ことがあった。  
+  **対応:** `LpUrlContext::looksLikeJsTemplatePlaceholder`（`${…}` と `%24%7B`）で監査の収集・未取得リストから除外。ダウンローダも同一判定を参照。  
+  **コミット:** `d912b2f`
+
 ---
 
 ## 3. 成果物（何ができれば完成か）
