@@ -581,34 +581,97 @@
   }
 
   // -----------------------------------------------------------------------
-  // Step 2 — Save & Generate
+  // Step 2 — Save & Generate (progress modal)
   // -----------------------------------------------------------------------
+  function resetSaveGenerateModal() {
+    const errEl = document.getElementById('saveGenModalErr');
+    if (errEl) {
+      errEl.textContent = '';
+      errEl.classList.add('d-none');
+    }
+    document.getElementById('saveGenFooterBusy')?.classList.remove('d-none');
+    document.getElementById('saveGenFooterDone')?.classList.add('d-none');
+    setSaveGenRowStatus('saveGenRowSave', 'pending');
+    setSaveGenRowStatus('saveGenRowGen', 'pending');
+  }
+
+  /** @param {'pending'|'active'|'done'|'error'} state */
+  function setSaveGenRowStatus(rowId, state) {
+    const row = document.getElementById(rowId);
+    const holder = row?.querySelector('.save-gen-status');
+    if (!holder) return;
+    const map = {
+      pending: '<i class="bi bi-circle text-muted" aria-hidden="true"></i>',
+      active:
+        '<div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">処理中</span></div>',
+      done: '<i class="bi bi-check-circle-fill text-success" aria-hidden="true"></i>',
+      error: '<i class="bi bi-x-circle-fill text-danger" aria-hidden="true"></i>',
+    };
+    holder.innerHTML = map[state] || map.pending;
+  }
+
+  function openSaveGenerateModal() {
+    const modalEl = document.getElementById('saveGenerateModal');
+    if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
+    resetSaveGenerateModal();
+    bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false }).show();
+  }
+
+  function hideSaveGenerateModal() {
+    const modalEl = document.getElementById('saveGenerateModal');
+    if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
+    bootstrap.Modal.getInstance(modalEl)?.hide();
+  }
+
   async function runSaveAndGenerate() {
     btnSaveGenerate.disabled = true;
     generateError.classList.add('d-none');
     generateSuccess.classList.add('d-none');
 
+    openSaveGenerateModal();
+
+    let savePhaseDone = false;
+
     try {
       const clientData = collectFormData();
 
-      // -- Save client data --
+      setSaveGenRowStatus('saveGenRowSave', 'active');
       const saveRes = await apiPost('store/save_client.php', clientData);
       if (!saveRes.success) throw new Error(saveRes.error ?? '保存に失敗しました。');
+      setSaveGenRowStatus('saveGenRowSave', 'done');
+      savePhaseDone = true;
 
-      // -- Generate site HTML --
+      setSaveGenRowStatus('saveGenRowGen', 'active');
       const genRes = await apiPost('store/generate_lp.php', {});
       if (!genRes.success) throw new Error(genRes.error ?? 'サイト生成に失敗しました。');
+      setSaveGenRowStatus('saveGenRowGen', 'done');
 
       showToast(`サイト生成完了！ (${(genRes.size / 1024).toFixed(1)} KB)`, 'success');
 
-      await sleep(500);
+      await sleep(350);
+      hideSaveGenerateModal();
+
+      btnSaveGenerate.disabled = false;
 
       expandMaxReachable(3);
 
       tryNavigateToReachedStep(3);
 
     } catch (err) {
-      showError(generateError, err.message);
+      const message = err instanceof Error ? err.message : String(err);
+      showError(generateError, message);
+      const msgEl = document.getElementById('saveGenModalErr');
+      if (msgEl) {
+        msgEl.textContent = message;
+        msgEl.classList.remove('d-none');
+      }
+      if (!savePhaseDone) {
+        setSaveGenRowStatus('saveGenRowSave', 'error');
+      } else {
+        setSaveGenRowStatus('saveGenRowGen', 'error');
+      }
+      document.getElementById('saveGenFooterBusy')?.classList.add('d-none');
+      document.getElementById('saveGenFooterDone')?.classList.remove('d-none');
       btnSaveGenerate.disabled = false;
     }
   }
@@ -1476,6 +1539,10 @@
     if (btnSaveGenerate) {
       btnSaveGenerate.addEventListener('click', runSaveAndGenerate);
     }
+
+    document.getElementById('btnSaveGenModalDismiss')?.addEventListener('click', () => {
+      if (btnSaveGenerate) btnSaveGenerate.disabled = false;
+    });
 
     initAiTextReplace();
 

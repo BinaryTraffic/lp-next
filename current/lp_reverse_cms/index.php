@@ -517,6 +517,39 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
   </div>
 </div>
 
+<!-- 保存＆サイト生成 — 進捗モーダル -->
+<div class="modal fade" id="saveGenerateModal" tabindex="-1" aria-labelledby="saveGenerateModalLabel" aria-hidden="true"
+     data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2 border-bottom-0">
+        <h5 class="modal-title fs-6" id="saveGenerateModalLabel">
+          <i class="bi bi-lightning-charge-fill text-primary me-1"></i>保存＆サイト生成
+        </h5>
+      </div>
+      <div class="modal-body pt-0 pb-2">
+        <ul class="list-unstyled mb-0 small" id="saveGenSteps">
+          <li id="saveGenRowSave" class="d-flex align-items-center gap-2 mb-3">
+            <span class="save-gen-status flex-shrink-0" style="width:1.25rem;text-align:center"><i class="bi bi-circle text-muted"></i></span>
+            <span>編集内容をサーバーに保存しています…</span>
+          </li>
+          <li id="saveGenRowGen" class="d-flex align-items-center gap-2 mb-0">
+            <span class="save-gen-status flex-shrink-0" style="width:1.25rem;text-align:center"><i class="bi bi-circle text-muted"></i></span>
+            <span>output/index.html を生成しています…</span>
+          </li>
+        </ul>
+        <div id="saveGenModalErr" class="alert alert-danger d-none mt-3 mb-0 py-2 small" role="alert"></div>
+      </div>
+      <div class="modal-footer py-2 border-top-0 justify-content-between" id="saveGenFooterBusy">
+        <span class="small text-muted mb-0">完了までこの画面を閉じないでください。</span>
+      </div>
+      <div class="modal-footer py-2 border-top-0 d-none" id="saveGenFooterDone">
+        <button type="button" class="btn btn-primary btn-sm" id="btnSaveGenModalDismiss" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MAIN LAYOUT ===== -->
 <div class="container-fluid py-4" style="max-width: 1200px;">
 

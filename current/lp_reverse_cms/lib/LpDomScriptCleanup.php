@@ -58,13 +58,23 @@ final class LpDomScriptCleanup
     private static function textLooksLikeJavaScriptSpill(string $t): bool
     {
         $len = strlen($t);
+        if ($len < 8) {
+            return false;
+        }
+
+        // Short fragments from broken script parsing (e.g. trailing quotes before innerHTML builder)
+        if (preg_match("/html\\s*\\+=/", $t) === 1 && $len >= 10) {
+            return true;
+        }
+        // Template literal remnants rendered as text (${icon}${item.t})
+        if ($len >= 8 && preg_match('/\$\{[^{}]+\}/', $t) === 1) {
+            return true;
+        }
+
         if ($len < 28) {
             return false;
         }
 
-        if ($len >= 40 && str_contains($t, 'html +=')) {
-            return true;
-        }
         if (str_contains($t, '.forEach(')) {
             return true;
         }
