@@ -206,11 +206,11 @@ $userApprovedUx  = $authManageUsers ? $registryUx->getApproved() : [];
 $superAdminUx    = (string) getenv('CMS_SUPER_ADMIN');
 $superAdminLw    = strtolower(trim($superAdminUx));
 
-$dataDir        = __DIR__ . '/data/';
-$structureFile  = $dataDir . 'lp_structure.json';
-$clientFile     = $dataDir . 'client_data.json';
-$outputFile     = __DIR__ . '/output/index.html';
-$sourceUrlFile  = $dataDir . 'source_url.txt';
+$workspaceDataDir = LpWorkspace::dataDir($cmsRootAuth);
+$structureFile    = $workspaceDataDir . 'lp_structure.json';
+$clientFile       = $workspaceDataDir . 'client_data.json';
+$outputFile       = LpWorkspace::outputDir($cmsRootAuth) . 'index.html';
+$sourceUrlFile    = $workspaceDataDir . 'source_url.txt';
 
 $hasStructure = file_exists($structureFile);
 $hasOutput    = file_exists($outputFile);

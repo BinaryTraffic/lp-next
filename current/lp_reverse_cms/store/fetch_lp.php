@@ -59,6 +59,23 @@ try {
         }
     }
 
+    // 別 URL で取り直すとき、セッション・ワークスペース内の旧解析・編集・生成物を除去
+    foreach ([
+        'client_data.json',
+        'lp_structure.json',
+        'output_unreplaced.json',
+        'lp_project_profile.json',
+    ] as $leaf) {
+        $p = $dataDir . $leaf;
+        if (is_file($p)) {
+            unlink($p);
+        }
+    }
+    $genHtml = $outputDir . 'index.html';
+    if (is_file($genHtml)) {
+        unlink($genHtml);
+    }
+
     // ── Step 1: Fetch HTML ────────────────────────────────────────────────
     $fetcher = new LpFetcher();
     $result  = $fetcher->fetch($url);
