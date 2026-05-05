@@ -87,7 +87,7 @@
 - **`/app/assets/...` が 404・`/assets/...` のみ 200 となる参照**（例: おたからやの静的アイコン）  
   HTML/CSS は WordPress 直下の `/app/` を付けたパスを出力しているが、CDN 等では `/app` なしで配信されているケース。  
   **対応:** 初回 GET が 404 のときだけ `LpUrlContext::alternateUrlStripAppAssetsPrefix` で `/app/assets/` → `/assets/` の URL を試行。成功時も元の参照文字列は `asset_map` でローカルへ解決。  
-  **コミット:** `e8a50fd`
+  **コミット:** `34be318`
 
 ---
 
