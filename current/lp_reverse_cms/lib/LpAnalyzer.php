@@ -265,12 +265,13 @@ class LpAnalyzer
         ?callable $onWalkVisit = null,
         ?array &$diagnosticsOut = null
     ): array {
-        $sections     = [];
-        $sectionIndex = 0;
+        $sections       = [];
+        $candidateIndex = 0;
+        $writtenIndex   = 0;
         $candidates   = $this->findStructuralElements($dom, $xpath);
 
         foreach ($candidates as $element) {
-            $sectionId = 'sec_' . $sectionIndex;
+            $sectionId = 'sec_' . $writtenIndex;
             $elements  = [];
             $elemIndex = 0;
 
@@ -289,12 +290,13 @@ class LpAnalyzer
                     $sections[] = [
                         'id'            => $sectionId,
                         'type'          => $this->classifySection($element),
-                        'label'         => $this->generateLabel($element, $sectionIndex),
+                        'label'         => $this->generateLabel($element, $writtenIndex),
                         'outer_tag'     => strtolower($element->tagName),
                         'html'          => $html,
                         'elements'      => $elements,
                         'element_count' => count($elements),
                     ];
+                    $writtenIndex++;
 
                     if ($diagnosticsOut !== null) {
                         $diagnosticsOut['sections_written']++;
@@ -304,7 +306,7 @@ class LpAnalyzer
                 if ($diagnosticsOut !== null) {
                     $diagnosticsOut['section_errors'][] = [
                         'section_id'      => $sectionId,
-                        'section_index'   => $sectionIndex,
+                        'section_index'   => $candidateIndex,
                         'exception_class' => $e::class,
                         'message'         => $e->getMessage(),
                         'file'            => $e->getFile(),
@@ -313,7 +315,7 @@ class LpAnalyzer
                 }
             }
 
-            $sectionIndex++;
+            $candidateIndex++;
         }
 
         return $sections;
