@@ -34,9 +34,18 @@ class LpAnalyzer
         $this->urlCtx    = LpUrlContext::fromPageAndHtml($sourceUrl, $html);
         $this->baseUrl   = $this->urlCtx->schemeHost;
 
+        // Strip inline <script> content before libxml parsing.
+        // JS template literals containing <div> etc. are misread as DOM nodes by libxml's
+        // HTML parser, causing backtick/ternary text to leak into section HTML output.
+        $htmlForDom = (string) preg_replace_callback(
+            '#(<script(?:\s[^>]*)?>).*?(</script>)#si',
+            static fn(array $m): string => $m[1] . $m[2],
+            $html
+        );
+
         libxml_use_internal_errors(true);
         $dom = new DOMDocument('1.0', 'UTF-8');
-        $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        $dom->loadHTML('<?xml encoding="UTF-8">' . $htmlForDom, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
         libxml_clear_errors();
 
         $docRoot = $dom->documentElement;
