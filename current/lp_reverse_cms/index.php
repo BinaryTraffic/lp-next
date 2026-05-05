@@ -336,9 +336,6 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           <li><a class="dropdown-item" href="store/auth_logout.php"><i class="bi bi-box-arrow-right me-2"></i>ログアウト</a></li>
         </ul>
       </div>
-      <button class="btn btn-sm btn-outline-light" id="btnDiag" type="button" title="診断情報">
-        <i class="bi bi-bug"></i>
-      </button>
     </div>
   </div>
 </nav>
@@ -496,28 +493,6 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
   </div>
 </div>
 <?php endif; ?>
-
-<!-- ===== DIAGNOSTIC MODAL ===== -->
-<div class="modal fade" id="diagModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header bg-dark text-white">
-        <h5 class="modal-title"><i class="bi bi-bug me-2"></i>診断情報 — v<?= htmlspecialchars(APP_VERSION, ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(APP_BUILD, ENT_QUOTES, 'UTF-8') ?></h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div id="diagContent">
-          <div class="text-center py-4"><div class="spinner-border text-primary"></div></div>
-        </div>
-        <div class="mt-3 p-3 bg-light rounded border small">
-          <strong>スタイルが反映されない場合：</strong><br>
-          Step 1 に戻り「<strong>解析する</strong>」をもう一度実行してください（CSS・画像が再ダウンロードされます）。<br>
-          その後 Step 2 で「<strong>保存＆サイト生成</strong>」を実行してください。
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- HTTP 取得失敗ログ（コピー用テキスト） -->
 <div class="modal fade" id="fetchFailureModal" tabindex="-1" aria-labelledby="fetchFailureModalLabel" aria-hidden="true">

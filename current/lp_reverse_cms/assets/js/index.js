@@ -1429,25 +1429,6 @@
     });
   }
 
-  function openDiagModal() {
-    const diagContent = document.getElementById('diagContent');
-    if (!diagContent) return;
-
-    diagContent.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
-
-    const modal = new bootstrap.Modal(document.getElementById('diagModal'));
-    modal.show();
-
-    loadDiagnostics(null).then(data => {
-      if (!data) {
-        diagContent.innerHTML = '<p class="text-danger">診断データを取得できませんでした。</p>';
-        return;
-      }
-      diagContent.innerHTML = `
-        <pre class="bg-dark text-success rounded p-3 small" style="max-height:400px;overflow:auto">${JSON.stringify(data, null, 2)}</pre>`;
-    });
-  }
-
   // -----------------------------------------------------------------------
   // Init
   // -----------------------------------------------------------------------
@@ -1464,12 +1445,6 @@
     bindImageReplaceModal();
     bindCloneImageZipPanel();
     initLpCmsBootstrapTooltips();
-
-    // Diagnostic modal button
-    const btnDiag = document.getElementById('btnDiag');
-    if (btnDiag) {
-      btnDiag.addEventListener('click', openDiagModal);
-    }
 
     document.getElementById('step3DiagSummary')?.addEventListener('click', (e) => {
       const el = e.target;
