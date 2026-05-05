@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/LpDomScriptCleanup.php';
+
 /**
  * LpGenerator — rebuilds a complete HTML page from lp_structure + client_data.
  *
@@ -278,6 +280,12 @@ HTML;
         $wrappedHtml = '<?xml encoding="UTF-8"><div id="__lp_root__">' . $originalHtml . '</div>';
         $dom->loadHTML($wrappedHtml, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
         libxml_clear_errors();
+
+        $xpathBoot = new DOMXPath($dom);
+        $wrapRoot  = $xpathBoot->query('//*[@id="__lp_root__"]')->item(0);
+        if ($wrapRoot instanceof DOMElement) {
+            LpDomScriptCleanup::stripScriptsAndJsSpills($wrapRoot);
+        }
 
         $xpath = new DOMXPath($dom);
 

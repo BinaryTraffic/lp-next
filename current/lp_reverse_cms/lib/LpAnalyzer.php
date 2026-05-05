@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/LpUrlContext.php';
+require_once __DIR__ . '/LpDomScriptCleanup.php';
 
 class LpAnalyzer
 {
@@ -37,6 +38,11 @@ class LpAnalyzer
         $dom = new DOMDocument('1.0', 'UTF-8');
         $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
         libxml_clear_errors();
+
+        $docRoot = $dom->documentElement;
+        if ($docRoot instanceof DOMElement) {
+            LpDomScriptCleanup::stripScriptsAndJsSpills($docRoot);
+        }
 
         $xpath = new DOMXPath($dom);
 
@@ -630,6 +636,8 @@ class LpAnalyzer
      */
     private function buildSectionHtml(DOMElement $element, DOMDocument $dom): string
     {
+        LpDomScriptCleanup::stripScriptsAndJsSpills($element);
+
         // Absolutize img src
         foreach ($element->getElementsByTagName('img') as $img) {
             /** @var DOMElement $img */
