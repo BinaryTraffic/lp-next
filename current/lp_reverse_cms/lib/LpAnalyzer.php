@@ -88,6 +88,8 @@ class LpAnalyzer
             'analyzed_at'         => date('Y-m-d H:i:s'),
             'meta'                => $this->extractMeta($xpath),
             'head_extra'          => $this->extractHeadExtra($xpath),
+            /** body 直下の style / stylesheet link（ヒーロー直前のページ固有 CSS 等。セクション HTML に含まれないため別途保持） */
+            'body_head_snippets'  => $this->extractBodyDirectChildHeadSnippets($xpath),
             'sections'            => $sections,
             'parse_diagnostics'   => [
                 'walk_total_steps'      => $diag['walk_total_steps'],
@@ -177,6 +179,50 @@ class LpAnalyzer
                 $media = $style->getAttribute('media');
                 $mediaAttr = $media ? ' media="' . htmlspecialchars($media, ENT_QUOTES) . '"' : '';
                 $parts[] = '<style' . $mediaAttr . '>' . $style->textContent . '</style>';
+            }
+        }
+
+        return implode("\n", $parts);
+    }
+
+    /**
+     * Collect &lt;style&gt; and stylesheet &lt;link&gt; that are **direct children** of &lt;body&gt;.
+     * Many LP templates place page-local rules (hero/banner layers) here; they are not part of
+     * section fragments and would otherwise be dropped at generate time.
+     *
+     * Order is preserved (DOM child order).
+     */
+    private function extractBodyDirectChildHeadSnippets(DOMXPath $xpath): string
+    {
+        $bodyList = $xpath->query('//body');
+        if (!$bodyList || $bodyList->length === 0) {
+            return '';
+        }
+        /** @var DOMElement $bodyEl */
+        $bodyEl = $bodyList->item(0);
+        $parts  = [];
+
+        foreach ($bodyEl->childNodes as $child) {
+            if (!($child instanceof DOMElement)) {
+                continue;
+            }
+            $tag = strtolower($child->tagName);
+            if ($tag === 'style') {
+                $media = $child->getAttribute('media');
+                $mediaAttr = $media ? ' media="' . htmlspecialchars($media, ENT_QUOTES) . '"' : '';
+                $parts[] = '<style' . $mediaAttr . '>' . $child->textContent . '</style>';
+                continue;
+            }
+            if ($tag === 'link') {
+                $rel = strtolower(trim($child->getAttribute('rel') ?? ''));
+                if ($rel !== 'stylesheet') {
+                    continue;
+                }
+                $href = $child->getAttribute('href');
+                if ($href) {
+                    $child->setAttribute('href', $this->absolutizeUrl($href));
+                }
+                $parts[] = $this->serializeLinkTag($child);
             }
         }
 

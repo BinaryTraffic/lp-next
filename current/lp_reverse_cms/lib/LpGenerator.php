@@ -15,6 +15,11 @@ declare(strict_types=1);
  * Stacking: sections are emitted as consecutive siblings under <body>. If the source page
  * nested blocks under one positioned ancestor, z-index could otherwise compete globally.
  * Each section is wrapped in .lp-reverse-section-root (isolation:isolate) to scope layers.
+ *
+ * Layout: body_head_snippets restores body-level style/link that are not inside any
+ * section fragment (common for hero/banner CSS). The wrapper uses position:relative so
+ * position:absolute descendants keep a bounded containing block when the original outer
+ * wrapper was not part of the extracted section.
  */
 class LpGenerator
 {
@@ -33,6 +38,7 @@ class LpGenerator
 
         $meta        = $structure['meta']       ?? [];
         $headExtra   = $structure['head_extra'] ?? '';
+        $bodySnip    = $structure['body_head_snippets'] ?? '';
         $sections    = $structure['sections']   ?? [];
         $elemData    = $clientData['elements']  ?? [];
         $clientMeta  = $clientData['meta']      ?? [];
@@ -48,7 +54,7 @@ class LpGenerator
         $viewport    = htmlspecialchars($viewport,    ENT_QUOTES, 'UTF-8');
 
         $stackFixCss = '<style id="lp-reverse-stack-context">'
-            . '.lp-reverse-section-root{isolation:isolate;z-index:0}'
+            . '.lp-reverse-section-root{isolation:isolate;z-index:0;position:relative;width:100%;box-sizing:border-box}'
             . '</style>';
 
         $sectionsHtml = '';
@@ -71,6 +77,7 @@ class LpGenerator
 <meta name="description" content="{$description}">
 <title>{$title}</title>
 {$headExtra}
+{$bodySnip}
 {$stackFixCss}
 </head>
 <body>
