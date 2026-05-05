@@ -89,6 +89,11 @@
   **対応:** 初回 GET が 404 のときだけ `LpUrlContext::alternateUrlStripAppAssetsPrefix` で `/app/assets/` → `/assets/` の URL を試行。成功時も元の参照文字列は `asset_map` でローカルへ解決。  
   **コミット:** `34be318`
 
+- **JS テンプレート残骸 URL が属性として DOM に露出するケース**（例: `src="https://.../%24%7Bitem.i%7D"`）  
+  解析時に `img[src]` や `a[href]` がそのまま残ると、壊れ画像・外部参照が残存して見た目が崩れる。  
+  **対応:** `LpDomScriptCleanup` で `${...}` / `%24%7B...` を含む URL 属性を除去し、`img[src]` は要素ごと除去。  
+  **コミット:** `97a0944`
+
 ---
 
 ## 3. 成果物（何ができれば完成か）

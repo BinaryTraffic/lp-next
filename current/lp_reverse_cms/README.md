@@ -191,6 +191,7 @@ C:\xampp\php\php.exe -S localhost:8080 -t "C:\path\to\lp_reverse_cms"
 - **アセット URL — 日本語パスと `%` エンコードの表記ゆれ:** 同一ファイルでも URL の書き方が違うと `asset_map` 置換が欠けることがある。正規化・別表記の登録・生成時のエイリアス展開。**コミット `f462a95`**（詳細は [PROJECT_HISTORY_AND_SETUP.md](docs/PROJECT_HISTORY_AND_SETUP.md) §2.8）。
 - **アセット URL — JS テンプレート残骸（例 `…/${item.i}`）:** HTTP では取得できないが、診断の「未取得」に載ることがあった。**コミット `d912b2f`**（同上 §2.8）。
 - **アセット URL — `/app/assets/` が 404 で `/assets/` のみ配信:** 取得時に自動で代替 URL を試す。**コミット `34be318`**（同上 §2.8）。
+- **アセット URL — JS テンプレート残骸が属性に露出（`.../%24%7Bitem.i%7D`）:** 解析後 DOM からプレースホルダ URL 属性を除去し、壊れ `img[src]` を削除。**コミット `97a0944`**（同上 §2.8）。
 
 **運用の詳細**（`data/` 非公開、HTTPS、タイムアウト、`git pull` 後の `data`/`output` など）: リポジトリルートの [ENVIRONMENT_AND_OPERATIONS.md](../ENVIRONMENT_AND_OPERATIONS.md) を参照。
 
