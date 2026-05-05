@@ -11,15 +11,16 @@
 
 `git clone` 直後の通常作業: `main` から作業用ブランチを切るか、既存の `develop/v1.2.0` を追います。
 
-## 版の固定（タグ）
+## 版の固定（タグ） / 現行アプリ版
 
 | タグ | 役割 |
 |------|------|
 | **v1.0.0** | 過去版の固定点（初期版）。 |
 | **v1.1.0** | 過去版の固定点（v1.1 系・安定ライン）。 |
-| **v1.2.0** | 現行本番想定の固定点。 |
+| **v1.2.0** | 現行本番想定の固定点（タグ運用）。 |
 
-`git tag -l` で一覧し、`git show v1.2.0` で指すコミットを確認します。過去ツリーの出し方は [releases/README.md](releases/README.md) を参照。
+`git tag -l` で一覧し、`git show v1.2.0` で指すコミットを確認します。過去ツリーの出し方は [releases/README.md](releases/README.md) を参照。  
+アプリケーション版（`current/lp_reverse_cms/index.php` の `APP_VERSION`）は **`1.4.0`** です。
 
 ```text
 lp-next/
