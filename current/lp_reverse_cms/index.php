@@ -315,25 +315,28 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
       </span>
     </span>
     <div class="d-flex align-items-center gap-2">
-      <?php if ($hasOutput): ?>
-        <a href="preview.php" target="_blank" class="btn btn-sm btn-light">
-          <i class="bi bi-eye me-1"></i>プレビュー
-        </a>
-        <a href="export.php" class="btn btn-sm btn-success">
-          <i class="bi bi-download me-1"></i>エクスポート
-        </a>
-      <?php endif; ?>
-      <?php if ($authManageUsers): ?>
-        <button type="button" class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#userMgmtModal">
-          <i class="bi bi-people-fill me-1"></i>ユーザー
-        </button>
-      <?php endif; ?>
       <span class="text-white-50 small d-none d-xl-inline text-truncate" style="max-width:200px;"
             title="<?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>">
         <?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>
       </span>
-      <a href="store/auth_logout.php" class="btn btn-sm btn-warning">ログアウト</a>
-      <button class="btn btn-sm btn-outline-light" id="btnDiag" title="診断情報">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-light" type="button" id="navMenuDropdown"
+                data-bs-toggle="dropdown" aria-expanded="false" title="メニュー">
+          <i class="bi bi-list"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navMenuDropdown">
+          <?php if ($authManageUsers): ?>
+          <li>
+            <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#userMgmtModal">
+              <i class="bi bi-people-fill me-2"></i>ユーザー管理
+            </button>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <?php endif; ?>
+          <li><a class="dropdown-item" href="store/auth_logout.php"><i class="bi bi-box-arrow-right me-2"></i>ログアウト</a></li>
+        </ul>
+      </div>
+      <button class="btn btn-sm btn-outline-light" id="btnDiag" type="button" title="診断情報">
         <i class="bi bi-bug"></i>
       </button>
     </div>
@@ -516,6 +519,29 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
   </div>
 </div>
 
+<!-- HTTP 取得失敗ログ（コピー用テキスト） -->
+<div class="modal fade" id="fetchFailureModal" tabindex="-1" aria-labelledby="fetchFailureModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6" id="fetchFailureModalLabel">
+          <i class="bi bi-link-45deg me-1"></i>HTTP 取得に失敗した URL
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body py-2">
+        <p class="small text-muted mb-2">1行1URL。テキストをそのまま選択してコピーできます。</p>
+        <label class="form-label small mb-1" for="fetchFailureLogBody">ログ</label>
+        <textarea id="fetchFailureLogBody" class="form-control font-monospace small" rows="14" readonly
+                  style="white-space:pre;overflow-wrap:normal;overflow-x:auto"></textarea>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MAIN LAYOUT ===== -->
 <div class="container-fluid py-4" style="max-width: 1200px;">
 
@@ -619,7 +645,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             <ol class="mb-0 small text-muted">
               <li>コピー元サイトのURLを入力して「解析する」をクリック</li>
               <li>抽出された各テキスト・画像を自社情報に書き換え</li>
-              <li>「保存＆サイト生成」で HTML を出力 → プレビュー・エクスポート</li>
+              <li>「保存＆サイト生成」で HTML を出力 → Step 3 でプレビュー・ダウンロード</li>
             </ol>
           </div>
         </div>

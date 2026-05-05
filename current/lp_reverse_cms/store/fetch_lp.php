@@ -146,6 +146,7 @@ try {
         'asset_fonts'        => $counts['fonts'],
         'asset_uncategorized'=> $uncategorized,
         'fetch_failed'       => count($failedList),
+        'fetch_failures'     => $failedList,
         'message'            => 'HTML・CSS・画像・フォントの取得が完了しました。',
     ]);
 

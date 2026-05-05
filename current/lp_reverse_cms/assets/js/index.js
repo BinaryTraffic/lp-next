@@ -9,6 +9,9 @@
   // -----------------------------------------------------------------------
   let currentStep = window.LP_CMS?.initialStep ?? 1;
 
+  /** Step 3 診断で取得した fetch_failures（ログモーダル用） */
+  let lastDiagFetchFailures = [];
+
   // -----------------------------------------------------------------------
   // DOM refs
   // -----------------------------------------------------------------------
@@ -421,7 +424,10 @@
   // Progress helpers (Step 1)
   // -----------------------------------------------------------------------
 
-  function setProgState(el, state, detail = '') {
+  /**
+   * @param {{ skipDetail?: boolean }} [opts]
+   */
+  function setProgState(el, state, detail = '', opts = {}) {
     const spinner  = el.querySelector('.spinner-border');
     const iconWrap = el.querySelector('.text-secondary');
 
@@ -445,7 +451,46 @@
     }
 
     const detailEl = el.querySelector('[id$="_detail"]');
-    if (detailEl) detailEl.textContent = detail;
+    if (detailEl && !opts.skipDetail) {
+      detailEl.textContent = detail;
+    }
+  }
+
+  function openFetchFailureLogModal(urlList) {
+    const ta = document.getElementById('fetchFailureLogBody');
+    const modalEl = document.getElementById('fetchFailureModal');
+    if (!ta || !modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+      return;
+    }
+    const lines = Array.isArray(urlList) ? urlList.map(u => String(u)) : [];
+    ta.value = lines.length > 0
+      ? lines.join('\n')
+      : '（失敗 URL の記録がありません。store/debug.php の fetch_failures を参照してください。）';
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  }
+
+  /**
+   * Step 1 取得完了行に「失敗 N件」リンクを埋め込む（テキストのみの部分は textContent で連結）
+   */
+  function renderFetchProgDetail(htmlKb, buckets, total, failed, failList) {
+    if (!progFetchDetail) return;
+    progFetchDetail.replaceChildren();
+    const totalExplain = `（計 ${total}＝重複省略後のアセットファイル保存先の一意数）`;
+    const line = `HTML ${htmlKb} KB | ${buckets}${totalExplain}`;
+    progFetchDetail.appendChild(document.createTextNode(line));
+    if (failed > 0) {
+      const list = Array.isArray(failList) ? failList : [];
+      progFetchDetail.appendChild(document.createTextNode(' / '));
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-link btn-sm p-0 align-baseline text-danger text-decoration-underline';
+      btn.setAttribute('aria-label', '失敗したURLのログを表示');
+      btn.textContent = `失敗 ${failed}件（ログを表示）`;
+      btn.addEventListener('click', () => {
+        openFetchFailureLogModal(list);
+      });
+      progFetchDetail.appendChild(btn);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -482,17 +527,22 @@
       const uncat   = fetchRes.asset_uncategorized ?? 0;
       const failed  = fetchRes.fetch_failed ?? 0;
       const total   = fetchRes.asset_total  ?? 0;
+      const failList = fetchRes.fetch_failures;
 
       const buckets = `CSS ${css} / 画像 ${img} / JS ${js} / フォント ${fonts}${
         Number(uncat) > 0 ? ` / 未分類 ${uncat}` : ''
       }`;
-      const failNote = failed > 0 ? ` / 失敗 ${failed}件（debug.php で確認）` : '';
-      const totalExplain =
-        '（計 ' + total + '＝重複省略後のアセットファイル保存先の一意数）';
-      setProgState(
-        progFetch, 'done',
-        `HTML ${htmlKb} KB | ${buckets}${totalExplain}${failNote}`
-      );
+      if (failed > 0) {
+        setProgState(progFetch, 'done', '', { skipDetail: true });
+        renderFetchProgDetail(htmlKb, buckets, total, failed, failList);
+      } else {
+        const totalExplain =
+          '（計 ' + total + '＝重複省略後のアセットファイル保存先の一意数）';
+        setProgState(
+          progFetch, 'done',
+          `HTML ${htmlKb} KB | ${buckets}${totalExplain}`,
+        );
+      }
       resetAnalyzeProgressUi();
       progAnalyzeBarWrap?.classList.remove('d-none');
       setProgState(progAnalyze, 'loading', 'サイト構造を解析中…');
@@ -1246,19 +1296,36 @@
       const data = await fetch('store/debug.php').then(r => r.json());
       if (!targetEl) return data;
 
-      const ok     = data.output_health?.ok;
-      const leftOver = data.output_health?.absolute_refs_remaining ?? '?';
-      const totalMap = data.assets?.map_total ?? 0;
-      const css    = data.assets?.map_css ?? 0;
-      const img    = data.assets?.map_img ?? 0;
-      const js     = data.assets?.map_js  ?? 0;
-      const diskCss = data.assets?.disk_css?.count ?? 0;
-      const diskImg = data.assets?.disk_img?.count ?? 0;
-      const diskJs  = data.assets?.disk_js?.count  ?? 0;
+      const ff = Array.isArray(data.fetch_failures) ? data.fetch_failures : [];
+      lastDiagFetchFailures = ff;
+      const failCount =
+        typeof data.summary?.fetch_failure_count === 'number'
+          ? data.summary.fetch_failure_count
+          : ff.length;
+
+      const sum = data.summary ?? {};
+      const ast = data.assets ?? {};
+      const unrepTotal = Number(data.output_unreplaced?.total ?? 0);
+      const ok = unrepTotal === 0;
+      const leftOver = unrepTotal;
+      const css    = sum.map_css ?? ast.map_css ?? 0;
+      const img    = sum.map_img ?? ast.map_img ?? 0;
+      const js     = sum.map_js  ?? ast.map_js  ?? 0;
+      const diskCss = sum.disk_css ?? ast.disk_css?.count ?? 0;
+      const diskImg = sum.disk_img ?? ast.disk_img?.count ?? 0;
+      const diskJs  = sum.disk_js  ?? ast.disk_js?.count  ?? 0;
 
       const healthBadge = ok
-        ? '<span class="badge bg-success">✓ URLの置換OK</span>'
-        : `<span class="badge bg-warning text-dark">⚠ 絶対URL残存：${leftOver}件</span>`;
+        ? '<span class="badge bg-success">✓ 生成HTMLの未置換URLなし</span>'
+        : `<span class="badge bg-warning text-dark">⚠ 未置換の絶対URL：${leftOver}件</span>`;
+
+      const fetchFailBlock =
+        failCount > 0
+          ? `<div class="col-12 small mt-2">
+          <span class="text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Step1 での HTTP 取得失敗: ${failCount}件</span>
+          <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" id="step3FetchFailLogBtn">ログを表示</button>
+        </div>`
+          : '';
 
       targetEl.innerHTML = `
         <div class="row g-2 text-start">
@@ -1288,8 +1355,9 @@
               <span class="text-muted">map: ${js}</span>
             </div>
           </div>
+          ${fetchFailBlock}
           ${!ok ? `<div class="col-12"><div class="alert alert-warning small mb-0 mt-1">
-            スタイルが反映されない場合は <strong>Step 1 に戻り「解析する」を再実行</strong>してください。
+            外部URLや置換漏れが残っている可能性があります。必要なら Step 1 に戻り「解析する」を再実行するか、編集画面で該当リンク・画像を確認してください。
           </div></div>` : ''}
         </div>`;
       return data;
@@ -1402,6 +1470,14 @@
     if (btnDiag) {
       btnDiag.addEventListener('click', openDiagModal);
     }
+
+    document.getElementById('step3DiagSummary')?.addEventListener('click', (e) => {
+      const el = e.target;
+      if (!(el instanceof Element)) return;
+      if (el.closest('#step3FetchFailLogBtn')) {
+        openFetchFailureLogModal(lastDiagFetchFailures);
+      }
+    });
 
     // Step 1 events
     if (btnFetchAnalyze) {
