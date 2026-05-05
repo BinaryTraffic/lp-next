@@ -1356,7 +1356,16 @@
   // -----------------------------------------------------------------------
   async function loadDiagnostics(targetEl) {
     try {
-      const data = await fetch('store/debug.php').then(r => r.json());
+      const ctrl = new AbortController();
+      const tm = setTimeout(() => ctrl.abort(), 10000);
+      const res = await fetch('store/debug.php', {
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: ctrl.signal,
+      });
+      clearTimeout(tm);
+      const data = await res.json();
       if (!targetEl) return data;
 
       const ff = Array.isArray(data.fetch_failures) ? data.fetch_failures : [];
@@ -1425,7 +1434,12 @@
         </div>`;
       return data;
     } catch (e) {
-      if (targetEl) targetEl.innerHTML = '<p class="text-danger small">診断取得に失敗しました。</p>';
+      if (targetEl) {
+        const msg = e?.name === 'AbortError'
+          ? '診断取得がタイムアウトしました（10秒）。再読込後に再確認してください。'
+          : '診断取得に失敗しました（`store/debug.php` 応答エラー）。';
+        targetEl.innerHTML = `<p class="text-danger small mb-0">${msg}</p>`;
+      }
       return null;
     }
   }

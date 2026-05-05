@@ -777,7 +777,10 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 
           <!-- Asset health summary -->
           <div id="step3DiagSummary" class="text-start mt-2">
-            <div class="text-center"><div class="spinner-border spinner-border-sm text-secondary"></div> アセット状況を確認中…</div>
+            <div class="text-center text-muted small">
+              <div class="spinner-border spinner-border-sm text-secondary me-1" role="status" aria-hidden="true"></div>
+              アセット状況を確認中（`store/debug.php` を取得しています）…
+            </div>
           </div>
 
           <?php if ($hasOutput): ?>
