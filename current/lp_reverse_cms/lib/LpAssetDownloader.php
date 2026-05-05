@@ -220,6 +220,11 @@ class LpAssetDownloader
             return null;
         }
 
+        // Inline JS template placeholders (${item.i}) are not fetchable URLs — skip quietly (no failedFetches noise).
+        if (self::isUnresolvedJsTemplateUrl($url) || self::isUnresolvedJsTemplateUrl($absUrl)) {
+            return null;
+        }
+
         // Already handled — just ensure original variant is also mapped
         if (isset($this->done[$absUrl])) {
             $existing = $this->urlMap[$absUrl] ?? null;
@@ -495,6 +500,19 @@ class LpAssetDownloader
     // -----------------------------------------------------------------------
     // URL resolution
     // -----------------------------------------------------------------------
+
+    private static function isUnresolvedJsTemplateUrl(string $url): bool
+    {
+        if (str_contains($url, '${')) {
+            return true;
+        }
+        // encoded `$` + `{`
+        if (stripos($url, '%24%7B') !== false) {
+            return true;
+        }
+
+        return false;
+    }
 
     /**
      * Resolve $url relative to the source page URL.
