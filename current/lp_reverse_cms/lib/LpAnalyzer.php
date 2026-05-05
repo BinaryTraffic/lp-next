@@ -348,7 +348,49 @@ class LpAnalyzer
             }
         }
 
-        return $unique;
+        return $this->filterDescendantCandidates($unique);
+    }
+
+    /**
+     * If both an ancestor and a descendant appear as section roots, keep only the outer node.
+     * Emitting nested fragments as consecutive siblings breaks layout and z-index.
+     *
+     * @param DOMElement[] $nodes
+     * @return DOMElement[]
+     */
+    private function filterDescendantCandidates(array $nodes): array
+    {
+        if (count($nodes) <= 1) {
+            return $nodes;
+        }
+        $out = [];
+        foreach ($nodes as $n) {
+            $nested = false;
+            foreach ($nodes as $m) {
+                if ($n !== $m && $this->domElementIsDescendantOf($n, $m)) {
+                    $nested = true;
+                    break;
+                }
+            }
+            if (!$nested) {
+                $out[] = $n;
+            }
+        }
+
+        return $out;
+    }
+
+    private function domElementIsDescendantOf(DOMElement $node, DOMElement $ancestor): bool
+    {
+        $p = $node->parentNode;
+        while ($p !== null) {
+            if ($p === $ancestor) {
+                return true;
+            }
+            $p = $p->parentNode;
+        }
+
+        return false;
     }
 
     /**

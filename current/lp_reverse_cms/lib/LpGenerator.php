@@ -11,6 +11,10 @@ declare(strict_types=1);
  *  3. Replace text / src / href with client data (or keep originals).
  *  4. Wrap everything in a full HTML document shell.
  *  5. Apply the asset URL map (absolute → local) produced by LpAssetDownloader.
+ *
+ * Stacking: sections are emitted as consecutive siblings under <body>. If the source page
+ * nested blocks under one positioned ancestor, z-index could otherwise compete globally.
+ * Each section is wrapped in .lp-reverse-section-root (isolation:isolate) to scope layers.
  */
 class LpGenerator
 {
@@ -43,9 +47,19 @@ class LpGenerator
         $charset     = htmlspecialchars($charset,     ENT_QUOTES, 'UTF-8');
         $viewport    = htmlspecialchars($viewport,    ENT_QUOTES, 'UTF-8');
 
+        $stackFixCss = '<style id="lp-reverse-stack-context">'
+            . '.lp-reverse-section-root{isolation:isolate;z-index:0}'
+            . '</style>';
+
         $sectionsHtml = '';
         foreach ($sections as $section) {
-            $sectionsHtml .= $this->processSection($section, $elemData) . "\n";
+            $chunk = $this->processSection($section, $elemData);
+            if (trim($chunk) === '') {
+                continue;
+            }
+            $secId = htmlspecialchars((string) ($section['id'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $sectionsHtml .= '<div class="lp-reverse-section-root" data-lp-section="' . $secId . '">'
+                . $chunk . "</div>\n";
         }
 
         $html = <<<HTML
@@ -57,6 +71,7 @@ class LpGenerator
 <meta name="description" content="{$description}">
 <title>{$title}</title>
 {$headExtra}
+{$stackFixCss}
 </head>
 <body>
 {$sectionsHtml}
