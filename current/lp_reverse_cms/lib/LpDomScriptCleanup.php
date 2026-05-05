@@ -53,6 +53,57 @@ final class LpDomScriptCleanup
         foreach ($toRemove as $tn) {
             $tn->parentNode?->removeChild($tn);
         }
+
+        self::stripTemplatePlaceholderUrlAttributes($root);
+    }
+
+    private static function stripTemplatePlaceholderUrlAttributes(DOMElement $root): void
+    {
+        $doc = $root->ownerDocument;
+        if ($doc === null) {
+            return;
+        }
+        $xp = new DOMXPath($doc);
+        $nodes = $xp->query('.//*', $root);
+        if (!$nodes) {
+            return;
+        }
+
+        $urlAttrs = [
+            'src', 'href', 'poster', 'style',
+            'srcset', 'data-src', 'data-srcset', 'data-bg',
+            'data-background', 'data-original', 'data-lazy-src',
+        ];
+
+        $removeElements = [];
+        foreach ($nodes as $node) {
+            if (!($node instanceof DOMElement)) {
+                continue;
+            }
+            foreach ($urlAttrs as $attr) {
+                if (!$node->hasAttribute($attr)) {
+                    continue;
+                }
+                $v = trim($node->getAttribute($attr));
+                if ($v === '') {
+                    continue;
+                }
+                if (!self::textLooksLikeTemplatePlaceholderUrl($v)) {
+                    continue;
+                }
+
+                // Placeholder-only images are always broken; remove node itself.
+                if ($attr === 'src' && strtolower($node->tagName) === 'img') {
+                    $removeElements[] = $node;
+                    continue;
+                }
+                $node->removeAttribute($attr);
+            }
+        }
+
+        foreach ($removeElements as $el) {
+            $el->parentNode?->removeChild($el);
+        }
     }
 
     private static function textLooksLikeJavaScriptSpill(string $t): bool
@@ -104,6 +155,18 @@ final class LpDomScriptCleanup
                     return true;
                 }
             }
+        }
+
+        return false;
+    }
+
+    private static function textLooksLikeTemplatePlaceholderUrl(string $v): bool
+    {
+        if (preg_match('/\$\{[^{}]+\}/', $v) === 1) {
+            return true;
+        }
+        if (stripos($v, '%24%7B') !== false) {
+            return true;
         }
 
         return false;
