@@ -14,6 +14,8 @@ require_once __DIR__ . '/LpUrlContext.php';
 final class LpInternalPagesPipeline
 {
     public const MAX_PAGES = 20;
+    private const INTERNAL_ASSET_MAX_NEW_DOWNLOADS = 220;
+    private const INTERNAL_ASSET_MAX_ELAPSED_SECONDS = 75;
 
     /**
      * @param callable(array<string, mixed>): void|null $emit NDJSON progress のときのみ
@@ -108,13 +110,20 @@ final class LpInternalPagesPipeline
                 $identity  = LpUrlContext::canonicalHttpDocumentIdentity($finalUrl);
 
                 $emitInternal('アセットを同期しています（取得済みはスキップ）…');
-                $newMap = $downloader->downloadAll($html, $finalUrl, $existing);
+                $newMap = $downloader->downloadAll($html, $finalUrl, $existing, [
+                    'max_new_downloads' => self::INTERNAL_ASSET_MAX_NEW_DOWNLOADS,
+                    'max_elapsed_seconds' => self::INTERNAL_ASSET_MAX_ELAPSED_SECONDS,
+                ]);
                 $merged = array_merge($existing, $newMap);
                 file_put_contents(
                     $assetPath,
                     json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
                     LOCK_EX
                 );
+                $assetSyncLimited = $downloader->hasExceededBudget();
+                if ($assetSyncLimited) {
+                    $emitInternal('アセット同期は上限到達のため続行します…');
+                }
 
                 $emitInternal('構造を解析しています…');
                 $sub = $analyzer->analyze($html, $finalUrl);
@@ -134,6 +143,8 @@ final class LpInternalPagesPipeline
                     'fetch_ok'        => true,
                     'final_fetch_url' => $finalUrl,
                     'section_count'   => count($sub['sections'] ?? []),
+                    'asset_sync_limited' => $assetSyncLimited,
+                    'asset_new_downloads' => $downloader->getNewDownloadCount(),
                 ];
 
                 $mapCanonToOutput[$identity] = $outputRel;

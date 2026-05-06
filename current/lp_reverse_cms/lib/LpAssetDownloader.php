@@ -35,6 +35,10 @@ class LpAssetDownloader
     private array $failedFetches = [];
 
     private LpUrlContext $urlCtx;
+    private int $maxNewDownloads = 0;
+    private int $newDownloads = 0;
+    private int $maxElapsedSeconds = 0;
+    private float $startedAt = 0.0;
 
     private const CURL_TIMEOUT = 20;
 
@@ -64,14 +68,19 @@ class LpAssetDownloader
 
     /**
      * @param array<string, string> $existingUrlMap fetch_lp が書いた asset_map など（キーは任意の URL 表記）
+     * @param array{max_new_downloads?: int, max_elapsed_seconds?: int} $options
      * @return array<string,string>  URL map { "https://..." => "assets/css/file.css", ... }
      */
-    public function downloadAll(string $html, string $sourceUrl, array $existingUrlMap = []): array
+    public function downloadAll(string $html, string $sourceUrl, array $existingUrlMap = [], array $options = []): array
     {
         $this->urlMap        = [];
         $this->done          = [];
         $this->fileRegistry  = [];
         $this->failedFetches = [];
+        $this->newDownloads  = 0;
+        $this->maxNewDownloads = max(0, (int) ($options['max_new_downloads'] ?? 0));
+        $this->maxElapsedSeconds = max(0, (int) ($options['max_elapsed_seconds'] ?? 0));
+        $this->startedAt = microtime(true);
 
         $this->sourceUrl = $sourceUrl;
         $this->urlCtx    = LpUrlContext::fromPageAndHtml($sourceUrl, $html);
@@ -253,6 +262,10 @@ class LpAssetDownloader
      */
     private function downloadUrl(string $url, string $type): ?string
     {
+        if ($this->isDownloadBudgetExceeded()) {
+            return null;
+        }
+
         $url = trim($url);
         if (!$url
             || str_starts_with($url, 'data:')
@@ -332,8 +345,14 @@ class LpAssetDownloader
         $localPath = 'assets/' . $type . '/' . $filename;
 
         $this->registerAssetUrlAliases($absUrl, $url, $localPath);
+        $this->newDownloads++;
 
         return $localPath;
+    }
+
+    public function hasExceededBudget(): bool
+    {
+        return $this->isDownloadBudgetExceeded();
     }
 
     /**
@@ -561,6 +580,11 @@ class LpAssetDownloader
         return array_values($this->failedFetches);
     }
 
+    public function getNewDownloadCount(): int
+    {
+        return $this->newDownloads;
+    }
+
     private function allocateFilename(string $absUrl, string $type): string
     {
         $defaultExt = ['css' => 'css', 'img' => 'jpg', 'js' => 'js', 'fonts' => 'woff2'][$type] ?? $type;
@@ -673,5 +697,19 @@ class LpAssetDownloader
         }
 
         return $body;
+    }
+
+    private function isDownloadBudgetExceeded(): bool
+    {
+        if ($this->maxNewDownloads > 0 && $this->newDownloads >= $this->maxNewDownloads) {
+            return true;
+        }
+        if ($this->maxElapsedSeconds > 0 && $this->startedAt > 0.0) {
+            if ((microtime(true) - $this->startedAt) >= $this->maxElapsedSeconds) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
