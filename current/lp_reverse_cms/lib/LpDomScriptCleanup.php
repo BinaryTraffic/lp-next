@@ -147,9 +147,73 @@ final class LpDomScriptCleanup
             }
         }
 
+        self::stripWdPredictiveSearchWidgetArtifacts($xp, $root, $removeEls);
+
         foreach ($removeEls as $el) {
             $el->parentNode?->removeChild($el);
         }
+    }
+
+    /**
+     * インライン JS の検索サジェスト（テンプレートリテラル）から libxml が誤って生成した
+     * wd_predictive_* / wd_suggestion_* などの空シェルノードを除去する。
+     */
+    private static function stripWdPredictiveSearchWidgetArtifacts(DOMXPath $xp, DOMElement $root, array &$removeEls): void
+    {
+        $markers = [
+            'wd_predictive_pages_grid',
+            'wd_predictive_achieve_list',
+            'wd_group_header',
+            'wd_achieve_fallback',
+            'wd_suggestion_item',
+            'wd_suggestion_text',
+        ];
+
+        $candidates = [];
+        foreach ($markers as $cls) {
+            $nodes = $xp->query(
+                './/*[contains(concat(\' \', normalize-space(@class), \' \'), \' ' . $cls . ' \')]',
+                $root
+            );
+            if (!$nodes) {
+                continue;
+            }
+            foreach ($nodes as $node) {
+                if ($node instanceof DOMElement) {
+                    $candidates[spl_object_id($node)] = $node;
+                }
+            }
+        }
+
+        /** @var DOMElement[] $roots */
+        $roots = [];
+        foreach ($candidates as $n) {
+            $nestedUnder = false;
+            foreach ($candidates as $m) {
+                if ($n !== $m && self::domElementIsAncestorOf($m, $n)) {
+                    $nestedUnder = true;
+                    break;
+                }
+            }
+            if (!$nestedUnder) {
+                $roots[] = $n;
+            }
+        }
+
+        foreach ($roots as $el) {
+            $removeEls[] = $el;
+        }
+    }
+
+    private static function domElementIsAncestorOf(DOMElement $ancestor, DOMElement $descendant): bool
+    {
+        for ($n = $descendant->parentNode; $n; $n = $n->parentNode) {
+            if ($n === $ancestor) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function stripTemplatePlaceholderUrlAttributes(DOMElement $root): void
