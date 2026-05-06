@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/LpDomScriptCleanup.php';
+require_once __DIR__ . '/LpIoNeutralizer.php';
 require_once __DIR__ . '/LpUrlContext.php';
 
 /**
@@ -30,12 +31,13 @@ class LpGenerator
     private string $dataDir = '';
 
     /**
-     * @param array  $structure   Contents of lp_structure.json
-     * @param array  $clientData  Contents of client_data.json (may be empty)
-     * @param string $dataDir     Workspace data directory (trailing slash optional)
-     * @return string             Complete HTML of the generated LP
+     * @param array $structure Contents of lp_structure.json
+     * @param array $clientData Contents of client_data.json (may be empty)
+     * @param string $dataDir Workspace data directory (trailing slash optional)
+     * @param array<string, string>|null $assetMapOverride When non-null, use instead of reading asset_map.json
+     * @return string Complete HTML of the generated LP
      */
-    public function generate(array $structure, array $clientData, string $dataDir): string
+    public function generate(array $structure, array $clientData, string $dataDir, ?array $assetMapOverride = null): string
     {
         $this->dataDir = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
 
@@ -100,9 +102,198 @@ class LpGenerator
 HTML;
 
         // ── Apply asset URL map: absolute URLs → local paths ──────────────
-        $html = $this->applyAssetMap($html);
+        $html = $this->applyAssetMap($html, $assetMapOverride);
 
         return $html;
+    }
+
+    /**
+     * site_map.json を参照して output/ 以下の全ページを生成する
+     *
+     * @param array<string,mixed> $siteMap site_map.json の内容
+     * @param array<string,mixed> $clientData client_data.json の内容
+     * @param string $outputDir output/ws_* の絶対パス（末尾スラッシュ任意）
+     * @param array<string,string> $assetMap asset_map.json に相当するマップ（空ならファイルを読む）
+     * @return array{generated: int, skipped: int, errors: list<string>, skipped_coordinates: list<string>, generated_keys: list<string>}
+     */
+    public function generateFromSiteMap(
+        array $siteMap,
+        array $clientData,
+        string $outputDir,
+        array $assetMap
+    ): array {
+        $dataDir = $this->workspaceDataDirFromOutput($outputDir);
+        $structurePath = $dataDir . 'lp_structure.json';
+        if (!is_readable($structurePath)) {
+            throw new RuntimeException('サイト構造JSONが見つかりません。先にURLを解析してください。');
+        }
+
+        $mainStructure = json_decode((string) file_get_contents($structurePath), true);
+        if (!is_array($mainStructure)) {
+            throw new RuntimeException('サイト構造JSONの読み込みに失敗しました。');
+        }
+
+        $pages = $siteMap['pages'] ?? null;
+        if (!is_array($pages)) {
+            throw new RuntimeException('site_map.json の pages が不正です。');
+        }
+
+        $generated = 0;
+        $skipped = 0;
+        /** @var list<string> $errors */
+        $errors = [];
+        /** @var list<string> $skipped_coordinates */
+        $skipped_coordinates = [];
+        /** @var list<string> $generated_keys */
+        $generated_keys = [];
+
+        $assetOverride = $assetMap !== [] ? $assetMap : null;
+
+        foreach ($pages as $pageKey => $page) {
+            if (!is_array($page)) {
+                continue;
+            }
+
+            if (($page['status'] ?? '') === 'error') {
+                ++$skipped;
+                $coord = trim((string) ($page['coordinate'] ?? ''));
+                if ($coord !== '') {
+                    $skipped_coordinates[] = $coord;
+                }
+
+                continue;
+            }
+
+            $structure = null;
+            if ($pageKey === 'index') {
+                $structure = $mainStructure;
+            } elseif (preg_match('/^internal_(\d+)$/', (string) $pageKey, $mm)) {
+                $idx = (int) $mm[1];
+                $internals = $mainStructure['internal_pages'] ?? [];
+                if (!is_array($internals) || !isset($internals[$idx]) || !is_array($internals[$idx])) {
+                    ++$skipped;
+                    $errors[] = 'internal page missing in lp_structure.json: ' . $pageKey;
+
+                    continue;
+                }
+
+                $manifest = $internals[$idx];
+                if (empty($manifest['fetch_ok'])) {
+                    ++$skipped;
+                    $coord = trim((string) ($page['coordinate'] ?? sprintf('internal[%d]', $idx)));
+                    if ($coord !== '') {
+                        $skipped_coordinates[] = $coord;
+                    }
+
+                    continue;
+                }
+
+                $sf = (string) ($manifest['structure_file'] ?? '');
+                $subPath = $dataDir . $sf;
+                if ($sf === '' || !is_readable($subPath)) {
+                    ++$skipped;
+                    $errors[] = 'structure_file unreadable for ' . $pageKey;
+
+                    continue;
+                }
+
+                $decoded = json_decode((string) file_get_contents($subPath), true);
+                $structure = is_array($decoded) ? $decoded : null;
+            } else {
+                ++$skipped;
+                $errors[] = 'unknown site_map page key: ' . $pageKey;
+
+                continue;
+            }
+
+            if ($structure === null) {
+                ++$skipped;
+                $errors[] = 'could not load structure for ' . $pageKey;
+
+                continue;
+            }
+
+            $localPathRel = trim((string) ($page['local_path'] ?? ''));
+            if ($localPathRel === '') {
+                ++$skipped;
+                $errors[] = 'empty local_path for ' . $pageKey;
+
+                continue;
+            }
+
+            try {
+                $targetFile = $this->resolveSiteMapLocalPath($outputDir, $localPathRel);
+            } catch (Throwable $e) {
+                ++$skipped;
+                $errors[] = $e->getMessage();
+
+                continue;
+            }
+
+            $targetDir = dirname($targetFile);
+            if (!is_dir($targetDir)) {
+                if (!mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+                    throw new RuntimeException('出力ディレクトリを作成できません: ' . $targetDir);
+                }
+            }
+
+            $html = $this->generate($structure, $clientData, $dataDir, $assetOverride);
+
+            $regions = $page['data_io_regions'] ?? [];
+            if (!is_array($regions)) {
+                $regions = [];
+            }
+            $html = LpIoNeutralizer::applyNeutralization($html, $regions);
+
+            if (file_put_contents($targetFile, $html) === false) {
+                ++$skipped;
+                $errors[] = 'failed to write: ' . $targetFile;
+
+                continue;
+            }
+
+            ++$generated;
+            $generated_keys[] = (string) $pageKey;
+        }
+
+        return [
+            'generated' => $generated,
+            'skipped' => $skipped,
+            'errors' => $errors,
+            'skipped_coordinates' => $skipped_coordinates,
+            'generated_keys' => $generated_keys,
+        ];
+    }
+
+    /**
+     * output/ws_* から対応する data/ws_* を求める（LpWorkspace と同じ構成）
+     */
+    private function workspaceDataDirFromOutput(string $outputDir): string
+    {
+        $out = rtrim($outputDir, '/\\');
+        $wsFolder = basename($out);
+        $cmsRoot = dirname(dirname($out));
+
+        return $cmsRoot . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . $wsFolder . DIRECTORY_SEPARATOR;
+    }
+
+    /**
+     * site_map の local_path（output/ws_* 配下の相対パス）をワークスペース output ディレクトリ上の絶対パスに変換する
+     */
+    private function resolveSiteMapLocalPath(string $outputDir, string $localPathFromSiteMap): string
+    {
+        $out = rtrim(str_replace('\\', '/', $outputDir), '/') . '/';
+        $wsFolder = basename(rtrim($out, '/'));
+        $prefix = 'output/' . $wsFolder . '/';
+        $norm = str_replace('\\', '/', trim($localPathFromSiteMap));
+
+        if (str_starts_with($norm, $prefix)) {
+            return $out . substr($norm, strlen($prefix));
+        }
+
+        $stripped = preg_replace('#^output/#', '', $norm) ?? $norm;
+
+        return $out . ltrim($stripped, '/');
     }
 
     /**
@@ -115,14 +306,21 @@ HTML;
      *  - Protocol-relative form (//example.com/...)
      *  - Longest-key-first to avoid partial substring collisions
      */
-    private function applyAssetMap(string $html): string
+    /**
+     * @param array<string, string>|null $mapOverride
+     */
+    private function applyAssetMap(string $html, ?array $mapOverride = null): string
     {
-        $mapFile = $this->dataDir . 'asset_map.json';
-        if (!file_exists($mapFile)) {
-            return $html;
+        $map = $mapOverride;
+        if ($map === null) {
+            $mapFile = $this->dataDir . 'asset_map.json';
+            if (!file_exists($mapFile)) {
+                return $html;
+            }
+
+            $map = json_decode((string) file_get_contents($mapFile), true);
         }
 
-        $map = json_decode((string) file_get_contents($mapFile), true);
         if (!is_array($map) || empty($map)) {
             return $html;
         }

@@ -237,5 +237,49 @@ final class LpSiteMapper
 
         return 'output/' . $base . '/' . ltrim($path, '/\\');
     }
+
+    /**
+     * 生成完了後に site_map.json の meta（generated_at 等）と成功ページの status を更新して保存する。
+     *
+     * @param array<string,mixed> $siteMap
+     * @param list<string> $skippedCoordinates （レスポンス用に generate_lp が参照できるよう meta にも保存）
+     * @param list<string> $generatedPageKeys 書き出しに成功した page キー（index / internal_N）
+     */
+    public static function persistGenerationSummary(
+        string $dataDir,
+        array &$siteMap,
+        int $generated,
+        int $skipped,
+        array $skippedCoordinates,
+        array $generatedPageKeys
+    ): void {
+        $base = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
+        $path = $base . 'site_map.json';
+
+        if (!isset($siteMap['meta']) || !is_array($siteMap['meta'])) {
+            $siteMap['meta'] = [];
+        }
+
+        $siteMap['meta']['generated_at'] = gmdate('Y-m-d\TH:i:s\Z');
+        $siteMap['meta']['generated_pages'] = $generated;
+        $siteMap['meta']['skipped_pages'] = $skipped;
+        $siteMap['meta']['skipped_coordinates'] = $skippedCoordinates;
+
+        foreach ($generatedPageKeys as $pk) {
+            if (!isset($siteMap['pages'][$pk]) || !is_array($siteMap['pages'][$pk])) {
+                continue;
+            }
+            if (($siteMap['pages'][$pk]['status'] ?? '') === 'error') {
+                continue;
+            }
+            $siteMap['pages'][$pk]['status'] = 'generated';
+        }
+
+        file_put_contents(
+            $path,
+            json_encode($siteMap, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            LOCK_EX
+        );
+    }
 }
 
