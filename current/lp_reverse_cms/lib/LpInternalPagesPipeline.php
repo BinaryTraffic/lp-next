@@ -10,9 +10,16 @@ require_once __DIR__ . '/LpUrlContext.php';
 
 /**
  * エントリーページから辿れる同一ホストの HTML リンクを取得・解析し、成果物に複製ページとして載せる。
+ *
+ * クロール深さは {@see INTERNAL_LINK_CRAWL_MAX_DEPTH} のとおり **1 のみ**。
+ * 対象 URL は **エントリページ解析結果のセクションに現れた内部リンクだけ**であり、
+ * 内部ページの HTML を解析してもそこから見つかったリンクは **追記・追従しない**。
  */
 final class LpInternalPagesPipeline
 {
+    /** トップ（エントリ）からのリンクのみ。内部ページ内で見つかったリンクはクロールしない */
+    public const INTERNAL_LINK_CRAWL_MAX_DEPTH = 1;
+
     public const MAX_PAGES = 20;
     private const INTERNAL_ASSET_MAX_NEW_DOWNLOADS = 220;
     private const INTERNAL_ASSET_MAX_ELAPSED_SECONDS = 75;
@@ -54,7 +61,8 @@ final class LpInternalPagesPipeline
             return;
         }
 
-        $urls = self::collectInternalDocumentUrls($structure);
+        /* 深さ1: エントリの $structure だけから URL を列挙（サブページの構造は見ない） */
+        $urls = self::collectInternalDocumentUrlsFromEntryStructure($structure);
         $urls = array_values(array_filter($urls, static fn(string $u): bool => $u !== $entryCanon));
         $urls = array_values(array_unique($urls));
         sort($urls);
@@ -70,7 +78,10 @@ final class LpInternalPagesPipeline
         $assetPath       = $dataDir . 'asset_map.json';
         $den             = max(1, count($urls));
         $mapCanonToOutput = [];
-        $processedByIdentity = [];
+        /** @var array<string, array{structure_file: string, output_file: string, section_count: int, resolved_identity: string}> */
+        $visitedIdentityArtifacts = [];
+        /** @var array<string, array{structure_file: string, output_file: string, section_count: int, resolved_identity: string}> */
+        $visitedNormSourceArtifacts = [];
         $pipelineStartedAt = microtime(true);
 
         foreach ($urls as $i => $canonUrl) {
@@ -118,6 +129,29 @@ final class LpInternalPagesPipeline
                 }
             }
 
+            $normSource = LpUrlContext::canonicalHttpDocumentIdentity($canonUrl);
+            if (isset($visitedNormSourceArtifacts[$normSource])) {
+                $emitInternal('visited: エントリ由来の同一ドキュメントのため再利用します…');
+                $prev = $visitedNormSourceArtifacts[$normSource];
+                $resolved = $prev['resolved_identity'];
+                $manifest[] = [
+                    'canonical_url'       => $resolved,
+                    'source_canonical'    => $canonUrl,
+                    'structure_file'      => $prev['structure_file'],
+                    'output_file'         => $prev['output_file'],
+                    'fetch_ok'            => true,
+                    'final_fetch_url'     => $canonUrl,
+                    'section_count'       => $prev['section_count'],
+                    'asset_sync_limited'  => false,
+                    'asset_new_downloads' => 0,
+                    'dedup_reused'        => true,
+                    'visited_skip'        => 'norm_source',
+                ];
+                $mapCanonToOutput[$resolved] = $prev['output_file'];
+                $mapCanonToOutput[$canonUrl] = $prev['output_file'];
+                continue;
+            }
+
             $emitInternal('HTML を取得しています…');
 
             $slug = self::slugForCanonical($canonUrl);
@@ -127,21 +161,23 @@ final class LpInternalPagesPipeline
                 $finalUrl  = $res['final_url'];
                 $identity  = LpUrlContext::canonicalHttpDocumentIdentity($finalUrl);
 
-                if (isset($processedByIdentity[$identity])) {
-                    $emitInternal('最終到達URLが既処理のため再利用します…');
-                    $prev = $processedByIdentity[$identity];
+                if (isset($visitedIdentityArtifacts[$identity])) {
+                    $emitInternal('visited: 最終ドキュメント同一のため再利用します…');
+                    $prev = $visitedIdentityArtifacts[$identity];
                     $manifest[] = [
-                        'canonical_url'      => $identity,
-                        'source_canonical'   => $canonUrl,
-                        'structure_file'     => $prev['structure_file'],
-                        'output_file'        => $prev['output_file'],
-                        'fetch_ok'           => true,
-                        'final_fetch_url'    => $finalUrl,
-                        'section_count'      => $prev['section_count'],
-                        'asset_sync_limited' => false,
+                        'canonical_url'       => $identity,
+                        'source_canonical'    => $canonUrl,
+                        'structure_file'      => $prev['structure_file'],
+                        'output_file'         => $prev['output_file'],
+                        'fetch_ok'            => true,
+                        'final_fetch_url'     => $finalUrl,
+                        'section_count'       => $prev['section_count'],
+                        'asset_sync_limited'  => false,
                         'asset_new_downloads' => 0,
-                        'dedup_reused'       => true,
+                        'dedup_reused'        => true,
+                        'visited_skip'        => 'final_identity',
                     ];
+                    $visitedNormSourceArtifacts[$normSource] = $prev;
                     $mapCanonToOutput[$identity] = $prev['output_file'];
                     $mapCanonToOutput[$canonUrl] = $prev['output_file'];
                     continue;
@@ -185,11 +221,14 @@ final class LpInternalPagesPipeline
                     'asset_new_downloads' => $downloader->getNewDownloadCount(),
                 ];
 
-                $processedByIdentity[$identity] = [
-                    'structure_file' => $structureRel,
-                    'output_file'    => $outputRel,
-                    'section_count'  => count($sub['sections'] ?? []),
+                $artifact = [
+                    'structure_file'     => $structureRel,
+                    'output_file'        => $outputRel,
+                    'section_count'      => count($sub['sections'] ?? []),
+                    'resolved_identity'  => $identity,
                 ];
+                $visitedIdentityArtifacts[$identity]    = $artifact;
+                $visitedNormSourceArtifacts[$normSource] = $artifact;
                 $mapCanonToOutput[$identity] = $outputRel;
                 $mapCanonToOutput[$canonUrl] = $outputRel;
             } catch (Throwable $e) {
@@ -208,9 +247,11 @@ final class LpInternalPagesPipeline
     }
 
     /**
+     * エントリページの構造のみから内部ドキュメント URL を集める（深さ1）。
+     *
      * @return list<string>
      */
-    private static function collectInternalDocumentUrls(array $structure): array
+    private static function collectInternalDocumentUrlsFromEntryStructure(array $structure): array
     {
         $out = [];
         foreach ($structure['sections'] ?? [] as $sec) {
