@@ -39,6 +39,10 @@ $streamProgress = is_array($bodyIn) && !empty($bodyIn['stream_progress']);
         ob_end_clean();
     }
     ob_implicit_flush(true);
+    /* HEAD × 内部クローンで時間がかかるためプロキシ／PHP の既定制限を緩める */
+    @ignore_user_abort(true);
+    @set_time_limit(900);
+    @ini_set('max_execution_time', '900');
 }
 
 $emitNd = static function (array $row) use ($streamProgress): void {
