@@ -7,6 +7,7 @@ require_once __DIR__ . '/../lib/LpInternalPagesPipeline.php';
 require_once __DIR__ . '/../lib/LpFetcher.php';
 require_once __DIR__ . '/../lib/LpLinkRedirectVerifier.php';
 require_once __DIR__ . '/../lib/LpMapper.php';
+require_once __DIR__ . '/../lib/LpSiteMapper.php';
 require_once __DIR__ . '/../lib/LpWorkspace.php';
 require_once __DIR__ . '/../lib/env_load.php';
 require_once __DIR__ . '/../lib/lp_analyze_log.php';
@@ -279,6 +280,20 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
 
     if ($writeRes === false) {
         throw new RuntimeException('lp_structure.json の保存に失敗しました。ディレクトリ権限を確認してください。');
+    }
+
+    try {
+        $siteMap = LpSiteMapper::build($structure, $dataDir, $outputDirAnalyze, is_array($diag) ? $diag : null);
+        file_put_contents(
+            $dataDir . 'site_map.json',
+            json_encode($siteMap, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            LOCK_EX
+        );
+    } catch (Throwable $e) {
+        lp_reverse_analyze_append_log($dataDir, 'warning', 'site_map build failed', [
+            'exception' => $e::class,
+            'message'   => $e->getMessage(),
+        ]);
     }
 
     if ($streamProgress) {
