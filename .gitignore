@@ -17,11 +17,18 @@ lp_reverse_cms/output/*
 # OS・エディタ
 .DS_Store
 Thumbs.db
+desktop.ini
 *.swp
 *.swo
 .idea/
 .vscode/
 *.code-workspace
+
+# Google Drive 同期アーティファクト
+.tmp.driveupload/
+
+# GCP OAuth クライアントシークレット JSON（ローカル保管のみ）
+client_secret_*.json
 
 # 任意: Cursor ローカル（チームで共有する場合はこの行を削除）
 .cursor/
