@@ -63,9 +63,10 @@ class LpAssetDownloader
     }
 
     /**
+     * @param array<string, string> $existingUrlMap fetch_lp が書いた asset_map など（キーは任意の URL 表記）
      * @return array<string,string>  URL map { "https://..." => "assets/css/file.css", ... }
      */
-    public function downloadAll(string $html, string $sourceUrl): array
+    public function downloadAll(string $html, string $sourceUrl, array $existingUrlMap = []): array
     {
         $this->urlMap        = [];
         $this->done          = [];
@@ -74,6 +75,7 @@ class LpAssetDownloader
 
         $this->sourceUrl = $sourceUrl;
         $this->urlCtx    = LpUrlContext::fromPageAndHtml($sourceUrl, $html);
+        $this->seedFromMergedAssetMap($existingUrlMap);
 
         foreach (['css', 'img', 'js', 'fonts'] as $sub) {
             $d = $this->outputDir . '/assets/' . $sub;
@@ -95,6 +97,28 @@ class LpAssetDownloader
         $this->collectScripts($xpath);
 
         return $this->urlMap;
+    }
+
+    /**
+     * 内部ページ処理などで同一サイトのアセットを二度取得しない。
+     *
+     * @param array<string, string> $existingUrlMap
+     */
+    private function seedFromMergedAssetMap(array $existingUrlMap): void
+    {
+        foreach ($existingUrlMap as $url => $localPath) {
+            if (!is_string($url) || !is_string($localPath) || $url === '') {
+                continue;
+            }
+            $this->urlMap[$url] = $localPath;
+            if (!preg_match('#^https?://#i', $url)) {
+                continue;
+            }
+            $fk = LpUrlContext::canonicalHttpUrlForFetch($url);
+            if ($fk !== '' && (str_starts_with($fk, 'http://') || str_starts_with($fk, 'https://'))) {
+                $this->done[$fk] = true;
+            }
+        }
     }
 
     // -----------------------------------------------------------------------

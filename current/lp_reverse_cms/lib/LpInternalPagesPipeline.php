@@ -71,14 +71,34 @@ final class LpInternalPagesPipeline
         foreach ($urls as $i => $canonUrl) {
             // link_redirect_check が 52〜58 を使用するため、ここは 60〜99 の帯域にする
             $pct = 60 + (int) round(39 * (($i + 1) / $den));
-            if ($emit !== null) {
+            $pct = min(99, $pct);
+            $emitInternal = static function (string $detailJa) use ($emit, $pct, $i, $den): void {
+                if ($emit === null) {
+                    return;
+                }
                 $emit([
                     'type'      => 'progress',
                     'phase'     => 'internal_pages',
-                    'pct'       => min(99, $pct),
-                    'detail_ja' => sprintf('内部ページ取得・解析 (%s / %s) …', (string) ($i + 1), (string) $den),
+                    'pct'       => $pct,
+                    'detail_ja' => sprintf(
+                        '内部ページ取得・解析 (%s / %s) %s',
+                        (string) ($i + 1),
+                        (string) $den,
+                        $detailJa
+                    ),
                 ]);
+            };
+
+            $existing = [];
+            if (is_readable($assetPath)) {
+                $dec = json_decode((string) file_get_contents($assetPath), true);
+                if (is_array($dec)) {
+                    /** @var array<string, string> $existing */
+                    $existing = $dec;
+                }
             }
+
+            $emitInternal('HTML を取得しています…');
 
             $slug = self::slugForCanonical($canonUrl);
             try {
@@ -87,22 +107,16 @@ final class LpInternalPagesPipeline
                 $finalUrl  = $res['final_url'];
                 $identity  = LpUrlContext::canonicalHttpDocumentIdentity($finalUrl);
 
-                $existing = [];
-                if (is_readable($assetPath)) {
-                    $dec = json_decode((string) file_get_contents($assetPath), true);
-                    if (is_array($dec)) {
-                        /** @var array<string, string> $existing */
-                        $existing = $dec;
-                    }
-                }
-                $newMap    = $downloader->downloadAll($html, $finalUrl);
-                $merged    = array_merge($existing, $newMap);
+                $emitInternal('アセットを同期しています（取得済みはスキップ）…');
+                $newMap = $downloader->downloadAll($html, $finalUrl, $existing);
+                $merged = array_merge($existing, $newMap);
                 file_put_contents(
                     $assetPath,
                     json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
                     LOCK_EX
                 );
 
+                $emitInternal('構造を解析しています…');
                 $sub = $analyzer->analyze($html, $finalUrl);
                 unset($sub['parse_diagnostics']);
                 $sub = $mapper->enrich($sub);
