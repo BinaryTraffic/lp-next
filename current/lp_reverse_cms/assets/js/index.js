@@ -1333,13 +1333,43 @@
   // -----------------------------------------------------------------------
   // Utilities
   // -----------------------------------------------------------------------
+  /**
+   * API 応答 JSON の読み取り。途中切断/空レスポンス時に生の SyntaxError を出さない。
+   * @param {Response} res
+   * @param {string} endpoint
+   * @returns {Promise<Record<string, unknown>>}
+   */
+  async function parseApiJsonResponse(res, endpoint) {
+    const raw = await res.text();
+    if (!raw || !raw.trim()) {
+      throw new Error(`サーバー応答が空です（${endpoint}）`);
+    }
+    try {
+      return /** @type {Record<string, unknown>} */ (JSON.parse(raw));
+    } catch {
+      const brief = raw.slice(0, 160).replace(/\s+/g, ' ').trim();
+      throw new Error(
+        `サーバー応答のJSONが途中で壊れています（${endpoint}）`
+        + (brief ? `: ${brief}` : ''),
+      );
+    }
+  }
+
   async function apiPost(endpoint, data) {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(data),
     });
-    return res.json();
+    const json = await parseApiJsonResponse(res, endpoint);
+    if (!res.ok) {
+      throw new Error(
+        (typeof json.error === 'string' && json.error.trim() !== '')
+          ? json.error
+          : `HTTP ${res.status} (${endpoint})`,
+      );
+    }
+    return json;
   }
 
   function showError(el, message) {
