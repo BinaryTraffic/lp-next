@@ -69,6 +69,7 @@ final class LpInternalPagesPipeline
         $assetPath       = $dataDir . 'asset_map.json';
         $den             = max(1, count($urls));
         $mapCanonToOutput = [];
+        $processedByIdentity = [];
 
         foreach ($urls as $i => $canonUrl) {
             // link_redirect_check が 52〜58 を使用するため、ここは 60〜99 の帯域にする
@@ -109,6 +110,26 @@ final class LpInternalPagesPipeline
                 $finalUrl  = $res['final_url'];
                 $identity  = LpUrlContext::canonicalHttpDocumentIdentity($finalUrl);
 
+                if (isset($processedByIdentity[$identity])) {
+                    $emitInternal('最終到達URLが既処理のため再利用します…');
+                    $prev = $processedByIdentity[$identity];
+                    $manifest[] = [
+                        'canonical_url'      => $identity,
+                        'source_canonical'   => $canonUrl,
+                        'structure_file'     => $prev['structure_file'],
+                        'output_file'        => $prev['output_file'],
+                        'fetch_ok'           => true,
+                        'final_fetch_url'    => $finalUrl,
+                        'section_count'      => $prev['section_count'],
+                        'asset_sync_limited' => false,
+                        'asset_new_downloads' => 0,
+                        'dedup_reused'       => true,
+                    ];
+                    $mapCanonToOutput[$identity] = $prev['output_file'];
+                    $mapCanonToOutput[$canonUrl] = $prev['output_file'];
+                    continue;
+                }
+
                 $emitInternal('アセットを同期しています（取得済みはスキップ）…');
                 $newMap = $downloader->downloadAll($html, $finalUrl, $existing, [
                     'max_new_downloads' => self::INTERNAL_ASSET_MAX_NEW_DOWNLOADS,
@@ -147,6 +168,11 @@ final class LpInternalPagesPipeline
                     'asset_new_downloads' => $downloader->getNewDownloadCount(),
                 ];
 
+                $processedByIdentity[$identity] = [
+                    'structure_file' => $structureRel,
+                    'output_file'    => $outputRel,
+                    'section_count'  => count($sub['sections'] ?? []),
+                ];
                 $mapCanonToOutput[$identity] = $outputRel;
                 $mapCanonToOutput[$canonUrl] = $outputRel;
             } catch (Throwable $e) {
