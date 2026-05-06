@@ -76,6 +76,12 @@ try {
     if (is_file($genHtml)) {
         unlink($genHtml);
     }
+    foreach (glob($dataDir . 'internal_pages/*.json') ?: [] as $ipDel) {
+        @unlink($ipDel);
+    }
+    foreach (glob($outputDir . 'pages/*.html') ?: [] as $pgDel) {
+        @unlink($pgDel);
+    }
 
     // ── Step 1: Fetch HTML ────────────────────────────────────────────────
     $fetcher = new LpFetcher();

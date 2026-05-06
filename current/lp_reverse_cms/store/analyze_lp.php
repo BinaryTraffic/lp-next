@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../lib/LpAnalyzer.php';
+require_once __DIR__ . '/../lib/LpInternalPagesPipeline.php';
 require_once __DIR__ . '/../lib/LpMapper.php';
 require_once __DIR__ . '/../lib/LpWorkspace.php';
 require_once __DIR__ . '/../lib/env_load.php';
@@ -117,6 +118,13 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
     $mapper    = new LpMapper();
     $structure = $mapper->enrich($structure);
 
+    $cmsRootAnalyze   = dirname(__DIR__);
+    $outputDirAnalyze = LpWorkspace::outputDir($cmsRootAnalyze);
+    $emitInternal     = $streamProgress ? static function (array $row) use ($emitNd): void {
+        $emitNd($row);
+    } : null;
+    LpInternalPagesPipeline::run($structure, $dataDir, $outputDirAnalyze, $emitInternal);
+
     lp_reverse_load_env();
     $assetMapPath = $dataDir . 'asset_map.json';
     $assetMap     = [];
@@ -194,6 +202,13 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         ]);
     }
 
+    $internalPagesOk = 0;
+    foreach ($structure['internal_pages'] ?? [] as $_ip) {
+        if (!empty($_ip['fetch_ok'])) {
+            $internalPagesOk++;
+        }
+    }
+
     $diag = $structure['parse_diagnostics'] ?? null;
     unset($structure['parse_diagnostics']);
 
@@ -257,6 +272,8 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         'meta'                => $structure['meta'],
         'message'             => '解析が完了しました。',
         'parse_diagnostics'   => $diag,
+        'internal_pages_ok'   => $internalPagesOk,
+        'internal_pages_seen' => count($structure['internal_pages'] ?? []),
     ];
 };
 

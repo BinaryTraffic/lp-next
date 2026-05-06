@@ -320,4 +320,90 @@ final class LpUrlContext
 
         return false;
     }
+
+    /**
+     * クローン元ホストと同一か（http(s) 絶対 URL のみ判定。mailto/tel/# は別 scope）。
+     *
+     * @param string $schemeHost 例 https://example.com（パスなし推奨）
+     */
+    public static function classifyHrefScope(string $href, string $schemeHost): string
+    {
+        $h = trim($href);
+        if ($h === '') {
+            return 'none';
+        }
+        $low = strtolower($h);
+        if (str_starts_with($low, 'javascript:')) {
+            return 'javascript';
+        }
+        if (str_starts_with($low, 'mailto:')) {
+            return 'mailto';
+        }
+        if (str_starts_with($low, 'tel:')) {
+            return 'tel';
+        }
+        if (str_starts_with($h, '#')) {
+            return 'fragment';
+        }
+        if (!preg_match('#^https?://#i', $h)) {
+            return 'relative';
+        }
+        $host = parse_url($h, PHP_URL_HOST);
+        $baseHost = parse_url(rtrim($schemeHost, '/') . '/', PHP_URL_HOST);
+        if ($host === null || $host === '' || $baseHost === null || $baseHost === '') {
+            return 'external';
+        }
+
+        return strcasecmp((string) $host, (string) $baseHost) === 0 ? 'internal' : 'external';
+    }
+
+    /**
+     * フラグメント除去 + ホスト小文字 + {@see canonicalHttpUrlForFetch} で同一ページ判定用キー。
+     */
+    public static function canonicalHttpDocumentIdentity(string $absUrl): string
+    {
+        if (!preg_match('#^https?://#i', $absUrl)) {
+            return $absUrl;
+        }
+        $c = self::canonicalHttpUrlForFetch($absUrl);
+        $p = parse_url($c);
+        if ($p === false) {
+            return $c;
+        }
+        $scheme = strtolower((string) ($p['scheme'] ?? 'https'));
+        $host   = strtolower((string) ($p['host'] ?? ''));
+        $port   = isset($p['port']) ? ':' . $p['port'] : '';
+        $path   = $p['path'] ?? '/';
+        if ($path === '') {
+            $path = '/';
+        }
+        $query = isset($p['query']) ? '?' . $p['query'] : '';
+
+        return $scheme . '://' . $host . $port . $path . $query;
+    }
+
+    /**
+     * 内部ページとして HTML を取得してよさそうか（静的アセット URL を除外）。
+     */
+    public static function isLikelyHtmlDocumentUrl(string $httpUrl): bool
+    {
+        if (!preg_match('#^https?://#i', $httpUrl)) {
+            return false;
+        }
+        $path = parse_url($httpUrl, PHP_URL_PATH) ?: '';
+        if ($path === '' || str_ends_with($path, '/')) {
+            return true;
+        }
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        if ($ext === '') {
+            return true;
+        }
+
+        static $skip = [
+            'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'svgz', 'ico', 'pdf', 'zip',
+            'mp4', 'webm', 'mp3', 'css', 'js', 'json', 'xml', 'woff', 'woff2', 'ttf', 'otf', 'eot', 'map',
+        ];
+
+        return !in_array($ext, $skip, true);
+    }
 }

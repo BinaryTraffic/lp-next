@@ -314,6 +314,15 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                         <div class="form-text text-muted mb-2 small" style="white-space:pre-wrap">解析時の元メモ：<?= htmlspecialchars(mb_substr($memoOrig, 0, 200), ENT_QUOTES) ?><?= mb_strlen($memoOrig) > 200 ? '…' : '' ?></div>
                       <?php endif; ?>
                       <?php if ($wrapHref !== '' || $wrapTargetOrig !== ''): ?>
+                        <?php $__ws = (string) ($elem['href_scope'] ?? ''); ?>
+                        <?php if ($__ws !== '' && $__ws !== 'none'): ?>
+                          <div class="mb-1 small">
+                            <span class="badge bg-light text-dark border"><?= htmlspecialchars($__ws, ENT_QUOTES, 'UTF-8') ?></span>
+                            <?php if (!empty($elem['internal_relative_href'])): ?>
+                              <span class="text-success ms-1">クローン内 <code><?= htmlspecialchars((string) $elem['internal_relative_href'], ENT_QUOTES, 'UTF-8') ?></code></span>
+                            <?php endif; ?>
+                          </div>
+                        <?php endif; ?>
                         <label class="form-label small">囲みリンク先（親の &lt;a href&gt;）</label>
                         <input type="text" class="form-control form-control-sm mb-2"
                                data-lp-id="<?= $elemId ?>"
@@ -355,6 +364,17 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                              placeholder="<?= htmlspecialchars($origText, ENT_QUOTES) ?>"
                              value="<?= htmlspecialchars($currentText, ENT_QUOTES) ?>">
                       <label class="form-label small">リンク先URL</label>
+                      <?php
+                        $__scope = (string) ($elem['href_scope'] ?? '');
+                      ?>
+                      <?php if ($__scope !== '' && $__scope !== 'none'): ?>
+                        <div class="mb-1 small">
+                          <span class="badge bg-light text-dark border"><?= htmlspecialchars($__scope, ENT_QUOTES, 'UTF-8') ?></span>
+                          <?php if (!empty($elem['internal_relative_href'])): ?>
+                            <span class="text-success ms-1">クローン内 <code><?= htmlspecialchars((string) $elem['internal_relative_href'], ENT_QUOTES, 'UTF-8') ?></code></span>
+                          <?php endif; ?>
+                        </div>
+                      <?php endif; ?>
                       <input type="url" class="form-control form-control-sm"
                              data-lp-id="<?= $elemId ?>"
                              data-lp-field="href"

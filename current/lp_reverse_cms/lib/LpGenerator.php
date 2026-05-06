@@ -354,6 +354,8 @@ HTML;
                 if ($anchor instanceof DOMElement) {
                     if (is_array($override) && isset($override['href']) && $override['href'] !== '') {
                         $anchor->setAttribute('href', $override['href']);
+                    } elseif (!empty($element['internal_relative_href'])) {
+                        $anchor->setAttribute('href', (string) $element['internal_relative_href']);
                     }
                     if (is_array($override) && isset($override['target']) && $override['target'] !== '') {
                         $anchor->setAttribute('target', $override['target']);
@@ -369,9 +371,10 @@ HTML;
                 }
 
                 if (in_array($type, ['button', 'link'], true)) {
-                    $newHref = $override['href'] ?? null;
-                    if ($newHref) {
-                        $node->setAttribute('href', $newHref);
+                    if (is_array($override) && isset($override['href']) && $override['href'] !== '') {
+                        $node->setAttribute('href', $override['href']);
+                    } elseif (!empty($element['internal_relative_href'])) {
+                        $node->setAttribute('href', (string) $element['internal_relative_href']);
                     }
                 }
             }

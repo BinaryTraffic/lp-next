@@ -48,6 +48,27 @@ try {
     $outputFile = $outputDir . 'index.html';
     file_put_contents($outputFile, $html);
 
+    foreach ($structure['internal_pages'] ?? [] as $page) {
+        if (empty($page['fetch_ok']) || empty($page['structure_file']) || empty($page['output_file'])) {
+            continue;
+        }
+        $subPath = $dataDir . $page['structure_file'];
+        if (!is_readable($subPath)) {
+            continue;
+        }
+        $decoded = json_decode((string) file_get_contents($subPath), true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+        $innerHtml = $generator->generate($decoded, [], $dataDir);
+        $target    = $outputDir . $page['output_file'];
+        $targetDir = dirname($target);
+        if (!is_dir($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+        file_put_contents($target, $innerHtml);
+    }
+
     LpOutputAudit::persist($outputFile, $dataDir);
 
     echo json_encode([

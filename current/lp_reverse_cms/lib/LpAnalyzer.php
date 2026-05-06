@@ -94,6 +94,10 @@ class LpAnalyzer
             : 100.0;
 
         return [
+            'clone_site'          => [
+                'scheme_host' => $this->baseUrl,
+                'entry_url'   => $sourceUrl,
+            ],
             'source_url'          => $sourceUrl,
             'analyzed_at'         => date('Y-m-d H:i:s'),
             'meta'                => $meta,
@@ -771,7 +775,7 @@ class LpAnalyzer
                     if ($wrapRel !== null) {
                         $row['wrap_rel'] = $wrapRel;
                     }
-                    $elements[] = $row;
+                    $elements[] = array_merge($row, $this->hrefLinkageFields($wrapHref));
                 }
             } elseif ($tag === 'a') {
                 $text = trim($child->textContent);
@@ -787,7 +791,7 @@ class LpAnalyzer
                     if ($absHref) {
                         $child->setAttribute('href', $absHref);
                     }
-                    $elements[] = [
+                    $elements[] = array_merge([
                         'id'            => $id,
                         'type'          => $this->isButtonAnchor($child) ? 'button' : 'link',
                         'tag'           => 'a',
@@ -795,7 +799,7 @@ class LpAnalyzer
                         'original_text' => $text,
                         'original_src'  => null,
                         'original_href' => $absHref,
-                    ];
+                    ], $this->hrefLinkageFields($absHref !== '' ? $absHref : null));
                 } else {
                     // Recurse into anchor's children (might wrap an image)
                     $this->findEditableElements($child, $sectionId, $index, $elements, $onVisit);
@@ -961,6 +965,24 @@ class LpAnalyzer
         }
 
         return null;
+    }
+
+    /**
+     * @return array{href_scope: string, href_canonical: ?string}
+     */
+    private function hrefLinkageFields(?string $storedHref): array
+    {
+        if ($storedHref === null || trim($storedHref) === '') {
+            return ['href_scope' => 'none', 'href_canonical' => null];
+        }
+        $h = trim($storedHref);
+        $scope = LpUrlContext::classifyHrefScope($h, $this->baseUrl);
+        $canonical = null;
+        if (preg_match('#^https?://#i', $h)) {
+            $canonical = LpUrlContext::canonicalHttpDocumentIdentity($h);
+        }
+
+        return ['href_scope' => $scope, 'href_canonical' => $canonical];
     }
 
     /**

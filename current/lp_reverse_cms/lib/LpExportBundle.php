@@ -76,6 +76,7 @@ final class LpExportBundle
         };
 
         $addFile('index.html');
+        $addTree('pages');
         $addTree('assets');
 
         $customRel = 'sites/' . $cloneId . '/custom_images';
