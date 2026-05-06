@@ -2,7 +2,8 @@
 
 declare(strict_types=1);
 
-set_time_limit(120);
+// Large sites (many assets) routinely exceed 120s wall time.
+set_time_limit(900);
 
 /**
  * $data/ や $output/ へ書き込めないと file_put_contents は false を返し例外が出ない。

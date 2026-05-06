@@ -2,7 +2,8 @@
 
 declare(strict_types=1);
 
-set_time_limit(120);
+// site_map multi-page generate often exceeds 120s.
+set_time_limit(900);
 
 require_once __DIR__ . '/../lib/LpGenerator.php';
 require_once __DIR__ . '/../lib/LpOutputAudit.php';
