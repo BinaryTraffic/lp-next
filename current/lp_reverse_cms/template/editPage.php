@@ -321,6 +321,9 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                             <?php if (!empty($elem['internal_relative_href'])): ?>
                               <span class="text-success ms-1">クローン内 <code><?= htmlspecialchars((string) $elem['internal_relative_href'], ENT_QUOTES, 'UTF-8') ?></code></span>
                             <?php endif; ?>
+                            <?php if (!empty($elem['href_redirect_check'])): ?>
+                              <span class="text-muted ms-1">HEAD: <code><?= htmlspecialchars((string) $elem['href_redirect_check'], ENT_QUOTES, 'UTF-8') ?></code></span>
+                            <?php endif; ?>
                           </div>
                         <?php endif; ?>
                         <label class="form-label small">囲みリンク先（親の &lt;a href&gt;）</label>
@@ -372,6 +375,9 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                           <span class="badge bg-light text-dark border"><?= htmlspecialchars($__scope, ENT_QUOTES, 'UTF-8') ?></span>
                           <?php if (!empty($elem['internal_relative_href'])): ?>
                             <span class="text-success ms-1">クローン内 <code><?= htmlspecialchars((string) $elem['internal_relative_href'], ENT_QUOTES, 'UTF-8') ?></code></span>
+                          <?php endif; ?>
+                          <?php if (!empty($elem['href_redirect_check'])): ?>
+                            <span class="text-muted ms-1">HEAD: <code><?= htmlspecialchars((string) $elem['href_redirect_check'], ENT_QUOTES, 'UTF-8') ?></code></span>
                           <?php endif; ?>
                         </div>
                       <?php endif; ?>

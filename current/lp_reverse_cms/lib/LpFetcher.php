@@ -68,6 +68,113 @@ class LpFetcher
     }
 
     /**
+     * HEAD でリダイレクトを追い、最終 URL を取得する（リンク内外判定用）。
+     *
+     * @return array{curl_ok: bool, http_code: int, final_url: string}
+     */
+    public function resolveEffectiveUrlWithRedirects(string $url): array
+    {
+        $cookieFile = tempnam(sys_get_temp_dir(), 'lp_cookie_head_');
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL              => $url,
+            CURLOPT_NOBODY           => true,
+            CURLOPT_FOLLOWLOCATION   => true,
+            CURLOPT_MAXREDIRS        => 10,
+            CURLOPT_RETURNTRANSFER   => true,
+            CURLOPT_TIMEOUT          => 14,
+            CURLOPT_CONNECTTIMEOUT   => 8,
+            CURLOPT_HTTPHEADER       => $this->defaultHeaders,
+            CURLOPT_ENCODING         => '',
+            CURLOPT_SSL_VERIFYPEER   => true,
+            CURLOPT_SSL_VERIFYHOST   => 2,
+            CURLOPT_COOKIEJAR        => $cookieFile,
+            CURLOPT_COOKIEFILE       => $cookieFile,
+            CURLOPT_AUTOREFERER      => true,
+        ]);
+
+        curl_exec($ch);
+        $errno    = curl_errno($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $finalUrl = (string) curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+        curl_close($ch);
+
+        @unlink($cookieFile);
+
+        if ($errno !== 0 || $finalUrl === '') {
+            return ['curl_ok' => false, 'http_code' => $httpCode, 'final_url' => $url];
+        }
+
+        // HEAD が拒否されるサイト向けに軽量 GET（転送は追う・ボディは捨てる）
+        if ($httpCode === 405 || $httpCode === 403 || $httpCode === 501) {
+            return $this->resolveEffectiveUrlWithRedirectsByGet($url);
+        }
+
+        if ($httpCode >= 400) {
+            return ['curl_ok' => false, 'http_code' => $httpCode, 'final_url' => $finalUrl !== '' ? $finalUrl : $url];
+        }
+
+        return ['curl_ok' => true, 'http_code' => $httpCode, 'final_url' => $finalUrl];
+    }
+
+    /**
+     * @return array{curl_ok: bool, http_code: int, final_url: string}
+     */
+    private function resolveEffectiveUrlWithRedirectsByGet(string $url): array
+    {
+        $cookieFile = tempnam(sys_get_temp_dir(), 'lp_cookie_get_eff_');
+
+        $ch = curl_init();
+        $received = 0;
+        $cap      = 65536;
+        curl_setopt_array($ch, [
+            CURLOPT_URL              => $url,
+            CURLOPT_HTTPGET          => true,
+            CURLOPT_FOLLOWLOCATION   => true,
+            CURLOPT_MAXREDIRS        => 10,
+            CURLOPT_RETURNTRANSFER   => false,
+            CURLOPT_TIMEOUT          => 18,
+            CURLOPT_CONNECTTIMEOUT   => 8,
+            CURLOPT_HTTPHEADER       => $this->defaultHeaders,
+            CURLOPT_ENCODING         => '',
+            CURLOPT_SSL_VERIFYPEER   => true,
+            CURLOPT_SSL_VERIFYHOST   => 2,
+            CURLOPT_COOKIEJAR        => $cookieFile,
+            CURLOPT_COOKIEFILE       => $cookieFile,
+            CURLOPT_AUTOREFERER      => true,
+            CURLOPT_WRITEFUNCTION    => static function ($ch, string $data) use (&$received, $cap): int {
+                $received += strlen($data);
+
+                return $received > $cap ? 0 : strlen($data);
+            },
+        ]);
+
+        curl_exec($ch);
+        $errno    = curl_errno($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $finalUrl = (string) curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+        curl_close($ch);
+
+        @unlink($cookieFile);
+
+        if ($finalUrl === '') {
+            return ['curl_ok' => false, 'http_code' => $httpCode, 'final_url' => $url];
+        }
+
+        $abortOk = in_array($errno, [
+            defined('CURLE_WRITE_ERROR') ? CURLE_WRITE_ERROR : 23,
+            defined('CURLE_ABORTED_BY_CALLBACK') ? CURLE_ABORTED_BY_CALLBACK : 42,
+        ], true);
+
+        return [
+            'curl_ok'    => $httpCode < 400 && ($errno === 0 || $abortOk),
+            'http_code'  => $httpCode,
+            'final_url'  => $finalUrl,
+        ];
+    }
+
+    /**
      * Detect and convert HTML encoding to UTF-8.
      */
     private function ensureUtf8(string $html): string

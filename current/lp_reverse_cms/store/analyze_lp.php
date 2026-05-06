@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../lib/LpAnalyzer.php';
 require_once __DIR__ . '/../lib/LpInternalPagesPipeline.php';
+require_once __DIR__ . '/../lib/LpFetcher.php';
+require_once __DIR__ . '/../lib/LpLinkRedirectVerifier.php';
 require_once __DIR__ . '/../lib/LpMapper.php';
 require_once __DIR__ . '/../lib/LpWorkspace.php';
 require_once __DIR__ . '/../lib/env_load.php';
@@ -118,12 +120,16 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
     $mapper    = new LpMapper();
     $structure = $mapper->enrich($structure);
 
-    $cmsRootAnalyze   = dirname(__DIR__);
-    $outputDirAnalyze = LpWorkspace::outputDir($cmsRootAnalyze);
-    $emitInternal     = $streamProgress ? static function (array $row) use ($emitNd): void {
+    $emitProgressOnly = $streamProgress ? static function (array $row) use ($emitNd): void {
         $emitNd($row);
     } : null;
-    LpInternalPagesPipeline::run($structure, $dataDir, $outputDirAnalyze, $emitInternal);
+
+    $fetchRedirect = new LpFetcher();
+    LpLinkRedirectVerifier::verifyAndAnnotate($structure, $fetchRedirect, $emitProgressOnly);
+
+    $cmsRootAnalyze   = dirname(__DIR__);
+    $outputDirAnalyze = LpWorkspace::outputDir($cmsRootAnalyze);
+    LpInternalPagesPipeline::run($structure, $dataDir, $outputDirAnalyze, $emitProgressOnly);
 
     lp_reverse_load_env();
     $assetMapPath = $dataDir . 'asset_map.json';

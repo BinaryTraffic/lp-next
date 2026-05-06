@@ -69,7 +69,8 @@ final class LpInternalPagesPipeline
         $mapCanonToOutput = [];
 
         foreach ($urls as $i => $canonUrl) {
-            $pct = 50 + (int) round(49 * (($i + 1) / $den));
+            // link_redirect_check が 52〜58 を使用するため、ここは 60〜99 の帯域にする
+            $pct = 60 + (int) round(39 * (($i + 1) / $den));
             if ($emit !== null) {
                 $emit([
                     'type'      => 'progress',
