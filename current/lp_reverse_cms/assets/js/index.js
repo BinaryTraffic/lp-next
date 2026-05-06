@@ -258,6 +258,41 @@
   }
 
   /**
+   * フェーズが切り替わると同じ行に「11/…」「7/…」が続き、カウンタが戻ったように見える。
+   * NDJSON の phase を先頭に付けて混同しないようにする。
+   *
+   * @param {Record<string, unknown>} row
+   */
+  function formatAnalyzeProgressDetail(row) {
+    const det = typeof row.detail_ja === 'string' ? row.detail_ja.trim() : '';
+    const phaseRaw = row.phase;
+    const phase = typeof phaseRaw === 'string' ? phaseRaw.trim() : '';
+    /** @type {Record<string, string>} */
+    const labelByPhase = {
+      start: '開始',
+      tree_walk: 'ツリー走査',
+      mapper: 'セクション整形',
+      link_redirect_check: 'リンク検証（HEAD）',
+      internal_pages: '内部ページ取得',
+      memos: '画像メモ',
+      write: '保存',
+      industry: '業種候補',
+      complete: '完了',
+    };
+    const label = phase ? (labelByPhase[phase] ?? phase) : '';
+    if (!det && !label) {
+      return '';
+    }
+    if (!label) {
+      return det;
+    }
+    if (!det) {
+      return `【${label}】`;
+    }
+    return `【${label}】 ${det}`;
+  }
+
+  /**
    * @param {unknown} row
    */
   function applyAnalyzeProgressRow(row) {
@@ -271,9 +306,9 @@
     if (progAnalyzeBar) progAnalyzeBar.style.width = `${pct}%`;
     progAnalyzeBarOuter?.setAttribute('aria-valuenow', String(pctRounded));
     progAnalyzeBarOuter?.setAttribute('aria-valuetext', pctLabel);
-    const det = typeof r.detail_ja === 'string' ? r.detail_ja : '';
+    const labeled = formatAnalyzeProgressDetail(r);
     if (progAnalyzePct) progAnalyzePct.textContent = pctLabel;
-    if (progAnalyzeDetail) progAnalyzeDetail.textContent = det || pctLabel;
+    if (progAnalyzeDetail) progAnalyzeDetail.textContent = labeled || pctLabel;
   }
 
   /**
