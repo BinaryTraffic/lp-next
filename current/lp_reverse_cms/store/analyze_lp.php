@@ -26,7 +26,7 @@ $bodyIn  = ($bodyRaw !== false && trim($bodyRaw) !== '')
     ? json_decode($bodyRaw, true) : [];
 $streamProgress = is_array($bodyIn) && !empty($bodyIn['stream_progress']);
 
-    if ($streamProgress) {
+if ($streamProgress) {
     header('Content-Type: application/x-ndjson; charset=utf-8');
     header('X-Accel-Buffering: no');
     if (function_exists('apache_setenv')) {
