@@ -43,6 +43,7 @@ if ($streamProgress) {
     @ignore_user_abort(true);
     @set_time_limit(900);
     @ini_set('max_execution_time', '900');
+    @ini_set('memory_limit', '256M');
 }
 
 $emitNd = static function (array $row) use ($streamProgress): void {
@@ -54,6 +55,44 @@ $emitNd = static function (array $row) use ($streamProgress): void {
 };
 
 $dataDir = LpWorkspace::dataDir(dirname(__DIR__));
+
+if ($streamProgress) {
+    $GLOBALS['lp_reverse_analyze_stream_progress']      = true;
+    $GLOBALS['lp_reverse_analyze_ndjson_terminal_sent'] = false;
+    $shutdownLogDir                                     = $dataDir;
+    register_shutdown_function(static function () use ($shutdownLogDir): void {
+        if (empty($GLOBALS['lp_reverse_analyze_stream_progress'])) {
+            return;
+        }
+        if (!empty($GLOBALS['lp_reverse_analyze_ndjson_terminal_sent'])) {
+            return;
+        }
+        $GLOBALS['lp_reverse_analyze_ndjson_terminal_sent'] = true;
+
+        $last = error_get_last();
+        $msg  = '解析が異常終了しました（プロキシ／PHP のタイムアウト、メモリ不足、または致命的エラーの可能性があります）。';
+        if (is_array($last) && isset($last['type'], $last['message']) && is_string($last['message'])) {
+            $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR];
+            if (in_array((int) $last['type'], $fatalTypes, true)) {
+                $msg .= ' ' . $last['message'];
+            }
+        }
+        if (function_exists('connection_aborted') && connection_aborted() !== 0) {
+            $msg .= '（クライアント切断の可能性）';
+        }
+
+        lp_reverse_analyze_append_log($shutdownLogDir, 'error', 'analyze_lp NDJSON ended without terminal row', [
+            'error_get_last' => $last,
+        ]);
+
+        echo json_encode([
+            'type'    => 'error',
+            'success' => false,
+            'error'   => $msg,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n";
+        flush();
+    });
+}
 
 /**
  * @return array<string, mixed>
@@ -306,6 +345,8 @@ try {
             'success' => false,
             'error'   => $e->getMessage(),
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n";
+        flush();
+        $GLOBALS['lp_reverse_analyze_ndjson_terminal_sent'] = true;
     } else {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
@@ -323,6 +364,8 @@ if (!$streamProgress) {
 if ($streamProgress) {
     $merged = array_merge(['type' => 'complete'], $outArr);
     echo json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n";
+    flush();
+    $GLOBALS['lp_reverse_analyze_ndjson_terminal_sent'] = true;
 } else {
     echo json_encode($outArr, JSON_UNESCAPED_UNICODE);
 }
