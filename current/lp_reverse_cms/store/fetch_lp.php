@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+set_time_limit(120);
+
 /**
  * $data/ や $output/ へ書き込めないと file_put_contents は false を返し例外が出ない。
  * そのまま成功 JSON を返すと、続く analyze で「HTML が見つかりません」になる。

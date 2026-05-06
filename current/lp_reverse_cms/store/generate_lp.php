@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+set_time_limit(120);
+
 require_once __DIR__ . '/../lib/LpGenerator.php';
 require_once __DIR__ . '/../lib/LpOutputAudit.php';
 require_once __DIR__ . '/../lib/LpSiteMapper.php';

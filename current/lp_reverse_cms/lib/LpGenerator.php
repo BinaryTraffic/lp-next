@@ -470,14 +470,17 @@ HTML;
      */
     private function normalizeMalformedWindowsUrls(string $html): string
     {
+        $extra = '[]:_-';
+        $hostClass = '[a-zA-Z0-9.' . preg_quote($extra, '#') . ']+';
+
         $html = preg_replace(
-            '#(https?://[a-zA-Z0-9.\[\]:_-]+)\\(?=[/a-zA-Z0-9_%?#])#',
+            '#(https?://' . $hostClass . ')\\(?=[/a-zA-Z0-9_%?#])#',
             '$1/',
             $html
         ) ?? $html;
 
         $html = preg_replace(
-            '#(https?://[a-zA-Z0-9.\[\]:_-]+)(%5[Cc])(/)#',
+            '#(https?://' . $hostClass . ')(%5[Cc])(/)#',
             '$1$3',
             $html
         ) ?? $html;

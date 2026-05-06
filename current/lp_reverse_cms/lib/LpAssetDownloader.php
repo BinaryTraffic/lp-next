@@ -609,6 +609,15 @@ class LpAssetDownloader
         $basename = (string) preg_replace('/_+/', '_', $basename);
         $basename = trim($basename, '_') ?: ('asset.' . $defaultExt);
 
+        // Avoid overly long filesystem names (e.g. URL-derived stems)
+        if (strlen($basename) > 180) {
+            $extLong = strtolower((string) pathinfo($basename, PATHINFO_EXTENSION));
+            if ($extLong === '' || strlen($extLong) > 5) {
+                $extLong = $defaultExt;
+            }
+            $basename = md5($basename) . '.' . $extLong;
+        }
+
         // Collision: same filename, different URL → add hash prefix
         $key = $type . '/' . $basename;
         if (isset($this->fileRegistry[$key]) && $this->fileRegistry[$key] !== $absUrl) {
