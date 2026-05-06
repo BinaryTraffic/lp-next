@@ -16,6 +16,7 @@ final class LpInternalPagesPipeline
     public const MAX_PAGES = 20;
     private const INTERNAL_ASSET_MAX_NEW_DOWNLOADS = 220;
     private const INTERNAL_ASSET_MAX_ELAPSED_SECONDS = 75;
+    private const PIPELINE_MAX_ELAPSED_SECONDS = 300;
 
     /**
      * @param callable(array<string, mixed>): void|null $emit NDJSON progress のときのみ
@@ -70,8 +71,24 @@ final class LpInternalPagesPipeline
         $den             = max(1, count($urls));
         $mapCanonToOutput = [];
         $processedByIdentity = [];
+        $pipelineStartedAt = microtime(true);
 
         foreach ($urls as $i => $canonUrl) {
+            if ((microtime(true) - $pipelineStartedAt) >= self::PIPELINE_MAX_ELAPSED_SECONDS) {
+                if ($emit !== null) {
+                    $emit([
+                        'type'      => 'progress',
+                        'phase'     => 'internal_pages',
+                        'pct'       => 99,
+                        'detail_ja' => sprintf(
+                            '内部ページ処理の上限時間（%s秒）に到達したため、残りをスキップします',
+                            (string) self::PIPELINE_MAX_ELAPSED_SECONDS
+                        ),
+                    ]);
+                }
+                break;
+            }
+
             // link_redirect_check が 52〜58 を使用するため、ここは 60〜99 の帯域にする
             $pct = 60 + (int) round(39 * (($i + 1) / $den));
             $pct = min(99, $pct);
