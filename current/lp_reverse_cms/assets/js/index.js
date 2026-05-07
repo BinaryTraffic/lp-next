@@ -1512,24 +1512,40 @@
     }
 
     /**
-     * placehold.jp 画像と元画像を Canvas でブレンドし DataURL を返す。
-     * @param {number} phW  プレースホルダー幅
-     * @param {number} phH  プレースホルダー高さ
-     * @param {string} origSrc  元画像 URL（CORS 失敗時はプレースホルダーのみ使用）
-     * @param {number} origAlpha  元画像の描画透過度 0〜1
+     * Canvas でプレースホルダーをローカル生成（placehold.jp の CORS 問題を回避）。
+     * @param {number} w @param {number} h
+     * @returns {HTMLCanvasElement}
+     */
+    function drawLocalPlaceholder(w, h) {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#cccccc';
+      ctx.fillRect(0, 0, w, h);
+      const fontSize = Math.max(11, Math.min(Math.floor(Math.min(w, h) / 7), 52));
+      ctx.fillStyle = '#888888';
+      ctx.font = `bold ${fontSize}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${w} × ${h}`, w / 2, h / 2);
+      return c;
+    }
+
+    /**
+     * プレースホルダー（ローカル生成）と元画像を Canvas でブレンドし DataURL を返す。
+     * @param {number} phW @param {number} phH
+     * @param {string} origSrc  元画像 URL（CORS 失敗時はプレースホルダーのみ）
+     * @param {number} origAlpha  元画像の透過度 0〜1
      * @returns {Promise<string>} DataURL
      */
     async function blendPlaceholder(phW, phH, origSrc, origAlpha) {
-      const phUrl = buildPlaceholderUrl(phW, phH);
-      const phImg = await loadImgCors(phUrl);
-
       const canvas = document.createElement('canvas');
       canvas.width  = phW;
       canvas.height = phH;
       const ctx = canvas.getContext('2d');
 
-      // ① プレースホルダーを背景として全面描画
-      ctx.drawImage(phImg, 0, 0, phW, phH);
+      // ① ローカル生成したプレースホルダーを背景として描画（CORS 不要）
+      ctx.drawImage(drawLocalPlaceholder(phW, phH), 0, 0, phW, phH);
 
       // ② 元画像をオーバーレイ（CORS 失敗は無視して続行）
       if (origSrc && origAlpha > 0) {
@@ -1539,7 +1555,7 @@
           ctx.drawImage(origImg, 0, 0, phW, phH);
           ctx.globalAlpha = 1;
         } catch (_) {
-          // CORS 不可 → プレースホルダーのみ
+          // CORS 不可 → プレースホルダーのみで続行
         }
       }
 
