@@ -120,6 +120,14 @@ class LpAssetDownloader
                 continue;
             }
             $this->urlMap[$url] = $localPath;
+            // Seed filename collision registry so internal-page pass does not overwrite
+            // already-downloaded assets that share the same basename.
+            if (preg_match('#^assets/([^/]+)/([^/]+)$#', $localPath, $lm)) {
+                $registryKey = $lm[1] . '/' . $lm[2];
+                if (!isset($this->fileRegistry[$registryKey])) {
+                    $this->fileRegistry[$registryKey] = $url;
+                }
+            }
             if (!preg_match('#^https?://#i', $url)) {
                 continue;
             }

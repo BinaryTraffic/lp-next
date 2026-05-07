@@ -682,7 +682,6 @@ HTML;
         $wrapRoot  = $xpathBoot->query('//*[@id="__lp_root__"]')->item(0);
         if ($wrapRoot instanceof DOMElement) {
             LpDomScriptCleanup::stripScriptsAndJsSpills($wrapRoot);
-            $this->promoteLazyLoadAttributes($wrapRoot);
         }
 
         $xpath = new DOMXPath($dom);
@@ -752,6 +751,12 @@ HTML;
                     }
                 }
             }
+        }
+
+        // Apply lazy-load promotion after per-element overrides so space.gif style
+        // placeholders are finalized to real image URLs in static clone output.
+        if ($wrapRoot instanceof DOMElement) {
+            $this->promoteLazyLoadAttributes($wrapRoot);
         }
 
         // Extract the root wrapper's children as HTML
