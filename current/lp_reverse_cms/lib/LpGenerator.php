@@ -544,6 +544,9 @@ HTML;
             if ($from === '' || $to === '') {
                 continue;
             }
+            if (!str_contains($html, $from)) {
+                continue;
+            }
             if (str_starts_with($from, '//')) {
                 $qf = preg_quote($from, '~');
                 $html = preg_replace('~(?<![/:])' . $qf . '~', $to, $html) ?? $html;
@@ -557,7 +560,7 @@ HTML;
                 $html = str_replace($from, $to, $html);
                 $encFrom = htmlspecialchars($from, ENT_QUOTES, 'UTF-8');
                 $encTo   = htmlspecialchars($to, ENT_QUOTES, 'UTF-8');
-                if ($encFrom !== $from) {
+                if ($encFrom !== $from && str_contains($html, $encFrom)) {
                     $html = str_replace($encFrom, $encTo, $html);
                 }
             }
@@ -581,6 +584,9 @@ HTML;
                 continue;
             }
             if (str_starts_with($from, 'http://') || str_starts_with($from, 'https://') || str_starts_with($from, '//')) {
+                continue;
+            }
+            if (!str_contains($html, $from)) {
                 continue;
             }
             $qf = preg_quote($from, '~');
@@ -630,6 +636,12 @@ HTML;
      */
     private function normalizeMalformedWindowsUrls(string $html): string
     {
+        // This is a Windows-only artifact (PHP dirname() producing backslashes).
+        // On Linux production, the method is a no-op.
+        if (DIRECTORY_SEPARATOR !== '\\') {
+            return $html;
+        }
+
         $extra = '[]:_-';
         // Delimiter ~ matches preg_quote second arg; avoids "#" in lookahead terminating #-patterns.
         $hostClass = '[a-zA-Z0-9.' . preg_quote($extra, '~') . ']+';
@@ -670,6 +682,7 @@ HTML;
         $wrapRoot  = $xpathBoot->query('//*[@id="__lp_root__"]')->item(0);
         if ($wrapRoot instanceof DOMElement) {
             LpDomScriptCleanup::stripScriptsAndJsSpills($wrapRoot);
+            $this->promoteLazyLoadAttributes($wrapRoot);
         }
 
         $xpath = new DOMXPath($dom);
@@ -768,5 +781,57 @@ HTML;
             $node->removeChild($node->firstChild);
         }
         $node->appendChild($dom->createTextNode($text));
+    }
+
+    /**
+     * Inline lazy-loading attributes because clone output strips runtime scripts.
+     */
+    private function promoteLazyLoadAttributes(DOMElement $root): void
+    {
+        $doc = $root->ownerDocument;
+        if ($doc === null) {
+            return;
+        }
+
+        $xp = new DOMXPath($doc);
+        $nodes = $xp->query('.//*[@data-src or @data-lazy-src or @data-original or @data-srcset]');
+        if (!$nodes) {
+            return;
+        }
+
+        foreach ($nodes as $node) {
+            if (!($node instanceof DOMElement)) {
+                continue;
+            }
+
+            $tag = strtolower($node->tagName);
+            $dataSrc = trim((string) (
+                $node->getAttribute('data-src')
+                ?: $node->getAttribute('data-lazy-src')
+                ?: $node->getAttribute('data-original')
+            ));
+
+            if ($dataSrc !== '') {
+                if ($tag === 'img') {
+                    $src = trim((string) $node->getAttribute('src'));
+                    if ($src === '' || str_contains($src, 'space.gif')) {
+                        $node->setAttribute('src', $dataSrc);
+                    }
+                } elseif ($tag === 'iframe') {
+                    $src = trim((string) $node->getAttribute('src'));
+                    if ($src === '' || str_contains($src, 'space.gif')) {
+                        $node->setAttribute('src', $dataSrc);
+                    }
+                }
+            }
+
+            $dataSrcset = trim((string) $node->getAttribute('data-srcset'));
+            if ($dataSrcset !== '') {
+                $srcset = trim((string) $node->getAttribute('srcset'));
+                if ($srcset === '') {
+                    $node->setAttribute('srcset', $dataSrcset);
+                }
+            }
+        }
     }
 }
