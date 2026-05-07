@@ -1427,7 +1427,7 @@
     /** localStorage から元画像透過度(0〜1)を読む */
     function getPhBlendOpacity() {
       const v = parseFloat(localStorage.getItem(PH_BLEND_KEY) ?? '');
-      return (isFinite(v) && v >= 0 && v <= 1) ? v : 0.25;
+      return (isFinite(v) && v >= 0 && v <= 1) ? v : 0.70;
     }
     function savePhBlendOpacity(ratio) {
       localStorage.setItem(PH_BLEND_KEY, String(Math.max(0, Math.min(1, ratio))));
@@ -1532,32 +1532,38 @@
     }
 
     /**
-     * プレースホルダー（ローカル生成）と元画像を Canvas でブレンドし DataURL を返す。
+     * 元画像(100%) の上にプレースホルダーを mockAlpha で重ねた DataURL を返す。
      * @param {number} phW @param {number} phH
-     * @param {string} origSrc  元画像 URL（CORS 失敗時はプレースホルダーのみ）
-     * @param {number} origAlpha  元画像の透過度 0〜1
+     * @param {string} origSrc   元画像 URL（CORS 失敗時はグレー背景で代替）
+     * @param {number} mockAlpha モック画像の不透明度 0〜1
      * @returns {Promise<string>} DataURL
      */
-    async function blendPlaceholder(phW, phH, origSrc, origAlpha) {
+    async function blendPlaceholder(phW, phH, origSrc, mockAlpha) {
       const canvas = document.createElement('canvas');
       canvas.width  = phW;
       canvas.height = phH;
       const ctx = canvas.getContext('2d');
 
-      // ① ローカル生成したプレースホルダーを背景として描画（CORS 不要）
-      ctx.drawImage(drawLocalPlaceholder(phW, phH), 0, 0, phW, phH);
-
-      // ② 元画像をオーバーレイ（CORS 失敗は無視して続行）
-      if (origSrc && origAlpha > 0) {
+      // ① 元画像を 100% で下地として描画
+      if (origSrc) {
         try {
           const origImg = await loadImgCors(origSrc);
-          ctx.globalAlpha = origAlpha;
-          ctx.drawImage(origImg, 0, 0, phW, phH);
           ctx.globalAlpha = 1;
+          ctx.drawImage(origImg, 0, 0, phW, phH);
         } catch (_) {
-          // CORS 不可 → プレースホルダーのみで続行
+          // CORS 不可 → グレー背景で代替
+          ctx.fillStyle = '#999999';
+          ctx.fillRect(0, 0, phW, phH);
         }
+      } else {
+        ctx.fillStyle = '#999999';
+        ctx.fillRect(0, 0, phW, phH);
       }
+
+      // ② モック画像を mockAlpha で上から重ねる
+      ctx.globalAlpha = mockAlpha;
+      ctx.drawImage(drawLocalPlaceholder(phW, phH), 0, 0, phW, phH);
+      ctx.globalAlpha = 1;
 
       return canvas.toDataURL('image/png');
     }

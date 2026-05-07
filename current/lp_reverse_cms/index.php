@@ -851,9 +851,9 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
                   モックアップ画像
                   <a href="https://placehold.jp/" target="_blank" rel="noopener noreferrer" class="ms-1 text-decoration-none" style="font-size:.75em">placehold.jp ↗</a>
                 </div>
-                <div class="d-flex align-items-center gap-1" title="元画像をどれだけ透過させて重ねるか（0=非表示 / 100=元画像のみ）">
-                  <label class="small text-muted mb-0" for="phBlendOpacityInput" style="white-space:nowrap">元画像透過:</label>
-                  <input type="number" id="phBlendOpacityInput" min="0" max="100" step="5" value="25"
+                <div class="d-flex align-items-center gap-1" title="モック画像の濃さ（0=元画像のみ / 100=モックのみ）">
+                  <label class="small text-muted mb-0" for="phBlendOpacityInput" style="white-space:nowrap">モック濃度:</label>
+                  <input type="number" id="phBlendOpacityInput" min="0" max="100" step="5" value="70"
                          class="form-control form-control-sm text-center" style="width:4.5em;font-size:.8em">
                   <span class="small text-muted">%</span>
                 </div>
