@@ -846,15 +846,24 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             </div>
             <!-- モックアップ画像（placehold.jp） -->
             <div class="mt-3 pt-3 border-top">
-              <div class="small fw-semibold text-secondary mb-2">
-                モックアップ画像
-                <a href="https://placehold.jp/" target="_blank" rel="noopener noreferrer" class="ms-1 text-decoration-none" style="font-size:.75em">placehold.jp ↗</a>
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="small fw-semibold text-secondary">
+                  モックアップ画像
+                  <a href="https://placehold.jp/" target="_blank" rel="noopener noreferrer" class="ms-1 text-decoration-none" style="font-size:.75em">placehold.jp ↗</a>
+                </div>
+                <div class="d-flex align-items-center gap-1" title="元画像をどれだけ透過させて重ねるか（0=非表示 / 100=元画像のみ）">
+                  <label class="small text-muted mb-0" for="phBlendOpacityInput" style="white-space:nowrap">元画像透過:</label>
+                  <input type="number" id="phBlendOpacityInput" min="0" max="100" step="5" value="25"
+                         class="form-control form-control-sm text-center" style="width:4.5em;font-size:.8em">
+                  <span class="small text-muted">%</span>
+                </div>
               </div>
               <button type="button" id="imagePlaceholderSameSize"
                       class="btn btn-sm btn-outline-secondary w-100 mb-2 lp-ph-btn" disabled>
                 <i class="bi bi-aspect-ratio me-1"></i><span id="imagePlaceholderSameSizeLabel">同サイズで挿入</span>
               </button>
               <div class="d-flex flex-wrap gap-1" id="imagePlaceholderPresets"></div>
+              <div id="phBlendStatus" class="small text-muted mt-1 d-none">合成中…</div>
             </div>
           </div>
         </div>

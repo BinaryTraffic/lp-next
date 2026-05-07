@@ -1414,12 +1414,34 @@
     const phSameSizeBtn = document.getElementById('imagePlaceholderSameSize');
     const phSameSizeLabel = document.getElementById('imagePlaceholderSameSizeLabel');
     const phPresetsEl = document.getElementById('imagePlaceholderPresets');
+    const phBlendInput = document.getElementById('phBlendOpacityInput');
+    const phBlendStatus = document.getElementById('phBlendStatus');
 
+    const PH_BLEND_KEY = 'lp_ph_blend_opacity';
     const PH_PRESETS = [
       [100, 100], [150, 150], [200, 200], [300, 300],
       [200, 150], [300, 200], [400, 300], [600, 400],
       [800, 600], [1200, 630], [1920, 1080],
     ];
+
+    /** localStorage から元画像透過度(0〜1)を読む */
+    function getPhBlendOpacity() {
+      const v = parseFloat(localStorage.getItem(PH_BLEND_KEY) ?? '');
+      return (isFinite(v) && v >= 0 && v <= 1) ? v : 0.25;
+    }
+    function savePhBlendOpacity(ratio) {
+      localStorage.setItem(PH_BLEND_KEY, String(Math.max(0, Math.min(1, ratio))));
+    }
+
+    // 入力欄を localStorage の値で初期化し、変更時に保存
+    if (phBlendInput) {
+      phBlendInput.value = String(Math.round(getPhBlendOpacity() * 100));
+      phBlendInput.addEventListener('change', () => {
+        const v = Math.max(0, Math.min(100, parseInt(phBlendInput.value || '25', 10)));
+        phBlendInput.value = String(v);
+        savePhBlendOpacity(v / 100);
+      });
+    }
 
     let targetElemId = '';
     /** @type {string} */
@@ -1428,6 +1450,8 @@
     let origW = 0;
     /** @type {number} */
     let origH = 0;
+    /** @type {string} モーダル表示中の元画像 displayURL */
+    let origDisplayUrl = '';
 
     /** @param {HTMLImageElement|null} img */
     function formatImgPxDimsLine(img) {
@@ -1472,8 +1496,67 @@
       return `https://placehold.jp/${w}x${h}.png`;
     }
 
-    function selectPlaceholder(w, h) {
-      setRightSelection(buildPlaceholderUrl(w, h));
+    /**
+     * img 要素を crossOrigin='anonymous' で読み込み、load/error を Promise 化。
+     * @param {string} url
+     * @returns {Promise<HTMLImageElement>}
+     */
+    function loadImgCors(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('load failed: ' + url));
+        img.src = url;
+      });
+    }
+
+    /**
+     * placehold.jp 画像と元画像を Canvas でブレンドし DataURL を返す。
+     * @param {number} phW  プレースホルダー幅
+     * @param {number} phH  プレースホルダー高さ
+     * @param {string} origSrc  元画像 URL（CORS 失敗時はプレースホルダーのみ使用）
+     * @param {number} origAlpha  元画像の描画透過度 0〜1
+     * @returns {Promise<string>} DataURL
+     */
+    async function blendPlaceholder(phW, phH, origSrc, origAlpha) {
+      const phUrl = buildPlaceholderUrl(phW, phH);
+      const phImg = await loadImgCors(phUrl);
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = phW;
+      canvas.height = phH;
+      const ctx = canvas.getContext('2d');
+
+      // ① プレースホルダーを背景として全面描画
+      ctx.drawImage(phImg, 0, 0, phW, phH);
+
+      // ② 元画像をオーバーレイ（CORS 失敗は無視して続行）
+      if (origSrc && origAlpha > 0) {
+        try {
+          const origImg = await loadImgCors(origSrc);
+          ctx.globalAlpha = origAlpha;
+          ctx.drawImage(origImg, 0, 0, phW, phH);
+          ctx.globalAlpha = 1;
+        } catch (_) {
+          // CORS 不可 → プレースホルダーのみ
+        }
+      }
+
+      return canvas.toDataURL('image/png');
+    }
+
+    async function selectPlaceholder(w, h) {
+      if (phBlendStatus) phBlendStatus.classList.remove('d-none');
+      try {
+        const alpha = getPhBlendOpacity();
+        const dataUrl = await blendPlaceholder(w, h, origDisplayUrl, alpha);
+        setRightSelection(dataUrl);
+      } catch (e) {
+        showToast('合成に失敗しました: ' + String(e.message || e), 'danger');
+      } finally {
+        if (phBlendStatus) phBlendStatus.classList.add('d-none');
+      }
     }
 
     function renderPlaceholderSection(nw, nh) {
@@ -1580,10 +1663,12 @@
       } else if (orig) {
         leftSrc = orig;
       }
+      origDisplayUrl = '';
       renderPlaceholderSection(0, 0);
       if (leftImg) {
         if (leftSrc) {
           const displayUrl = resolveDisplayUrl(leftSrc);
+          origDisplayUrl = displayUrl;
           leftImg.onload = null;
           leftImg.onerror = null;
           dimsLeftEl && (dimsLeftEl.textContent = 'サイズ：読み込み中…');
@@ -1653,6 +1738,7 @@
 
     modalEl.addEventListener('hidden.bs.modal', () => {
       targetElemId = '';
+      origDisplayUrl = '';
       resetRight();
       wireImgDimsReporting(leftImg, dimsLeftEl, '');
       renderPlaceholderSection(0, 0);
