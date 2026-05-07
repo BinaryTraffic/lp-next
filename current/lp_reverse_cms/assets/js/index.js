@@ -1424,7 +1424,7 @@
       [800, 600], [1200, 630], [1920, 1080],
     ];
 
-    /** localStorage から元画像透過度(0〜1)を読む */
+    /** localStorage からモック濃度(0〜1)を読む */
     function getPhBlendOpacity() {
       const v = parseFloat(localStorage.getItem(PH_BLEND_KEY) ?? '');
       return (isFinite(v) && v >= 0 && v <= 1) ? v : 0.70;
@@ -1437,7 +1437,7 @@
     if (phBlendInput) {
       phBlendInput.value = String(Math.round(getPhBlendOpacity() * 100));
       phBlendInput.addEventListener('change', () => {
-        const v = Math.max(0, Math.min(100, parseInt(phBlendInput.value || '25', 10)));
+        const v = Math.max(0, Math.min(100, parseInt(phBlendInput.value || '70', 10)));
         phBlendInput.value = String(v);
         savePhBlendOpacity(v / 100);
       });
