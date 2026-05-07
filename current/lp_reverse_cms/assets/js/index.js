@@ -51,6 +51,8 @@
 
   // Step 3
   const btnEditAgain = document.getElementById('btnEditAgain');
+  const btnCopyWorkspaceName = document.getElementById('btnCopyWorkspaceName');
+  const workspaceNameField = document.getElementById('workspaceNameField');
 
   /** データ上到達した最遠ステップ。この範囲内のみステップアイコンクリックで遷移可 */
   let maxReachableStep = Math.min(
@@ -1921,6 +1923,24 @@
     if (btnEditAgain) {
       btnEditAgain.addEventListener('click', () => {
         window.location.href = window.location.pathname + '?step=2';
+      });
+    }
+
+    if (btnCopyWorkspaceName && workspaceNameField) {
+      btnCopyWorkspaceName.addEventListener('click', async () => {
+        const v = (workspaceNameField.value || '').trim();
+        if (!v) {
+          showToast('ワークスペース名が空です。', 'warning');
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(v);
+          showToast(`ワークスペース名をコピーしました（${v}）`, 'success');
+        } catch {
+          workspaceNameField.focus();
+          workspaceNameField.select();
+          showToast('コピーに失敗しました。手動でコピーしてください。', 'warning');
+        }
       });
     }
 

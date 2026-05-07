@@ -17,6 +17,10 @@ define('APP_VERSION', '1.4.0');
 define('APP_BUILD', lp_reverse_app_build_label(__DIR__));
 
 $outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
+$workspaceName  = '';
+if (preg_match('/\b(ws_[a-f0-9]{32})\b/i', $outputWsPrefix, $m) === 1) {
+    $workspaceName = (string) $m[1];
+}
 $cmsRootAuth    = __DIR__;
 $userDataDirUx  = LpWorkspace::authRegistryDir($cmsRootAuth);
 $registryUx     = new UserRegistry($userDataDirUx);
@@ -763,6 +767,18 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           <p class="text-muted mb-4">
             参照サイトの構成を保ったまま、新しいサイトが生成されました。
           </p>
+          <?php if ($workspaceName !== ''): ?>
+            <div class="alert alert-light border text-start mx-auto mb-4" style="max-width:560px;">
+              <label class="form-label small text-muted mb-1" for="workspaceNameField">ワークスペース名</label>
+              <div class="input-group">
+                <input type="text" id="workspaceNameField" class="form-control font-monospace" readonly
+                       value="<?= htmlspecialchars($workspaceName, ENT_QUOTES, 'UTF-8') ?>">
+                <button type="button" class="btn btn-outline-secondary" id="btnCopyWorkspaceName">
+                  <i class="bi bi-clipboard me-1"></i>コピー
+                </button>
+              </div>
+            </div>
+          <?php endif; ?>
           <div class="d-flex justify-content-center gap-3 flex-wrap mb-4">
             <a href="preview.php" target="_blank" class="btn btn-lg btn-primary">
               <i class="bi bi-eye me-2"></i>プレビューを確認
