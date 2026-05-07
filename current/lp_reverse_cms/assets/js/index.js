@@ -609,6 +609,11 @@
 
       if (twoPhaseAnalyze) {
         const total = Math.max(1, internalCandidateUrls.length);
+        const analyzeStartMs = Date.now();
+        if (progAnalyzeDetail) {
+          progAnalyzeDetail.textContent =
+            `【内部ページ取得】 内部ページ ${internalCandidateUrls.length} 件を検出。目安: ${roughEstimate(internalCandidateUrls.length, 'analyze')}`;
+        }
         for (let i = 0; i < internalCandidateUrls.length; i++) {
           const row = internalCandidateUrls[i];
           const idx = typeof row.index === 'number' ? row.index : i;
@@ -620,7 +625,9 @@
           if (progAnalyzePct) progAnalyzePct.textContent = `${pct}%/100%`;
           if (progAnalyzeDetail) {
             const shown = canonical.length > 100 ? `${canonical.slice(0, 97)}...` : canonical;
-            progAnalyzeDetail.textContent = `【内部ページ取得】 ${i + 1} / ${total} 内部ページ解析中... ${shown}`;
+            const eta = etaString(analyzeStartMs, i + 1, total);
+            const etaLabel = eta ? ` ${eta}` : '';
+            progAnalyzeDetail.textContent = `【内部ページ取得】 ${i + 1} / ${total} 内部ページ解析中... ${shown}${etaLabel}`;
           }
 
           try {
@@ -841,13 +848,20 @@
         /** 解析エラー行はクライアントでもスキップ（サーバーは 400） */
         const toRun = internals.filter(it => String(it.status ?? '') !== 'error');
         const totalBar = Math.max(1, 1 + toRun.length);
+        const genStartMs = Date.now();
         let completed = 1;
         let lastSize = typeof genRes.size === 'number' ? genRes.size : 0;
 
         setSaveGenProgress(
+          0,
+          totalBar,
+          `${totalBar} 件を生成します。目安: ${roughEstimate(totalBar, 'generate')}`,
+        );
+        const entryEta = etaString(genStartMs, completed, totalBar);
+        setSaveGenProgress(
           completed,
           totalBar,
-          `トップページ（index）の生成が完了しました。続いて内部ページを ${toRun.length} 件、順に生成します。（下のバーが全体の進みです）`,
+          `トップページ（index）の生成が完了しました。${entryEta || '内部ページ生成を継続します。'}`,
         );
 
         for (let i = 0; i < toRun.length; i++) {
@@ -892,7 +906,9 @@
           setSaveGenProgress(
             completed,
             totalBar,
-            `内部ページ ${n} / ${toRun.length} 件目の処理が終わりました。`,
+            completed < totalBar
+              ? `内部ページ ${n} / ${toRun.length} 件目の処理が終わりました。${etaString(genStartMs, completed, totalBar)}`
+              : `完了 (合計 ${formatDuration((Date.now() - genStartMs) / 1000)})`,
           );
         }
 
@@ -903,7 +919,7 @@
           setSaveGenProgress(
             totalBar,
             totalBar,
-            `内部ページ ${toRun.length} 件ぶんの生成処理が完了しました。`,
+            `内部ページ ${toRun.length} 件ぶんの生成処理が完了しました。完了 (合計 ${formatDuration((Date.now() - genStartMs) / 1000)})`,
           );
           genRes = { success: true, size: lastSize };
         }
@@ -1673,6 +1689,54 @@
 
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * 経過時間ベースの ETA を表示する。
+   * @param {number} startMs
+   * @param {number} done
+   * @param {number} total
+   * @returns {string}
+   */
+  function etaString(startMs, done, total) {
+    if (!Number.isFinite(startMs) || done <= 0 || total <= 0 || done >= total) {
+      return '';
+    }
+    const elapsedSec = Math.max(1, (Date.now() - startMs) / 1000);
+    const avgSec = elapsedSec / done;
+    const remainSec = Math.max(0, Math.round(avgSec * (total - done)));
+    const perSec = Math.max(1, Math.round(avgSec));
+    const remainStr = remainSec >= 60
+      ? `約 ${Math.ceil(remainSec / 60)} 分`
+      : `約 ${remainSec} 秒`;
+    return `残り ${remainStr}  (1件あたり ${perSec}秒)`;
+  }
+
+  /**
+   * 秒数を "X分Y秒" に整形する。
+   * @param {number} totalSec
+   * @returns {string}
+   */
+  function formatDuration(totalSec) {
+    const sec = Math.max(0, Math.round(totalSec));
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m > 0 ? `${m}分${s}秒` : `${s}秒`;
+  }
+
+  /**
+   * 件数ベースの初期目安（実測前）を返す。
+   * @param {number} count
+   * @param {'analyze'|'generate'} phase
+   * @returns {string}
+   */
+  function roughEstimate(count, phase) {
+    const n = Math.max(0, Number(count) || 0);
+    const [lo, hi] = phase === 'analyze' ? [20, 60] : [5, 20];
+    const loMin = Math.ceil((n * lo) / 60);
+    const hiMin = Math.ceil((n * hi) / 60);
+    if (loMin === hiMin) return `約 ${loMin} 分`;
+    return `約 ${loMin}〜${hiMin} 分`;
   }
 
   // -----------------------------------------------------------------------
