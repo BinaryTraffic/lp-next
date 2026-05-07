@@ -223,7 +223,13 @@ final class LpDomScriptCleanup
             return;
         }
         $xp = new DOMXPath($doc);
-        $nodes = $xp->query('.//*', $root);
+        // Avoid `.//*` on huge DOMs (memory); only nodes that can carry URL-like attrs we inspect.
+        $nodes = $xp->query(
+            './/*[@src or @href or @poster or @style or @srcset'
+            . ' or @data-src or @data-srcset or @data-bg or @data-background'
+            . ' or @data-original or @data-lazy-src]',
+            $root
+        );
         if (!$nodes) {
             return;
         }

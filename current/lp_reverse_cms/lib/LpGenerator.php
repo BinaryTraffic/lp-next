@@ -41,6 +41,8 @@ class LpGenerator
     {
         $this->dataDir = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
 
+        @ini_set('memory_limit', '512M');
+
         $meta        = $structure['meta']       ?? [];
         $headExtra   = $structure['head_extra'] ?? '';
         $bodySnip    = $structure['body_head_snippets'] ?? '';
@@ -473,14 +475,16 @@ HTML;
         $extra = '[]:_-';
         $hostClass = '[a-zA-Z0-9.' . preg_quote($extra, '#') . ']+';
 
+        // Use ~ delimiter: lookahead may contain "#", which would terminate a #-delimited pattern
+        // and trigger "Unknown modifier ']'" at the closing bracket.
         $html = preg_replace(
-            '#(https?://' . $hostClass . ')\\(?=[/a-zA-Z0-9_%?#])#',
+            '~(https?://' . $hostClass . ')\\(?=[/a-zA-Z0-9_%?#])~',
             '$1/',
             $html
         ) ?? $html;
 
         $html = preg_replace(
-            '#(https?://' . $hostClass . ')(%5[Cc])(/)#',
+            '~(https?://' . $hostClass . ')(%5[Cc])(/)~',
             '$1$3',
             $html
         ) ?? $html;
