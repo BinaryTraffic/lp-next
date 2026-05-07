@@ -26,6 +26,116 @@ final class LpInternalPagesPipeline
     private const PIPELINE_MAX_ELAPSED_SECONDS = 300;
 
     /**
+     * エントリ構造から内部ページ候補 URL を返す（重複除去・MAX_PAGES 制限済み）
+     *
+     * @param array<string,mixed> $structure
+     * @return list<string>
+     */
+    public static function extractCandidateUrls(array $structure, string $entryUrl): array
+    {
+        $entryCanon = LpUrlContext::canonicalHttpDocumentIdentity($entryUrl);
+        $urls = self::collectInternalDocumentUrlsFromEntryStructure($structure);
+        $urls = array_values(array_filter($urls, static fn(string $u): bool => $u !== $entryCanon));
+        $urls = array_values(array_unique($urls));
+        sort($urls);
+
+        return array_slice($urls, 0, self::MAX_PAGES);
+    }
+
+    /**
+     * 内部ページ 1 件を取得・解析してマニフェストエントリを返す
+     *
+     * @return array{
+     *   fetch_ok: bool,
+     *   canonical_url: string,
+     *   source_canonical: string,
+     *   structure_file: string|null,
+     *   final_fetch_url?: string,
+     *   section_count: int,
+     *   asset_new_downloads: int,
+     *   asset_sync_limited?: bool,
+     *   error?: string
+     * }
+     */
+    public static function processSingleUrl(string $canonUrl, string $dataDir, string $outputDir): array
+    {
+        $dataDir   = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
+        $outputDir = rtrim($outputDir, '/\\') . DIRECTORY_SEPARATOR;
+
+        if (!is_dir($dataDir . 'internal_pages')) {
+            mkdir($dataDir . 'internal_pages', 0755, true);
+        }
+
+        $assetPath = $dataDir . 'asset_map.json';
+        $existing = [];
+        if (is_readable($assetPath)) {
+            $dec = json_decode((string) file_get_contents($assetPath), true);
+            if (is_array($dec)) {
+                /** @var array<string, string> $existing */
+                $existing = $dec;
+            }
+        }
+
+        $fetcher    = new LpFetcher();
+        $downloader = new LpAssetDownloader($outputDir);
+        $analyzer   = new LpAnalyzer();
+        $mapper     = new LpMapper();
+
+        try {
+            $res      = $fetcher->fetch($canonUrl);
+            $html     = $res['html'];
+            $finalUrl = $res['final_url'];
+            $identity = LpUrlContext::canonicalHttpDocumentIdentity($finalUrl);
+            $slug     = self::slugForCanonical($canonUrl);
+
+            $newMap = $downloader->downloadAll($html, $finalUrl, $existing, [
+                'max_new_downloads'   => self::INTERNAL_ASSET_MAX_NEW_DOWNLOADS,
+                'max_elapsed_seconds' => self::INTERNAL_ASSET_MAX_ELAPSED_SECONDS,
+            ]);
+            $merged = array_merge($existing, $newMap);
+            file_put_contents(
+                $assetPath,
+                json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+                LOCK_EX
+            );
+
+            $sub = $analyzer->analyze($html, $finalUrl);
+            unset($sub['parse_diagnostics']);
+            $sub = $mapper->enrich($sub);
+            $sub['internal_pages'] = [];
+
+            $structureRel = 'internal_pages/' . $slug . '.json';
+            self::storagePut(
+                $dataDir . $structureRel,
+                json_encode($sub, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+            );
+
+            return [
+                'fetch_ok'            => true,
+                'canonical_url'       => $identity,
+                'source_canonical'    => $canonUrl,
+                'structure_file'      => $structureRel,
+                'final_fetch_url'     => $finalUrl,
+                'section_count'       => count($sub['sections'] ?? []),
+                'asset_new_downloads' => $downloader->getNewDownloadCount(),
+                'asset_sync_limited'  => $downloader->hasExceededBudget(),
+            ];
+        } catch (Throwable $e) {
+            return [
+                'fetch_ok'            => false,
+                'canonical_url'       => $canonUrl,
+                'source_canonical'    => $canonUrl,
+                'structure_file'      => null,
+                'section_count'       => 0,
+                'asset_new_downloads' => 0,
+                'error'               => $e->getMessage(),
+            ];
+        }
+    }
+    /** 内部ページ 1 件あたり DOM 走査のウォール時計上限（巨大ページで無限に近い処理にならないようにする） */
+    private const INTERNAL_PAGE_ANALYZE_MAX_WALL_SECONDS = 90.0;
+
+    /**
      * @param callable(array<string, mixed>): void|null $emit NDJSON progress のときのみ
      */
     public static function run(
@@ -200,7 +310,7 @@ final class LpInternalPagesPipeline
                 }
 
                 $emitInternal('構造を解析しています…');
-                $sub = $analyzer->analyze($html, $finalUrl);
+                $sub = $analyzer->analyze($html, $finalUrl, null, self::INTERNAL_PAGE_ANALYZE_MAX_WALL_SECONDS);
                 unset($sub['parse_diagnostics']);
                 $sub = $mapper->enrich($sub);
                 $sub['internal_pages'] = [];
@@ -251,7 +361,7 @@ final class LpInternalPagesPipeline
      *
      * @return list<string>
      */
-    private static function collectInternalDocumentUrlsFromEntryStructure(array $structure): array
+    public static function collectInternalDocumentUrlsFromEntryStructure(array $structure): array
     {
         $out = [];
         foreach ($structure['sections'] ?? [] as $sec) {
@@ -281,7 +391,7 @@ final class LpInternalPagesPipeline
     /**
      * @param array<string, string> $urlToOutput canonical → pages/foo.html
      */
-    private static function patchInternalRelativeHrefs(array &$structure, array $urlToOutput): void
+    public static function patchInternalRelativeHrefs(array &$structure, array $urlToOutput): void
     {
         foreach ($structure['sections'] as &$sec) {
             foreach ($sec['elements'] as &$el) {

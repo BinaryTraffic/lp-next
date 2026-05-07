@@ -11,6 +11,9 @@
 
   /** Step 3 診断で取得した fetch_failures（ログモーダル用） */
   let lastDiagFetchFailures = [];
+  /** @type {AbortController|null} */
+  let generateAbortController = null;
+  let generateStopRequested = false;
 
   // -----------------------------------------------------------------------
   // DOM refs
@@ -582,8 +585,68 @@
       progAnalyzeBarWrap?.classList.remove('d-none');
       setProgState(progAnalyze, 'loading', 'サイト構造を解析中…');
 
-      const analyzeRes = await apiPostAnalyzeStream('store/analyze_lp.php');
-      if (!analyzeRes.success) throw new Error(analyzeRes.error ?? '解析に失敗しました。');
+      /** @type {Record<string, unknown>|null} */
+      let analyzeRes = null;
+      /** @type {Array<Record<string, unknown>>} */
+      let internalCandidateUrls = [];
+      let twoPhaseAnalyze = false;
+
+      try {
+        const entryRes = await apiPost('store/analyze_entry.php', { stream_progress: true });
+        if (!entryRes.ok && !entryRes.success) {
+          throw new Error(typeof entryRes.error === 'string' ? entryRes.error : 'analyze_entry failed');
+        }
+        analyzeRes = entryRes;
+        internalCandidateUrls = Array.isArray(entryRes.internal_candidate_urls)
+          ? /** @type {Array<Record<string, unknown>>} */ (entryRes.internal_candidate_urls)
+          : [];
+        twoPhaseAnalyze = true;
+      } catch {
+        twoPhaseAnalyze = false;
+      }
+
+      if (twoPhaseAnalyze) {
+        const total = Math.max(1, internalCandidateUrls.length);
+        for (let i = 0; i < internalCandidateUrls.length; i++) {
+          const row = internalCandidateUrls[i];
+          const idx = typeof row.index === 'number' ? row.index : i;
+          const canonical = typeof row.canonical_url === 'string' ? row.canonical_url : '';
+          const pct = Math.min(98, 50 + Math.round((45 * (i + 1)) / total));
+          if (progAnalyzeBar) progAnalyzeBar.style.width = `${pct}%`;
+          progAnalyzeBarOuter?.setAttribute('aria-valuenow', String(pct));
+          progAnalyzeBarOuter?.setAttribute('aria-valuetext', `${pct}%/100%`);
+          if (progAnalyzePct) progAnalyzePct.textContent = `${pct}%/100%`;
+          if (progAnalyzeDetail) {
+            const shown = canonical.length > 100 ? `${canonical.slice(0, 97)}...` : canonical;
+            progAnalyzeDetail.textContent = `【内部ページ取得】 ${i + 1} / ${total} 内部ページ解析中... ${shown}`;
+          }
+
+          try {
+            await apiPost('store/analyze_internal_page.php', { index: idx }, { timeoutMs: 240000 });
+          } catch (e) {
+            console.warn('analyze_internal_page skipped', idx, e);
+          }
+        }
+
+        if (progAnalyzeDetail) {
+          progAnalyzeDetail.textContent = '【最終処理】 画像メモ・業種推定を処理しています...';
+        }
+        const finalizeRes = await apiPost('store/finalize_analyze.php', {});
+        if (!finalizeRes.ok && !finalizeRes.success) {
+          throw new Error(
+            typeof finalizeRes.error === 'string'
+              ? finalizeRes.error
+              : '最終処理に失敗しました。',
+          );
+        }
+      } else {
+        analyzeRes = await apiPostAnalyzeStream('store/analyze_lp.php');
+        if (!analyzeRes.success) throw new Error(analyzeRes.error ?? '解析に失敗しました。');
+      }
+
+      if (!analyzeRes) {
+        throw new Error('解析結果の取得に失敗しました。');
+      }
 
       let diagNote = '';
       const diag = analyzeRes.parse_diagnostics;
@@ -635,13 +698,25 @@
     wrap.innerHTML =
       '<div class="progress" style="height:8px" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">'
       + '<div id="saveGenProgressBar" class="progress-bar" style="width:0%"></div></div>'
-      + '<p id="saveGenProgressLabel" class="small text-muted mb-0 mt-2"></p>';
+      + '<p id="saveGenProgressLabel" class="small text-muted mb-0 mt-2"></p>'
+      + '<button id="saveGenAbortBtn" type="button" class="btn btn-sm btn-outline-danger mt-2">■ 生成を停止</button>';
     const errEl = modalBody.querySelector('#saveGenModalErr');
     if (errEl) {
       modalBody.insertBefore(wrap, errEl);
     } else {
       modalBody.appendChild(wrap);
     }
+
+    document.getElementById('saveGenAbortBtn')?.addEventListener('click', async () => {
+      generateStopRequested = true;
+      generateAbortController?.abort();
+      try {
+        await fetch('store/abort_generate.php', { method: 'POST' });
+      } catch {}
+      setSaveGenProgress(0, 1, '停止しました。');
+      const abortBtn = document.getElementById('saveGenAbortBtn');
+      if (abortBtn) abortBtn.disabled = true;
+    });
 
     return wrap;
   }
@@ -676,6 +751,8 @@
     setSaveGenRowStatus('saveGenRowGen', 'pending');
     document.getElementById('saveGenProgressWrap')?.classList.add('d-none');
     setSaveGenProgress(0, 1, '');
+    const abortBtn = document.getElementById('saveGenAbortBtn');
+    if (abortBtn) abortBtn.disabled = false;
   }
 
   /** @param {'pending'|'active'|'done'|'error'} state */
@@ -707,6 +784,9 @@
   }
 
   async function runSaveAndGenerate() {
+    generateAbortController = new AbortController();
+    generateStopRequested = false;
+    const generateSignal = generateAbortController.signal;
     btnSaveGenerate.disabled = true;
     generateError.classList.add('d-none');
     generateSuccess.classList.add('d-none');
@@ -744,7 +824,10 @@
 
       if (useTwoPhase) {
         ensureSaveGenProgressUi()?.classList.remove('d-none');
-        genRes = await apiPost('store/generate_entry.php', {});
+        genRes = await apiPost('store/generate_entry.php', {}, { signal: generateSignal });
+        if (genRes.aborted === true) {
+          throw new DOMException('aborted', 'AbortError');
+        }
         if (genRes.success !== true && genRes.ok !== true) {
           throw new Error(
             typeof genRes.error === 'string' ? genRes.error : 'エントリー生成に失敗しました。',
@@ -766,6 +849,9 @@
         );
 
         for (let i = 0; i < toRun.length; i++) {
+          if (generateStopRequested) {
+            break;
+          }
           const row = /** @type {Record<string, unknown>} */ (toRun[i]);
           const key = typeof row.key === 'string' ? row.key : '';
           if (!key || !/^internal_\d+$/.test(key)) {
@@ -780,10 +866,21 @@
           );
 
           try {
-            const one = await apiPost('store/generate_internal.php', { key });
+            const one = await apiPost(
+              'store/generate_internal.php',
+              { key },
+              { timeoutMs: 180000, signal: generateSignal },
+            );
+            if (one.aborted === true) {
+              throw new DOMException('aborted', 'AbortError');
+            }
             completed++;
             if (typeof one.size === 'number') lastSize += one.size;
           } catch (e) {
+            if (e instanceof DOMException && e.name === 'AbortError') {
+              generateStopRequested = true;
+              break;
+            }
             const msgSkip = `${key}: `;
             const reason = e instanceof Error ? e.message : String(e);
             console.warn('generate_internal skipped', msgSkip + reason);
@@ -797,15 +894,24 @@
           );
         }
 
-        setSaveGenProgress(
-          totalBar,
-          totalBar,
-          `内部ページ ${toRun.length} 件ぶんの生成処理が完了しました。`,
-        );
-        genRes = { success: true, size: lastSize };
+        if (generateStopRequested) {
+          setSaveGenProgress(0, 1, '停止しました。');
+          genRes = { success: false, aborted: true, size: lastSize };
+        } else {
+          setSaveGenProgress(
+            totalBar,
+            totalBar,
+            `内部ページ ${toRun.length} 件ぶんの生成処理が完了しました。`,
+          );
+          genRes = { success: true, size: lastSize };
+        }
       } else {
         genRes = await apiPost('store/generate_lp.php', {});
         if (!genRes.success) throw new Error(genRes.error ?? 'サイト生成に失敗しました。');
+      }
+
+      if (genRes.aborted === true || generateStopRequested) {
+        throw new DOMException('aborted', 'AbortError');
       }
 
       setSaveGenRowStatus('saveGenRowGen', 'done');
@@ -824,7 +930,8 @@
 
       tryNavigateToReachedStep(3);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const isAbort = err instanceof DOMException && err.name === 'AbortError';
+      const message = isAbort ? '生成を停止しました。' : (err instanceof Error ? err.message : String(err));
       showError(generateError, message);
       const msgEl = document.getElementById('saveGenModalErr');
       if (msgEl) {
@@ -833,7 +940,9 @@
       }
       document.getElementById('saveGenProgressWrap')?.classList.add('d-none');
 
-      if (!savePhaseDone) {
+      if (isAbort && savePhaseDone) {
+        setSaveGenRowStatus('saveGenRowGen', 'pending');
+      } else if (!savePhaseDone) {
         setSaveGenRowStatus('saveGenRowSave', 'error');
       } else {
         setSaveGenRowStatus('saveGenRowGen', 'error');
@@ -841,6 +950,9 @@
       document.getElementById('saveGenFooterBusy')?.classList.add('d-none');
       document.getElementById('saveGenFooterDone')?.classList.remove('d-none');
       btnSaveGenerate.disabled = false;
+    } finally {
+      generateAbortController = null;
+      generateStopRequested = false;
     }
   }
 
@@ -1488,12 +1600,38 @@
     }
   }
 
-  async function apiPost(endpoint, data) {
-    const res = await fetch(endpoint, {
+  async function apiPost(endpoint, data, options = {}) {
+    const timeoutMs = Number.isFinite(options.timeoutMs) ? Number(options.timeoutMs) : 0;
+    const externalSignal = options.signal instanceof AbortSignal ? options.signal : null;
+    const controller = (timeoutMs > 0 || externalSignal) ? new AbortController() : null;
+    if (controller && externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+    }
+    const timer = (controller && timeoutMs > 0)
+      ? setTimeout(() => controller.abort(new DOMException('timeout', 'AbortError')), timeoutMs)
+      : null;
+
+    let res;
+    try {
+      res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(data),
+      signal: controller ? controller.signal : undefined,
     });
+    } catch (e) {
+      if (controller && (e instanceof DOMException) && e.name === 'AbortError' && timeoutMs > 0) {
+        throw new Error(`タイムアウトしました（${endpoint} / ${Math.floor(timeoutMs / 1000)}秒）`);
+      }
+      throw e;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+
     const json = await parseApiJsonResponse(res, endpoint);
     if (!res.ok) {
       throw new Error(

@@ -27,8 +27,9 @@ class LpAnalyzer
      *
      * @param callable(int $doneSteps, int $totalSteps, string $phase, array<string, mixed> $ctx): void|null $onWalkProgress
      *        Called during DOM ツリー走査（進捗可視化用。throttle は呼び出し側でも可）。
+     * @param float $maxWalkWallSeconds 0 より大きいとき、ツリー走査中にウォール時計で打ち切り（内部ページのハング対策）
      */
-    public function analyze(string $html, string $sourceUrl, ?callable $onWalkProgress = null): array
+    public function analyze(string $html, string $sourceUrl, ?callable $onWalkProgress = null, float $maxWalkWallSeconds = 0.0): array
     {
         $this->sourceUrl = $sourceUrl;
         $this->urlCtx    = LpUrlContext::fromPageAndHtml($sourceUrl, $html);
@@ -46,6 +47,15 @@ class LpAnalyzer
 
         $xpath = new DOMXPath($dom);
 
+        $walkDeadline = $maxWalkWallSeconds > 0.0 ? microtime(true) + $maxWalkWallSeconds : null;
+        $checkWalkDeadline = static function (?float $deadline): void {
+            if ($deadline !== null && microtime(true) >= $deadline) {
+                throw new RuntimeException(
+                    '構造解析が時間上限を超えました（ページ規模が大きい可能性があります）。'
+                );
+            }
+        };
+
         /** @var array{walk_total_steps: int, walk_completed_steps: int, sections_planned: int, sections_written: int, section_errors: list<array<string, mixed>>, warnings: list<array<string, mixed>>} $diag */
         $diag = [
             'walk_total_steps'       => 0,
@@ -56,17 +66,23 @@ class LpAnalyzer
             'warnings'               => [],
         ];
 
+        $checkWalkDeadline($walkDeadline);
+
         $candidates = $this->findStructuralElements($dom, $xpath);
         $diag['sections_planned'] = count($candidates);
 
         $walkTotal = 0;
         foreach ($candidates as $cand) {
+            $checkWalkDeadline($walkDeadline);
             $walkTotal += $this->countTraversalSteps($cand);
         }
         $diag['walk_total_steps'] = $walkTotal;
 
+        $checkWalkDeadline($walkDeadline);
+
         $lastEmitDone = -1;
-        $throttleVisit = function () use (&$diag, $onWalkProgress, &$lastEmitDone): void {
+        $throttleVisit = function () use (&$diag, $onWalkProgress, &$lastEmitDone, $walkDeadline, $checkWalkDeadline): void {
+            $checkWalkDeadline($walkDeadline);
             if ($onWalkProgress === null) {
                 return;
             }
@@ -78,7 +94,8 @@ class LpAnalyzer
             $onWalkProgress($done, $diag['walk_total_steps'], 'tree_walk', []);
         };
 
-        $onVisit = function () use (&$diag, $throttleVisit): void {
+        $onVisit = function () use (&$diag, $throttleVisit, $walkDeadline, $checkWalkDeadline): void {
+            $checkWalkDeadline($walkDeadline);
             $diag['walk_completed_steps']++;
             $throttleVisit();
         };

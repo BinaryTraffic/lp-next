@@ -101,6 +101,16 @@ if ($streamProgress) {
  * @throws Throwable
  */
 $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
+    $requestId = substr(bin2hex(random_bytes(8)), 0, 12);
+    $startedAt = microtime(true);
+    $mark = static function (string $phase, array $context = []) use ($dataDir, $requestId, $startedAt): void {
+        $context['request_id'] = $requestId;
+        $context['elapsed_ms'] = (int) round((microtime(true) - $startedAt) * 1000);
+        $context['memory_mb']  = round(memory_get_usage(true) / 1024 / 1024, 1);
+        $context['peak_mb']    = round(memory_get_peak_usage(true) / 1024 / 1024, 1);
+        lp_reverse_analyze_append_log($dataDir, 'info', $phase, $context);
+    };
+
     $htmlFile = $dataDir . 'fetched.html';
     $urlFile  = $dataDir . 'source_url.txt';
 
@@ -113,6 +123,11 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         throw new RuntimeException('HTMLファイルの読み込みに失敗しました。');
     }
     $sourceUrl = file_exists($urlFile) ? trim((string) file_get_contents($urlFile)) : '';
+    $mark('analyze_lp:start', [
+        'stream_progress' => $streamProgress,
+        'source_url'      => $sourceUrl,
+        'html_bytes'      => strlen((string) $html),
+    ]);
 
     $emitNd([
         'type'      => 'progress',
@@ -144,7 +159,12 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         ]);
     };
 
+    $mark('phase:analyzer:start');
     $structure = $analyzer->analyze($html, $sourceUrl, $walkProgressCb);
+    $mark('phase:analyzer:done', [
+        'sections'       => count($structure['sections'] ?? []),
+        'total_elements' => (int) ($structure['total_elements'] ?? 0),
+    ]);
 
     $secErrs = $structure['parse_diagnostics']['section_errors'] ?? [];
     if (is_array($secErrs) && $secErrs !== []) {
@@ -162,18 +182,28 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
     ]);
 
     $mapper    = new LpMapper();
+    $mark('phase:mapper:start');
     $structure = $mapper->enrich($structure);
+    $mark('phase:mapper:done', [
+        'sections' => count($structure['sections'] ?? []),
+    ]);
 
     $emitProgressOnly = $streamProgress ? static function (array $row) use ($emitNd): void {
         $emitNd($row);
     } : null;
 
     $fetchRedirect = new LpFetcher();
+    $mark('phase:redirect_verify:start');
     LpLinkRedirectVerifier::verifyAndAnnotate($structure, $fetchRedirect, $emitProgressOnly);
+    $mark('phase:redirect_verify:done');
 
     $cmsRootAnalyze   = dirname(__DIR__);
     $outputDirAnalyze = LpWorkspace::outputDir($cmsRootAnalyze);
+    $mark('phase:internal_pages:start');
     LpInternalPagesPipeline::run($structure, $dataDir, $outputDirAnalyze, $emitProgressOnly);
+    $mark('phase:internal_pages:done', [
+        'internal_pages_seen' => count($structure['internal_pages'] ?? []),
+    ]);
 
     lp_reverse_load_env();
     $assetMapPath = $dataDir . 'asset_map.json';
@@ -222,6 +252,7 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
     };
 
     try {
+        $mark('phase:image_memos:start');
         $structure = lp_reverse_enrich_structure_image_text_memos(
             $structure,
             dirname(__DIR__),
@@ -229,10 +260,12 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
             $assetMap,
             $memoProgressCb
         );
+        $mark('phase:image_memos:done');
     } catch (Throwable $e) {
         lp_reverse_analyze_append_log($dataDir, 'warning', 'lp_reverse_enrich_structure_image_text_memos failed', [
             'exception' => $e::class,
             'message'   => $e->getMessage(),
+            'request_id' => $requestId,
         ]);
         /** @phpstan-ignore-next-line */
         if (isset($structure['parse_diagnostics']) && is_array($structure['parse_diagnostics'])) {
@@ -282,17 +315,26 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         throw new RuntimeException('lp_structure.json の保存に失敗しました。ディレクトリ権限を確認してください。');
     }
 
+    $mark('phase:write_lp_structure:done', [
+        'bytes' => (int) $writeRes,
+    ]);
+
     try {
+        $mark('phase:site_map:start');
         $siteMap = LpSiteMapper::build($structure, $dataDir, $outputDirAnalyze, is_array($diag) ? $diag : null);
         file_put_contents(
             $dataDir . 'site_map.json',
             json_encode($siteMap, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
             LOCK_EX
         );
+        $mark('phase:site_map:done', [
+            'pages' => count($siteMap['pages'] ?? []),
+        ]);
     } catch (Throwable $e) {
         lp_reverse_analyze_append_log($dataDir, 'warning', 'site_map build failed', [
             'exception' => $e::class,
             'message'   => $e->getMessage(),
+            'request_id' => $requestId,
         ]);
     }
 
@@ -306,6 +348,7 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
     }
 
     try {
+        $mark('phase:industry_suggest:start');
         require_once dirname(__DIR__) . '/lib/suggest_industries.php';
         $industrySuggest = lp_reverse_suggest_industries_from_structure($structure);
         file_put_contents(
@@ -313,10 +356,14 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
             json_encode($industrySuggest, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
             LOCK_EX,
         );
+        $mark('phase:industry_suggest:done', [
+            'industry_count' => count($industrySuggest['industries'] ?? []),
+        ]);
     } catch (Throwable $e) {
         lp_reverse_analyze_append_log($dataDir, 'warning', 'industry_suggest failed', [
             'exception' => $e::class,
             'message'   => $e->getMessage(),
+            'request_id' => $requestId,
         ]);
     }
 
@@ -329,7 +376,7 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         'detail_ja'        => '解析処理が完了しました',
     ]);
 
-    return [
+    $result = [
         'success'             => true,
         'section_count'       => count($structure['sections'] ?? []),
         'total_elements'      => $structure['total_elements'] ?? 0,
@@ -339,6 +386,15 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
         'internal_pages_ok'   => $internalPagesOk,
         'internal_pages_seen' => count($structure['internal_pages'] ?? []),
     ];
+    $mark('analyze_lp:complete', [
+        'success'             => true,
+        'section_count'       => (int) $result['section_count'],
+        'total_elements'      => (int) $result['total_elements'],
+        'internal_pages_ok'   => (int) $result['internal_pages_ok'],
+        'internal_pages_seen' => (int) $result['internal_pages_seen'],
+    ]);
+
+    return $result;
 };
 
 try {

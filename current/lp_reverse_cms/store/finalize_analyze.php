@@ -1,0 +1,109 @@
+<?php
+
+declare(strict_types=1);
+
+set_time_limit(0);
+
+require_once __DIR__ . '/../lib/LpInternalPagesPipeline.php';
+require_once __DIR__ . '/../lib/LpSiteMapper.php';
+require_once __DIR__ . '/../lib/LpWorkspace.php';
+require_once __DIR__ . '/../lib/env_load.php';
+require_once __DIR__ . '/../lib/lp_image_text_memo.php';
+
+header('Content-Type: application/json; charset=utf-8');
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['ok' => false, 'error' => 'Method Not Allowed']);
+    exit;
+}
+
+try {
+    $cmsRoot = dirname(__DIR__);
+    $dataDir = LpWorkspace::dataDir($cmsRoot);
+    $outputDir = LpWorkspace::outputDir($cmsRoot);
+    $structurePath = $dataDir . 'lp_structure.json';
+    if (!is_readable($structurePath)) {
+        throw new RuntimeException('lp_structure.json が見つかりません。');
+    }
+
+    $structure = json_decode((string) file_get_contents($structurePath), true);
+    if (!is_array($structure)) {
+        throw new RuntimeException('lp_structure.json が不正です。');
+    }
+
+    $urlToOutput = [];
+    foreach ($structure['internal_pages'] ?? [] as $row) {
+        if (!is_array($row) || empty($row['fetch_ok'])) {
+            continue;
+        }
+        $canon = (string) ($row['canonical_url'] ?? '');
+        $out = (string) ($row['output_file'] ?? '');
+        if ($canon !== '' && $out !== '') {
+            $urlToOutput[$canon] = $out;
+        }
+    }
+    LpInternalPagesPipeline::patchInternalRelativeHrefs($structure, $urlToOutput);
+
+    lp_reverse_load_env();
+    $assetMapPath = $dataDir . 'asset_map.json';
+    $assetMap = [];
+    if (is_readable($assetMapPath)) {
+        $rawMap = json_decode((string) file_get_contents($assetMapPath), true);
+        if (is_array($rawMap)) {
+            /** @var array<string, string> $assetMap */
+            $assetMap = $rawMap;
+        }
+    }
+    $structure = lp_reverse_enrich_structure_image_text_memos(
+        $structure,
+        $cmsRoot,
+        $dataDir,
+        $assetMap,
+        null
+    );
+
+    require_once dirname(__DIR__) . '/lib/suggest_industries.php';
+    $industrySuggest = lp_reverse_suggest_industries_from_structure($structure);
+    file_put_contents(
+        $dataDir . 'industry_suggest.json',
+        json_encode($industrySuggest, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+        LOCK_EX
+    );
+
+    file_put_contents(
+        $structurePath,
+        json_encode($structure, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+        LOCK_EX
+    );
+
+    $siteMap = LpSiteMapper::build($structure, $dataDir, $outputDir, null);
+    file_put_contents(
+        $dataDir . 'site_map.json',
+        json_encode($siteMap, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+        LOCK_EX
+    );
+
+    $okCount = 0;
+    $errCount = 0;
+    foreach ($structure['internal_pages'] ?? [] as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        if (!empty($row['fetch_ok'])) {
+            $okCount++;
+        } else {
+            $errCount++;
+        }
+    }
+
+    echo json_encode([
+        'ok' => true,
+        'internal_pages_ok' => $okCount,
+        'internal_pages_error' => $errCount,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+} catch (Throwable $e) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+}
+

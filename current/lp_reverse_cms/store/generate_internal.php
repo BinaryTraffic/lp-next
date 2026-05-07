@@ -46,10 +46,22 @@ try {
 
     $cmsRoot       = dirname(__DIR__);
     $dataDir       = LpWorkspace::dataDir($cmsRoot);
+    $abortFlag     = $dataDir . 'abort.flag';
     $outputDir     = LpWorkspace::outputDir($cmsRoot);
     $structureFile = $dataDir . 'lp_structure.json';
     $siteMapPath   = $dataDir . 'site_map.json';
     $clientFile    = $dataDir . 'client_data.json';
+
+    if (file_exists($abortFlag)) {
+        @unlink($abortFlag);
+        http_response_code(409);
+        echo json_encode([
+            'ok'      => false,
+            'aborted' => true,
+            'error'   => '生成が中断されました。',
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 
     if (!file_exists($structureFile) || !is_readable($siteMapPath)) {
         http_response_code(404);
