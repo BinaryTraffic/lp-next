@@ -140,7 +140,9 @@ final class LpIoNeutralizer
             }
         }
 
-        return $dom->saveHTML();
+        $out = $dom->saveHTML();
+        // DOMDocument may retain XML processing instruction injected for UTF-8 parsing.
+        return str_replace('<?xml encoding="UTF-8">', '', $out);
     }
 
     private static function findSectionRootForCoordinate(DOMXPath $xpath, string $coordinate): ?DOMElement

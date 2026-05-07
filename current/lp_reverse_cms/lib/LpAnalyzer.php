@@ -797,7 +797,10 @@ class LpAnalyzer
             } elseif ($tag === 'a') {
                 $text = trim($child->textContent);
                 $href = $child->getAttribute('href') ?: '';
-                $absHref = (!str_starts_with($href, '#') && !str_starts_with($href, 'javascript:'))
+                $absHref = (!str_starts_with($href, '#')
+                    && !str_starts_with($href, 'javascript:')
+                    && !str_starts_with($href, 'tel:')
+                    && !str_starts_with($href, 'mailto:'))
                     ? $this->absolutizeUrl($href)
                     : $href;
 

@@ -150,6 +150,10 @@ final class LpUrlContext
         if (str_starts_with($url, 'data:') || str_starts_with($url, 'blob:')) {
             return $url;
         }
+        // Keep non-hierarchical scheme URLs as-is (tel:, mailto:, javascript:, sms:, etc).
+        if (preg_match('/^[a-zA-Z][a-zA-Z0-9+\-.]*:[^\/]/', $url)) {
+            return $url;
+        }
 
         $pe = parse_url($documentDirUrl);
         if (empty($pe['host'])) {
