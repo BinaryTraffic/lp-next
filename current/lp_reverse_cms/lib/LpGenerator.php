@@ -634,7 +634,7 @@ HTML;
         // Delimiter ~ matches preg_quote second arg; avoids "#" in lookahead terminating #-patterns.
         $hostClass = '[a-zA-Z0-9.' . preg_quote($extra, '~') . ']+';
         $html = preg_replace(
-            '~(https?://' . $hostClass . ')\\(?=[/a-zA-Z0-9_%?#])~',
+            '~(https?://' . $hostClass . ')\\\\(?=[/a-zA-Z0-9_%?#])~',
             '$1/',
             $html
         ) ?? $html;
