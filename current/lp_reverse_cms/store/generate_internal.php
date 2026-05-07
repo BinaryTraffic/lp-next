@@ -11,9 +11,21 @@ require_once __DIR__ . '/../lib/LpWorkspace.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+$requestMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($requestMethod === 'OPTIONS') {
+    header('Allow: POST, OPTIONS');
+    http_response_code(204);
+    exit;
+}
+if ($requestMethod !== 'POST') {
+    header('Allow: POST');
     http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Method Not Allowed']);
+    echo json_encode([
+        'success'          => false,
+        'error'            => 'Method Not Allowed',
+        'received_method'  => $requestMethod,
+        'hint'             => 'POST のみ対応です。URL を直接開くと GET になり 405 になります。保存フロー経由の fetch POST を確認してください。',
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
