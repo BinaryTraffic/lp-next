@@ -1411,10 +1411,23 @@
     const applyBtn = document.getElementById('imageReplaceApply');
     const dimsLeftEl = document.getElementById('imageReplaceDimsLeft');
     const dimsRightEl = document.getElementById('imageReplaceDimsRight');
+    const phSameSizeBtn = document.getElementById('imagePlaceholderSameSize');
+    const phSameSizeLabel = document.getElementById('imagePlaceholderSameSizeLabel');
+    const phPresetsEl = document.getElementById('imagePlaceholderPresets');
+
+    const PH_PRESETS = [
+      [100, 100], [150, 150], [200, 200], [300, 300],
+      [200, 150], [300, 200], [400, 300], [600, 400],
+      [800, 600], [1200, 630], [1920, 1080],
+    ];
 
     let targetElemId = '';
     /** @type {string} */
     let selectedPath = '';
+    /** @type {number} */
+    let origW = 0;
+    /** @type {number} */
+    let origH = 0;
 
     /** @param {HTMLImageElement|null} img */
     function formatImgPxDimsLine(img) {
@@ -1452,6 +1465,46 @@
       imgEl.src = u;
       if (typeof imgEl.decode === 'function') {
         void imgEl.decode().then(apply).catch(() => {});
+      }
+    }
+
+    function buildPlaceholderUrl(w, h) {
+      return `https://placehold.jp/${w}x${h}.png`;
+    }
+
+    function selectPlaceholder(w, h) {
+      setRightSelection(buildPlaceholderUrl(w, h));
+    }
+
+    function renderPlaceholderSection(nw, nh) {
+      origW = nw;
+      origH = nh;
+
+      if (phSameSizeBtn && phSameSizeLabel) {
+        if (nw > 0 && nh > 0) {
+          phSameSizeLabel.textContent = `同サイズで挿入 (${nw}×${nh})`;
+          phSameSizeBtn.disabled = false;
+          phSameSizeBtn.dataset.phW = String(nw);
+          phSameSizeBtn.dataset.phH = String(nh);
+        } else {
+          phSameSizeLabel.textContent = '同サイズで挿入';
+          phSameSizeBtn.disabled = true;
+        }
+      }
+
+      if (phPresetsEl) {
+        phPresetsEl.innerHTML = '';
+        PH_PRESETS.forEach(([w, h]) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-xs btn-outline-secondary lp-ph-btn';
+          btn.style.fontSize = '0.72em';
+          btn.style.padding = '1px 6px';
+          btn.textContent = `${w}×${h}`;
+          btn.dataset.phW = String(w);
+          btn.dataset.phH = String(h);
+          phPresetsEl.appendChild(btn);
+        });
       }
     }
 
@@ -1527,15 +1580,39 @@
       } else if (orig) {
         leftSrc = orig;
       }
+      renderPlaceholderSection(0, 0);
       if (leftImg) {
         if (leftSrc) {
-          wireImgDimsReporting(leftImg, dimsLeftEl, resolveDisplayUrl(leftSrc));
+          const displayUrl = resolveDisplayUrl(leftSrc);
+          leftImg.onload = null;
+          leftImg.onerror = null;
+          dimsLeftEl && (dimsLeftEl.textContent = 'サイズ：読み込み中…');
+          const applyDims = () => {
+            if (dimsLeftEl) dimsLeftEl.textContent = formatImgPxDimsLine(leftImg);
+            renderPlaceholderSection(leftImg.naturalWidth, leftImg.naturalHeight);
+          };
+          leftImg.onload = applyDims;
+          leftImg.onerror = () => {
+            if (dimsLeftEl) dimsLeftEl.textContent = 'サイズ：読み込みに失敗しました';
+          };
+          leftImg.src = displayUrl;
+          if (typeof leftImg.decode === 'function') {
+            void leftImg.decode().then(applyDims).catch(() => {});
+          }
         } else {
           wireImgDimsReporting(leftImg, dimsLeftEl, '');
         }
       }
       resetRight();
       modal.show();
+    });
+
+    modalEl.addEventListener('click', ev => {
+      const btn = ev.target && ev.target.closest ? ev.target.closest('.lp-ph-btn') : null;
+      if (!btn) return;
+      const w = parseInt(btn.dataset.phW || '0', 10);
+      const h = parseInt(btn.dataset.phH || '0', 10);
+      if (w > 0 && h > 0) selectPlaceholder(w, h);
     });
 
     pickBtn?.addEventListener('click', () => fileInp?.click());
@@ -1578,6 +1655,7 @@
       targetElemId = '';
       resetRight();
       wireImgDimsReporting(leftImg, dimsLeftEl, '');
+      renderPlaceholderSection(0, 0);
     });
   }
 

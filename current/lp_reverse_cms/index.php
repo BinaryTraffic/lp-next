@@ -835,14 +835,26 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             <div id="imageReplaceDimsRight" class="small text-body mb-2">サイズ：—</div>
             <div id="imageReplaceDropzone"
                  class="border border-2 border-dashed rounded bg-white p-2 text-center d-flex flex-column align-items-center justify-content-center"
-                 style="min-height:240px;cursor:default">
-              <img id="imageReplaceModalRight" src="" alt="" class="img-fluid rounded d-none mb-2" style="max-height:220px;object-fit:contain" />
+                 style="min-height:180px;cursor:default">
+              <img id="imageReplaceModalRight" src="" alt="" class="img-fluid rounded d-none mb-2" style="max-height:160px;object-fit:contain" />
               <div id="imageReplaceRightPlaceholder" class="text-muted small px-2">
                 ドラッグ＆ドロップ、またはファイル選択
               </div>
               <input type="file" id="imageReplaceFile" class="d-none"
                      accept=".jpg,.jpeg,.png,.gif,.webp,.avif,.svg,image/jpeg,image/png,image/gif,image/webp,image/avif,image/svg+xml" />
               <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="imageReplacePickFile">ローカルから選ぶ</button>
+            </div>
+            <!-- モックアップ画像（placehold.jp） -->
+            <div class="mt-3 pt-3 border-top">
+              <div class="small fw-semibold text-secondary mb-2">
+                モックアップ画像
+                <a href="https://placehold.jp/" target="_blank" rel="noopener noreferrer" class="ms-1 text-decoration-none" style="font-size:.75em">placehold.jp ↗</a>
+              </div>
+              <button type="button" id="imagePlaceholderSameSize"
+                      class="btn btn-sm btn-outline-secondary w-100 mb-2 lp-ph-btn" disabled>
+                <i class="bi bi-aspect-ratio me-1"></i><span id="imagePlaceholderSameSizeLabel">同サイズで挿入</span>
+              </button>
+              <div class="d-flex flex-wrap gap-1" id="imagePlaceholderPresets"></div>
             </div>
           </div>
         </div>
