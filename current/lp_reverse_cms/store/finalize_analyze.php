@@ -45,6 +45,27 @@ try {
     }
     LpInternalPagesPipeline::patchInternalRelativeHrefs($structure, $urlToOutput);
 
+    // 内部ページ構造 JSON にも同じパッチを適用（内部ページ同士のリンクを pages/slug.html に書き換える）
+    foreach ($structure['internal_pages'] ?? [] as $row) {
+        if (!is_array($row) || empty($row['fetch_ok']) || empty($row['structure_file'])) {
+            continue;
+        }
+        $subPath = $dataDir . (string) $row['structure_file'];
+        if (!is_readable($subPath)) {
+            continue;
+        }
+        $sub = json_decode((string) file_get_contents($subPath), true);
+        if (!is_array($sub)) {
+            continue;
+        }
+        LpInternalPagesPipeline::patchInternalRelativeHrefs($sub, $urlToOutput);
+        file_put_contents(
+            $subPath,
+            json_encode($sub, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            LOCK_EX
+        );
+    }
+
     lp_reverse_load_env();
     $assetMapPath = $dataDir . 'asset_map.json';
     $assetMap = [];

@@ -245,6 +245,12 @@ HTML;
             }
             $html = LpIoNeutralizer::applyNeutralization($html, $regions);
 
+            $urlMap = self::buildInternalUrlToPageKeyMap($siteMap);
+            $origin = self::entryOriginFromSiteMap($siteMap);
+            if ($origin !== '' && $urlMap !== []) {
+                $html = $this->injectClickInterceptorScript($html, $origin, $urlMap);
+            }
+
             if (file_put_contents($targetFile, $html) === false) {
                 ++$skipped;
                 $errors[] = 'failed to write: ' . $targetFile;
