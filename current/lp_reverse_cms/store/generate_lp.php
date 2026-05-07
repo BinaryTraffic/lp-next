@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-// site_map multi-page generate often exceeds 120s.
-set_time_limit(900);
+// Multi-page site_map emit can exceed 15 minutes on large clones; 0 = no limit (respects php.ini if stricter).
+set_time_limit(0);
 
 require_once __DIR__ . '/../lib/LpGenerator.php';
 require_once __DIR__ . '/../lib/LpOutputAudit.php';
