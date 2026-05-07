@@ -762,7 +762,7 @@
         setSaveGenProgress(
           completed,
           totalBar,
-          `[===========>        ] エントリー完了 / 内部 ${toRun.length} 件を順に生成…`,
+          `トップページ（index）の生成が完了しました。続いて内部ページを ${toRun.length} 件、順に生成します。（下のバーが全体の進みです）`,
         );
 
         for (let i = 0; i < toRun.length; i++) {
@@ -772,10 +772,11 @@
             continue;
           }
 
+          const n = i + 1;
           setSaveGenProgress(
             completed,
             totalBar,
-            `[===========>        ] ${i} / ${toRun.length} 内部ページ生成中…（${key}）`,
+            `内部ページ ${n} / ${toRun.length} 件目を生成しています…（キー「${key}」は site_map のページ ID であり、URL の並び順と一致するとは限りません）`,
           );
 
           try {
@@ -789,10 +790,18 @@
             completed++;
           }
 
-          setSaveGenProgress(completed, totalBar, `[===========>        ] ${i + 1} / ${toRun.length} 内部ページ処理…`);
+          setSaveGenProgress(
+            completed,
+            totalBar,
+            `内部ページ ${n} / ${toRun.length} 件目の処理が終わりました。`,
+          );
         }
 
-        setSaveGenProgress(totalBar, totalBar, `[===========>] ${toRun.length} / ${toRun.length} 内部ページまで完了`);
+        setSaveGenProgress(
+          totalBar,
+          totalBar,
+          `内部ページ ${toRun.length} 件ぶんの生成処理が完了しました。`,
+        );
         genRes = { success: true, size: lastSize };
       } else {
         genRes = await apiPost('store/generate_lp.php', {});
