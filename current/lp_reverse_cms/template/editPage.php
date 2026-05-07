@@ -189,31 +189,51 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
             $bgHints = $section['css_background_hints'] ?? [];
           ?>
           <?php if ($bgHints !== []): ?>
-            <div class="alert alert-light border small mb-3">
-              <div class="fw-semibold mb-2">
-                <i class="bi bi-aspect-ratio me-1" aria-hidden="true"></i>CSS 背景画像（参照）
-              </div>
-              <ul class="mb-0 ps-3">
-                <?php foreach ($bgHints as $h): ?>
-                  <?php
-                    $tok = (string) ($h['token'] ?? '');
-                    $u   = (string) ($h['url'] ?? '');
-                    $short = $u;
-                    if (mb_strlen($short) > 96) {
-                        $short = mb_substr($short, 0, 93) . '…';
-                    }
-                  ?>
-                  <li class="mb-1">
-                    <code><?= htmlspecialchars($tok, ENT_QUOTES, 'UTF-8') ?></code>
-                    <?php if ($u !== ''): ?>
-                      → <a href="<?= htmlspecialchars($u, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer"><?= htmlspecialchars($short, ENT_QUOTES, 'UTF-8') ?></a>
+            <div class="row g-3 mb-3">
+              <?php foreach ($bgHints as $bgIdx => $h): ?>
+                <?php
+                  $tok         = (string) ($h['token'] ?? '');
+                  $origBgSrc   = (string) ($h['url'] ?? '');
+                  $bgElemId    = 'css_bg_' . $section['id'] . '_' . $bgIdx;
+                  $bgClientEl  = $clientElems[$bgElemId] ?? [];
+                  $currentBgSrc = (string) ($bgClientEl['src'] ?? '');
+                  $previewBgSrc = $currentBgSrc ?: $origBgSrc;
+                  $bgElemIdAttr = htmlspecialchars($bgElemId, ENT_QUOTES, 'UTF-8');
+                ?>
+                <div class="col-md-6">
+                  <div class="p-3 rounded border border-1 h-100" style="background:#fafafa">
+                    <div class="d-flex align-items-center gap-1 mb-2">
+                      <i class="bi bi-aspect-ratio text-secondary"></i>
+                      <span class="small fw-semibold">CSS背景: <code class="fs-6"><?= htmlspecialchars($tok, ENT_QUOTES, 'UTF-8') ?></code></span>
+                    </div>
+                    <?php if ($previewBgSrc): ?>
+                      <div class="mb-2 text-center">
+                        <img src="<?= htmlspecialchars($previewBgSrc, ENT_QUOTES, 'UTF-8') ?>"
+                             alt="CSS背景プレビュー"
+                             class="img-fluid rounded border"
+                             style="max-height:120px; object-fit:contain;"
+                             data-preview-for="<?= $bgElemIdAttr ?>">
+                      </div>
                     <?php endif; ?>
-                  </li>
-                <?php endforeach; ?>
-              </ul>
-              <p class="mb-0 text-muted mt-2 small">
-                スタイルシート由来のため一覧は参照用です。プレビューでは生成時に asset_map でローカルパスへ置換されます。
-              </p>
+                    <label class="form-label small">画像URL</label>
+                    <div class="input-group input-group-sm mb-1">
+                      <input type="url" class="form-control"
+                             data-lp-id="<?= $bgElemIdAttr ?>"
+                             data-lp-field="src"
+                             placeholder="<?= htmlspecialchars($origBgSrc, ENT_QUOTES, 'UTF-8') ?>"
+                             value="<?= htmlspecialchars($currentBgSrc, ENT_QUOTES, 'UTF-8') ?>">
+                      <button type="button"
+                              class="btn btn-outline-secondary lp-open-image-replace"
+                              data-lp-id="<?= $bgElemIdAttr ?>"
+                              data-lp-original-src="<?= htmlspecialchars($origBgSrc, ENT_QUOTES, 'UTF-8') ?>"
+                              title="モーダルで差し替え">
+                        <i class="bi bi-images"></i>
+                      </button>
+                    </div>
+                    <p class="mb-0 text-muted" style="font-size:.72em">生成時に <code><?= htmlspecialchars($tok, ENT_QUOTES, 'UTF-8') ?></code> の background-image を上書きします</p>
+                  </div>
+                </div>
+              <?php endforeach; ?>
             </div>
           <?php endif; ?>
           <?php if (empty($section['elements'])): ?>

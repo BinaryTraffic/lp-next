@@ -779,6 +779,26 @@ HTML;
             }
         }
 
+        // CSS 背景画像オーバーライド: client_data で差し替えられた場合に <style> を先頭に注入
+        $secId = (string) ($section['id'] ?? '');
+        $styleOverrides = '';
+        foreach ($section['css_background_hints'] ?? [] as $bgIdx => $hint) {
+            $syntheticId = 'css_bg_' . $secId . '_' . $bgIdx;
+            $bgOverride  = $elemData[$syntheticId] ?? null;
+            if (!is_array($bgOverride) || empty($bgOverride['src'])) {
+                continue;
+            }
+            $token  = trim((string) ($hint['token'] ?? ''));
+            $newSrc = trim((string) $bgOverride['src']);
+            if ($token === '' || $newSrc === '') {
+                continue;
+            }
+            $styleOverrides .= $token . '{background-image:url(' . json_encode($newSrc, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ')!important}' . "\n";
+        }
+        if ($styleOverrides !== '') {
+            $result = '<style>' . "\n" . $styleOverrides . '</style>' . "\n" . $result;
+        }
+
         return $result;
     }
 
