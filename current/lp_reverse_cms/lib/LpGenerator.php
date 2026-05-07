@@ -41,8 +41,6 @@ class LpGenerator
     {
         $this->dataDir = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
 
-        @ini_set('memory_limit', '512M');
-
         $meta        = $structure['meta']       ?? [];
         $headExtra   = $structure['head_extra'] ?? '';
         $bodySnip    = $structure['body_head_snippets'] ?? '';
@@ -293,7 +291,7 @@ HTML;
             return $out . substr($norm, strlen($prefix));
         }
 
-        $stripped = preg_replace('#^output/#', '', $norm) ?? $norm;
+        $stripped = preg_replace('~^output/~', '', $norm) ?? $norm;
 
         return $out . ltrim($stripped, '/');
     }
@@ -387,13 +385,13 @@ HTML;
                 continue;
             }
             if (str_starts_with($from, '//')) {
-                $qf = preg_quote($from, '#');
-                $html = preg_replace('#(?<![/:])' . $qf . '#', $to, $html) ?? $html;
+                $qf = preg_quote($from, '~');
+                $html = preg_replace('~(?<![/:])' . $qf . '~', $to, $html) ?? $html;
                 $encFrom = htmlspecialchars($from, ENT_QUOTES, 'UTF-8');
                 if ($encFrom !== $from) {
-                    $eq = preg_quote($encFrom, '#');
+                    $eq = preg_quote($encFrom, '~');
                     $encTo = htmlspecialchars($to, ENT_QUOTES, 'UTF-8');
-                    $html = preg_replace('#(?<![/:])' . $eq . '#', $encTo, $html) ?? $html;
+                    $html = preg_replace('~(?<![/:])' . $eq . '~', $encTo, $html) ?? $html;
                 }
             } else {
                 $html = str_replace($from, $to, $html);
@@ -425,33 +423,33 @@ HTML;
             if (str_starts_with($from, 'http://') || str_starts_with($from, 'https://') || str_starts_with($from, '//')) {
                 continue;
             }
-            $qf = preg_quote($from, '#');
+            $qf = preg_quote($from, '~');
             foreach ($attrs as $attr) {
                 $html = preg_replace(
-                    '#(?i)(?<![\w-])' . $attr . '\s*=\s*(")' . $qf . '(")#',
+                    '~(?i)(?<![\w-])' . $attr . '\s*=\s*(")' . $qf . '(")~',
                     $attr . '=$1' . $to . '$2',
                     $html
                 ) ?? $html;
                 $html = preg_replace(
-                    "#(?i)(?<![\w-])" . $attr . "\s*=\s*(')" . $qf . "(')#",
+                    "~(?i)(?<![\w-])" . $attr . "\s*=\s*(')" . $qf . "(')~",
                     $attr . '=$1' . $to . '$2',
                     $html
                 ) ?? $html;
             }
             $html = preg_replace_callback(
-                '#(?i)\bsrcset\s*=\s*(")([^"]*)(")#',
+                '~(?i)\bsrcset\s*=\s*(")([^"]*)(")~',
                 static function (array $m) use ($from, $to): string {
                     if (!str_contains($m[2], $from)) {
                         return $m[0];
                     }
-                    $parts = preg_split('#\s*,\s*#', $m[2]) ?: [];
+                    $parts = preg_split('~\s*,\s*~', $m[2]) ?: [];
                     $newParts = [];
                     foreach ($parts as $part) {
                         $part = trim($part);
                         if ($part === '') {
                             continue;
                         }
-                        $tok  = preg_split('/\s+/', $part, 2);
+                        $tok  = preg_split('~\s+~', $part, 2);
                         $u    = $tok[0] ?? '';
                         $desc = isset($tok[1]) ? ' ' . $tok[1] : '';
                         $newParts[] = ($u === $from) ? ($to . $desc) : $part;
@@ -473,10 +471,8 @@ HTML;
     private function normalizeMalformedWindowsUrls(string $html): string
     {
         $extra = '[]:_-';
-        $hostClass = '[a-zA-Z0-9.' . preg_quote($extra, '#') . ']+';
-
-        // Use ~ delimiter: lookahead may contain "#", which would terminate a #-delimited pattern
-        // and trigger "Unknown modifier ']'" at the closing bracket.
+        // Delimiter ~ matches preg_quote second arg; avoids "#" in lookahead terminating #-patterns.
+        $hostClass = '[a-zA-Z0-9.' . preg_quote($extra, '~') . ']+';
         $html = preg_replace(
             '~(https?://' . $hostClass . ')\\(?=[/a-zA-Z0-9_%?#])~',
             '$1/',

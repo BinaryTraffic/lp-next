@@ -43,7 +43,7 @@ final class LpDomScriptCleanup
             }
 
             // keep external script tags untouched
-            if (preg_match('/\ssrc\s*=/i', $startTag) === 1) {
+            if (preg_match('~\ssrc\s*=~i', $startTag) === 1) {
                 $out .= substr($html, $open, ($closePos + 9) - $open);
             } else {
                 $out .= $startTag . '</script>';
@@ -70,7 +70,9 @@ final class LpDomScriptCleanup
             $scripts[] = $n;
         }
         foreach ($scripts as $n) {
-            $n->parentNode?->removeChild($n);
+            if ($n->parentNode !== null) {
+                $n->parentNode->removeChild($n);
+            }
         }
 
         $xp = new DOMXPath($doc);
@@ -79,8 +81,16 @@ final class LpDomScriptCleanup
             return;
         }
 
-        $toRemove = [];
+        /** @var list<DOMText> $textSnapshot */
+        $textSnapshot = [];
         foreach ($textNodes as $tn) {
+            if ($tn instanceof DOMText) {
+                $textSnapshot[] = $tn;
+            }
+        }
+
+        $toRemove = [];
+        foreach ($textSnapshot as $tn) {
             if (!($tn instanceof DOMText)) {
                 continue;
             }
@@ -98,7 +108,9 @@ final class LpDomScriptCleanup
             $toRemove[] = $tn;
         }
         foreach ($toRemove as $tn) {
-            $tn->parentNode?->removeChild($tn);
+            if ($tn->parentNode !== null) {
+                $tn->parentNode->removeChild($tn);
+            }
         }
 
         self::stripLibxmlTemplateLiteralArtifactNodes($root);
@@ -127,7 +139,14 @@ final class LpDomScriptCleanup
         );
         $removeEls = [];
         if ($wd) {
+            /** @var list<DOMElement> $wdSnapshot */
+            $wdSnapshot = [];
             foreach ($wd as $node) {
+                if ($node instanceof DOMElement) {
+                    $wdSnapshot[] = $node;
+                }
+            }
+            foreach ($wdSnapshot as $node) {
                 if (!($node instanceof DOMElement)) {
                     continue;
                 }
@@ -141,7 +160,7 @@ final class LpDomScriptCleanup
                 if ($hasElementChild) {
                     continue;
                 }
-                if (preg_replace('/\s+/u', '', (string) $node->textContent) === 'IMG') {
+                if (preg_replace('~\s+~u', '', (string) $node->textContent) === 'IMG') {
                     $removeEls[] = $node;
                 }
             }
@@ -150,7 +169,9 @@ final class LpDomScriptCleanup
         self::stripWdPredictiveSearchWidgetArtifacts($xp, $root, $removeEls);
 
         foreach ($removeEls as $el) {
-            $el->parentNode?->removeChild($el);
+            if ($el->parentNode !== null) {
+                $el->parentNode->removeChild($el);
+            }
         }
     }
 
@@ -178,10 +199,15 @@ final class LpDomScriptCleanup
             if (!$nodes) {
                 continue;
             }
+            /** @var list<DOMElement> $batch */
+            $batch = [];
             foreach ($nodes as $node) {
                 if ($node instanceof DOMElement) {
-                    $candidates[spl_object_id($node)] = $node;
+                    $batch[] = $node;
                 }
+            }
+            foreach ($batch as $node) {
+                $candidates[spl_object_id($node)] = $node;
             }
         }
 
@@ -234,6 +260,14 @@ final class LpDomScriptCleanup
             return;
         }
 
+        /** @var list<DOMElement> $elementSnapshot */
+        $elementSnapshot = [];
+        foreach ($nodes as $node) {
+            if ($node instanceof DOMElement) {
+                $elementSnapshot[] = $node;
+            }
+        }
+
         $urlAttrs = [
             'src', 'href', 'poster', 'style',
             'srcset', 'data-src', 'data-srcset', 'data-bg',
@@ -241,7 +275,7 @@ final class LpDomScriptCleanup
         ];
 
         $removeElements = [];
-        foreach ($nodes as $node) {
+        foreach ($elementSnapshot as $node) {
             if (!($node instanceof DOMElement)) {
                 continue;
             }
@@ -267,7 +301,9 @@ final class LpDomScriptCleanup
         }
 
         foreach ($removeElements as $el) {
-            $el->parentNode?->removeChild($el);
+            if ($el->parentNode !== null) {
+                $el->parentNode->removeChild($el);
+            }
         }
     }
 
@@ -280,7 +316,7 @@ final class LpDomScriptCleanup
 
         // Stray punctuation from ternary / template glue: ` : ` or `?`...`:` next to leaked tags
         if (str_contains($t, '`')) {
-            if ($len <= 40 && preg_match('/[?:]/', $t) === 1) {
+            if ($len <= 40 && preg_match('~[?:]~', $t) === 1) {
                 return true;
             }
             if ($len <= 32) {
@@ -289,7 +325,7 @@ final class LpDomScriptCleanup
         }
 
         // Tiny comma/quote-only scraps next to mis-parsed scripts
-        if ($len <= 16 && preg_match('/^[\s`,\'":;|&]+$/', $t) === 1) {
+        if ($len <= 16 && preg_match('~^[\s`,\'":;|&]+$~', $t) === 1) {
             return true;
         }
 
@@ -298,11 +334,11 @@ final class LpDomScriptCleanup
         }
 
         // Short fragments from broken script parsing (e.g. trailing quotes before innerHTML builder)
-        if (preg_match("/html\\s*\\+=/", $t) === 1 && $len >= 10) {
+        if (preg_match('~html\s*\+=~', $t) === 1 && $len >= 10) {
             return true;
         }
         // Template literal remnants rendered as text (${icon}${item.t})
-        if ($len >= 8 && preg_match('/\$\{[^{}]+\}/', $t) === 1) {
+        if ($len >= 8 && preg_match('~\$\{[^{}]+\}~', $t) === 1) {
             return true;
         }
 
@@ -346,7 +382,7 @@ final class LpDomScriptCleanup
 
     private static function textLooksLikeTemplatePlaceholderUrl(string $v): bool
     {
-        if (preg_match('/\$\{[^{}]+\}/', $v) === 1) {
+        if (preg_match('~\$\{[^{}]+\}~', $v) === 1) {
             return true;
         }
         if (stripos($v, '%24%7B') !== false) {

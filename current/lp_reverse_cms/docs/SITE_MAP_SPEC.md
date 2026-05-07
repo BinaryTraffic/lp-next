@@ -297,7 +297,8 @@ output/
 | `lib/LpSiteMapper.php` | site_map.json の生成・更新・読み込み |
 | `lib/LpCmsDetector.php` | CMS 判定ロジック |
 | `lib/LpIoNeutralizer.php` | データ IO 領域の検出・無効化・data 属性付与 |
-| `store/get_site_map.php` | site_map.json を返す API エンドポイント |
+| `store/get_site_map.php` | site_map.json を返す API エンドポイント（正規パス） |
+| `get_site_map.php`（`lp_reverse_cms/` 直下） | `store/get_site_map.php` を読み込む互換シム（`/current/lp_reverse_cms/get_site_map.php`） |
 
 既存ファイルとの関係：
 - `LpAnalyzer.php` → 解析結果を `LpSiteMapper` に渡す
