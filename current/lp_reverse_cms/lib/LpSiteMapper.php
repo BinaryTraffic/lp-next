@@ -281,5 +281,32 @@ final class LpSiteMapper
             LOCK_EX
         );
     }
+
+    /**
+     * 1ページ分の生成完了を site_map.json に反映する（status: generated）。error 行は変更しない。
+     *
+     * @param array<string,mixed> $siteMap 呼び出し元の配列も同期更新する
+     */
+    public static function persistSinglePageGenerated(string $dataDir, array &$siteMap, string $pageKey): void
+    {
+        $base = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
+        $path = $base . 'site_map.json';
+
+        if (!isset($siteMap['pages'][$pageKey]) || !is_array($siteMap['pages'][$pageKey])) {
+            return;
+        }
+
+        if (($siteMap['pages'][$pageKey]['status'] ?? '') === 'error') {
+            return;
+        }
+
+        $siteMap['pages'][$pageKey]['status'] = 'generated';
+
+        file_put_contents(
+            $path,
+            json_encode($siteMap, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            LOCK_EX
+        );
+    }
 }
 

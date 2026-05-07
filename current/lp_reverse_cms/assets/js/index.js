@@ -618,6 +618,52 @@
   // -----------------------------------------------------------------------
   // Step 2 — Save & Generate (progress modal)
   // -----------------------------------------------------------------------
+  function ensureSaveGenProgressUi() {
+    let wrap = document.getElementById('saveGenProgressWrap');
+    if (wrap) {
+      return wrap;
+    }
+
+    const modalBody = document.querySelector('#saveGenerateModal .modal-body');
+    if (!modalBody) {
+      return null;
+    }
+
+    wrap = document.createElement('div');
+    wrap.id = 'saveGenProgressWrap';
+    wrap.className = 'mt-3 d-none';
+    wrap.innerHTML =
+      '<div class="progress" style="height:8px" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">'
+      + '<div id="saveGenProgressBar" class="progress-bar" style="width:0%"></div></div>'
+      + '<p id="saveGenProgressLabel" class="small text-muted mb-0 mt-2"></p>';
+    const errEl = modalBody.querySelector('#saveGenModalErr');
+    if (errEl) {
+      modalBody.insertBefore(wrap, errEl);
+    } else {
+      modalBody.appendChild(wrap);
+    }
+
+    return wrap;
+  }
+
+  /** @param {number} done @param {number} total @param {string} label */
+  function setSaveGenProgress(done, total, label) {
+    const wrap = document.getElementById('saveGenProgressWrap');
+    const bar = document.getElementById('saveGenProgressBar');
+    const outer = wrap?.querySelector('.progress');
+    const labelEl = document.getElementById('saveGenProgressLabel');
+    const pct = total > 0 ? Math.min(100, Math.round((100 * done) / total)) : 0;
+    if (bar) {
+      bar.style.width = `${pct}%`;
+    }
+    if (outer) {
+      outer.setAttribute('aria-valuenow', String(pct));
+    }
+    if (labelEl) {
+      labelEl.textContent = label;
+    }
+  }
+
   function resetSaveGenerateModal() {
     const errEl = document.getElementById('saveGenModalErr');
     if (errEl) {
@@ -628,6 +674,8 @@
     document.getElementById('saveGenFooterDone')?.classList.add('d-none');
     setSaveGenRowStatus('saveGenRowSave', 'pending');
     setSaveGenRowStatus('saveGenRowGen', 'pending');
+    document.getElementById('saveGenProgressWrap')?.classList.add('d-none');
+    setSaveGenProgress(0, 1, '');
   }
 
   /** @param {'pending'|'active'|'done'|'error'} state */
@@ -677,11 +725,86 @@
       savePhaseDone = true;
 
       setSaveGenRowStatus('saveGenRowGen', 'active');
-      const genRes = await apiPost('store/generate_lp.php', {});
-      if (!genRes.success) throw new Error(genRes.error ?? 'サイト生成に失敗しました。');
-      setSaveGenRowStatus('saveGenRowGen', 'done');
 
-      showToast(`サイト生成完了！ (${(genRes.size / 1024).toFixed(1)} KB)`, 'success');
+      /** site_map が取れるときは 2フェーズ分割生成 */
+      /** @type {Record<string, unknown>|null} */
+      let listProbe = null;
+      try {
+        listProbe = await apiGet('store/list_internal_urls.php');
+      } catch {
+        listProbe = null;
+      }
+
+      const useTwoPhase = listProbe !== null;
+
+      ensureSaveGenProgressUi();
+
+      /** @type {Record<string, unknown>} */
+      let genRes;
+
+      if (useTwoPhase) {
+        ensureSaveGenProgressUi()?.classList.remove('d-none');
+        genRes = await apiPost('store/generate_entry.php', {});
+        if (genRes.success !== true && genRes.ok !== true) {
+          throw new Error(
+            typeof genRes.error === 'string' ? genRes.error : 'エントリー生成に失敗しました。',
+          );
+        }
+
+        const internals = Array.isArray(listProbe.internals) ? listProbe.internals : [];
+
+        /** 解析エラー行はクライアントでもスキップ（サーバーは 400） */
+        const toRun = internals.filter(it => String(it.status ?? '') !== 'error');
+        const totalBar = Math.max(1, 1 + toRun.length);
+        let completed = 1;
+        let lastSize = typeof genRes.size === 'number' ? genRes.size : 0;
+
+        setSaveGenProgress(
+          completed,
+          totalBar,
+          `[===========>        ] エントリー完了 / 内部 ${toRun.length} 件を順に生成…`,
+        );
+
+        for (let i = 0; i < toRun.length; i++) {
+          const row = /** @type {Record<string, unknown>} */ (toRun[i]);
+          const key = typeof row.key === 'string' ? row.key : '';
+          if (!key || !/^internal_\d+$/.test(key)) {
+            continue;
+          }
+
+          setSaveGenProgress(
+            completed,
+            totalBar,
+            `[===========>        ] ${i} / ${toRun.length} 内部ページ生成中…（${key}）`,
+          );
+
+          try {
+            const one = await apiPost('store/generate_internal.php', { key });
+            completed++;
+            if (typeof one.size === 'number') lastSize += one.size;
+          } catch (e) {
+            const msgSkip = `${key}: `;
+            const reason = e instanceof Error ? e.message : String(e);
+            console.warn('generate_internal skipped', msgSkip + reason);
+            completed++;
+          }
+
+          setSaveGenProgress(completed, totalBar, `[===========>        ] ${i + 1} / ${toRun.length} 内部ページ処理…`);
+        }
+
+        setSaveGenProgress(totalBar, totalBar, `[===========>] ${toRun.length} / ${toRun.length} 内部ページまで完了`);
+        genRes = { success: true, size: lastSize };
+      } else {
+        genRes = await apiPost('store/generate_lp.php', {});
+        if (!genRes.success) throw new Error(genRes.error ?? 'サイト生成に失敗しました。');
+      }
+
+      setSaveGenRowStatus('saveGenRowGen', 'done');
+      ensureSaveGenProgressUi()?.classList.add('d-none');
+
+      /** @type {number} */
+      const szNum = typeof genRes.size === 'number' ? genRes.size : 0;
+      showToast(`サイト生成完了！ (${(szNum / 1024).toFixed(1)} KB)`, 'success');
 
       await sleep(350);
       hideSaveGenerateModal();
@@ -691,7 +814,6 @@
       expandMaxReachable(3);
 
       tryNavigateToReachedStep(3);
-
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       showError(generateError, message);
@@ -700,6 +822,8 @@
         msgEl.textContent = message;
         msgEl.classList.remove('d-none');
       }
+      document.getElementById('saveGenProgressWrap')?.classList.add('d-none');
+
       if (!savePhaseDone) {
         setSaveGenRowStatus('saveGenRowSave', 'error');
       } else {
@@ -1360,6 +1484,27 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(data),
+    });
+    const json = await parseApiJsonResponse(res, endpoint);
+    if (!res.ok) {
+      throw new Error(
+        (typeof json.error === 'string' && json.error.trim() !== '')
+          ? json.error
+          : `HTTP ${res.status} (${endpoint})`,
+      );
+    }
+    return json;
+  }
+
+  /**
+   * GET 系API（site_map 一覧など）
+   * @param {string} endpoint
+   * @returns {Promise<Record<string, unknown>>}
+   */
+  async function apiGet(endpoint) {
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
     });
     const json = await parseApiJsonResponse(res, endpoint);
     if (!res.ok) {

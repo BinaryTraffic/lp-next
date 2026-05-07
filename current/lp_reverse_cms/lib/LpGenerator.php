@@ -266,6 +266,158 @@ HTML;
     }
 
     /**
+     * site_map の internal_* ページ用: source_url → page key（クリックインターセプター用）
+     *
+     * @param array<string,mixed> $siteMap
+     * @return array<string,string>
+     */
+    public static function buildInternalUrlToPageKeyMap(array $siteMap): array
+    {
+        $map = [];
+        foreach ($siteMap['pages'] ?? [] as $key => $page) {
+            if ($key === 'index' || !is_string($key) || !is_array($page)) {
+                continue;
+            }
+            if (!preg_match('/^internal_\d+$/', $key)) {
+                continue;
+            }
+            $u = trim((string) ($page['source_url'] ?? ''));
+            if ($u === '') {
+                continue;
+            }
+            $noTrailing = rtrim($u, '/');
+            $withTrailing = $noTrailing . '/';
+            foreach ([$u, $noTrailing, $withTrailing] as $variant) {
+                $map[$variant] = $key;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * クリックインターセプター用 ORIGIN（例: https://example.com）
+     *
+     * @param array<string,mixed> $siteMap
+     */
+    public static function entryOriginFromSiteMap(array $siteMap): string
+    {
+        $url = trim((string) (($siteMap['meta'] ?? [])['entry_url'] ?? ''));
+        if ($url === '') {
+            return '';
+        }
+        $p = parse_url($url);
+        if (!is_array($p) || empty($p['scheme']) || empty($p['host'])) {
+            return '';
+        }
+        $port = isset($p['port']) ? ':' . (string) $p['port'] : '';
+
+        return (string) $p['scheme'] . '://' . (string) $p['host'] . $port;
+    }
+
+    /**
+     * &lt;/body&gt; 直前にクリックインターセプター JS を注入する（静的プレビュー内リンク → generate_internal）
+     *
+     * @param array<string,string> $internalUrlMap source_url variant → internal_N
+     */
+    public function injectClickInterceptorScript(string $html, string $entryOrigin, array $internalUrlMap): string
+    {
+        $entryOrigin = trim($entryOrigin);
+        if ($entryOrigin === '' || $internalUrlMap === []) {
+            return $html;
+        }
+
+        $mapJson = json_encode($internalUrlMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($mapJson === false) {
+            return $html;
+        }
+        $originJson = json_encode($entryOrigin, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $cmsPath = '/current/lp_reverse_cms/store/generate_internal.php';
+        $cmsJson = json_encode($cmsPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $script =
+            '<script data-lp-interceptor>' . "\n"
+            . '(function(){' . "\n"
+            . '  var ORIGIN = ' . $originJson . ';' . "\n"
+            . '  var CMS    = ' . $cmsJson . ';' . "\n"
+            . '  var MAP    = ' . $mapJson . ';' . "\n"
+            . '  document.addEventListener(\'click\', function(e){' . "\n"
+            . '    var a = e.target.closest(\'a[href]\');' . "\n"
+            . '    if (!a) return;' . "\n"
+            . '    try {' . "\n"
+            . '      var url = new URL(a.href);' . "\n"
+            . '      if (url.origin !== ORIGIN) return;' . "\n"
+            . '    } catch (err) { return; }' . "\n"
+            . '    var abs = a.href;' . "\n"
+            . '    var key = MAP[abs] || MAP[abs.replace(/' . '\\/' . '$/, \'\')];' . "\n"
+            . '    if (!key) return;' . "\n"
+            . '    e.preventDefault();' . "\n"
+            . '    fetch(CMS, {' . "\n"
+            . '      method: \'POST\',' . "\n"
+            . '      headers: {\'Content-Type\': \'application/json\'},' . "\n"
+            . '      body: JSON.stringify({key: key})' . "\n"
+            . '    })' . "\n"
+            . '    .then(function(r){ return r.json(); })' . "\n"
+            . '    .then(function(d){' . "\n"
+            . '      if (d.preview_relative) {' . "\n"
+            . '        window.location.href = String(d.preview_relative);' . "\n"
+            . '      } else if (d.local_path && typeof d.local_path === \'string\') {' . "\n"
+            . '        window.location.href = String(d.local_path).replace(/' . '^output' . '\\/[^/]+\\/' . '/, \'\');' . "\n"
+            . '      }' . "\n"
+            . '    })' . "\n"
+            . '    .catch(function(){});' . "\n"
+            . '  });' . "\n"
+            . '})();' . "\n"
+            . '</script>';
+
+        if (preg_match('~</body>~i', $html)) {
+            return (string) (preg_replace('~</body>~i', $script . "\n</body>", $html, 1) ?? $html);
+        }
+
+        return $html . "\n" . $script;
+    }
+
+    /**
+     * site_map の index / internal_N に対応する lp_structure を読み込む
+     *
+     * @param array<string,mixed> $mainStructure lp_structure.json ルート
+     * @return array{0:?array<string,mixed>, 1:?string} [構造または null, エラー理由]
+     */
+    public function loadStructureForSiteMapPageKey(string $pageKey, array $mainStructure, string $dataDir): array
+    {
+        $dataDir = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
+
+        if ($pageKey === 'index') {
+            return [$mainStructure, null];
+        }
+
+        if (!preg_match('/^internal_(\d+)$/', $pageKey, $mm)) {
+            return [null, 'unsupported page key'];
+        }
+
+        $idx = (int) $mm[1];
+        $internals = $mainStructure['internal_pages'] ?? [];
+        if (!is_array($internals) || !isset($internals[$idx]) || !is_array($internals[$idx])) {
+            return [null, 'internal page missing in lp_structure'];
+        }
+
+        $manifest = $internals[$idx];
+        if (empty($manifest['fetch_ok'])) {
+            return [null, 'internal page fetch failed'];
+        }
+
+        $sf = (string) ($manifest['structure_file'] ?? '');
+        $subPath = $dataDir . $sf;
+        if ($sf === '' || !is_readable($subPath)) {
+            return [null, 'structure file unreadable'];
+        }
+
+        $decoded = json_decode((string) file_get_contents($subPath), true);
+
+        return is_array($decoded) ? [$decoded, null] : [null, 'invalid structure JSON'];
+    }
+
+    /**
      * output/ws_* から対応する data/ws_* を求める（LpWorkspace と同じ構成）
      */
     private function workspaceDataDirFromOutput(string $outputDir): string
@@ -275,6 +427,14 @@ HTML;
         $cmsRoot = dirname(dirname($out));
 
         return $cmsRoot . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . $wsFolder . DIRECTORY_SEPARATOR;
+    }
+
+    /**
+     * site_map の local_path をワークスペース output の絶対パスへ解決する
+     */
+    public function filesystemPathForSiteMapLocal(string $outputDir, string $localPathFromSiteMap): string
+    {
+        return $this->resolveSiteMapLocalPath($outputDir, $localPathFromSiteMap);
     }
 
     /**
