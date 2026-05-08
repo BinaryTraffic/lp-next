@@ -12,6 +12,9 @@ function lpInitWorkspaceManage(storeBase) {
   const checkAll = document.getElementById('workspaceManageCheckAll');
   const selectedIds = new Set();
   let bulkDeleting = false;
+  let deleteTaskId = '';
+  let pollTimer = null;
+  const POLL_MS = 1500;
 
   const role = (typeof window.LP_CMS !== 'undefined' && window.LP_CMS && window.LP_CMS.cmsRole)
     ? String(window.LP_CMS.cmsRole)
@@ -199,49 +202,72 @@ function lpInitWorkspaceManage(storeBase) {
       const tok = (typeof window.LP_CMS !== 'undefined' && window.LP_CMS && window.LP_CMS.csrfToken)
         ? String(window.LP_CMS.csrfToken)
         : '';
-      const failed = [];
-      let deletedCount = 0;
-      let clearedSession = false;
-      const total = ids.length;
-      for (let i = 0; i < total; i += 1) {
-        const id = ids[i];
-        if (helpEl) helpEl.textContent = `削除中… ${i + 1}/${total}`;
-        if (btnDeleteSelected) btnDeleteSelected.textContent = `削除中 ${i + 1}/${total}`;
-        // 長時間ブロックを避けるため、1件ずつ Ajax で削除する
-        const rr = await fetch(storeBase + 'workspace_delete.php', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-          body: JSON.stringify({ workspace_id: id, csrf: tok }),
-        });
-        const out = await rr.json().catch(() => ({}));
-        if (!rr.ok || !out.ok) {
-          failed.push(id);
-        } else {
-          deletedCount += 1;
-          if (out.cleared_session) {
-            clearedSession = true;
-            break;
-          }
-          selectedIds.delete(id);
-        }
-        await new Promise(resolve => window.requestAnimationFrame(resolve));
-      }
-      if (clearedSession) {
-        window.location.reload();
+      const rr = await fetch(storeBase + 'workspace_delete_async_start.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify({ workspace_ids: ids, csrf: tok }),
+      });
+      const out = await rr.json().catch(() => ({}));
+      if (!rr.ok || !out.ok) {
+        window.alert((out && out.error) ? String(out.error) : ('HTTP ' + rr.status));
         return;
       }
-      if (failed.length > 0) {
-        window.alert(`削除完了: ${deletedCount}/${total} 件。失敗: ${failed.join(', ')}`);
+      deleteTaskId = String(out.task_id || '');
+      if (deleteTaskId === '') {
+        window.alert('task_id が取得できませんでした');
+        return;
       }
-      await loadList();
+      await tickDeleteProgress();
+      startDeletePolling();
     } catch {
       window.alert('通信に失敗しました');
-    } finally {
-      bulkDeleting = false;
-      if (btnRef) btnRef.disabled = false;
-      if (checkAll) checkAll.disabled = false;
-      updateBulkDeleteState();
+    }
+  }
+
+  function stopDeletePolling() {
+    if (pollTimer !== null) {
+      window.clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function startDeletePolling() {
+    stopDeletePolling();
+    pollTimer = window.setInterval(() => { void tickDeleteProgress(); }, POLL_MS);
+  }
+
+  async function tickDeleteProgress() {
+    if (!bulkDeleting) return;
+    try {
+      const q = deleteTaskId ? `?task_id=${encodeURIComponent(deleteTaskId)}` : '';
+      const rr = await fetch(storeBase + 'workspace_delete_async_progress.php' + q, {
+        credentials: 'same-origin',
+      });
+      const out = await rr.json().catch(() => ({}));
+      if (!rr.ok || !out.ok) {
+        if (helpEl) helpEl.textContent = (out && out.error) ? String(out.error) : ('HTTP ' + rr.status);
+        return;
+      }
+      const prog = String(out.progress_text || '000/000');
+      const status = String(out.status || '');
+      if (helpEl) helpEl.textContent = `削除ジョブ: ${prog} (${status})`;
+      if (btnDeleteSelected) btnDeleteSelected.textContent = `削除中 ${prog}`;
+
+      if (out.done === true) {
+        stopDeletePolling();
+        bulkDeleting = false;
+        if (btnRef) btnRef.disabled = false;
+        if (checkAll) checkAll.disabled = false;
+        if (status === 'done') {
+          await loadList();
+        } else {
+          window.alert('削除ジョブが失敗しました。');
+        }
+        updateBulkDeleteState();
+      }
+    } catch {
+      if (helpEl) helpEl.textContent = '進捗取得に失敗しました。';
     }
   }
 
@@ -286,6 +312,27 @@ function lpInitWorkspaceManage(storeBase) {
       syncCheckAll();
     });
   }
+
+  // 既存の未完了ジョブがあれば監視再開（ブラウザ再オープン対策）
+  void (async () => {
+    try {
+      const rr = await fetch(storeBase + 'workspace_delete_async_progress.php', { credentials: 'same-origin' });
+      const out = await rr.json().catch(() => ({}));
+      if (!rr.ok || !out.ok || out.exists !== true) return;
+      const st = String(out.status || '');
+      deleteTaskId = String(out.task_id || '');
+      if (st === 'queued' || st === 'running') {
+        bulkDeleting = true;
+        if (btnDeleteSelected) btnDeleteSelected.disabled = true;
+        if (btnRef) btnRef.disabled = true;
+        if (checkAll) checkAll.disabled = true;
+        await tickDeleteProgress();
+        startDeletePolling();
+      }
+    } catch {
+      void 0;
+    }
+  })();
 
   void 0;
 }
