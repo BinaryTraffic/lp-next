@@ -124,6 +124,8 @@ try {
         throw new RuntimeException($loadErr ?? 'index structure load failed');
     }
     $indexPage = $siteMapRaw['pages']['index'];
+    // LpGenerator::generate が長時間ブロックする間も updated_at を進める（stale 誤判定回避）
+    GenerateTask::save($cmsRoot, $taskId, $task);
     $html = $generator->generate($structure, $clientData, $dataDir, $assetOverride);
     $regions = $indexPage['data_io_regions'] ?? [];
     $html = LpIoNeutralizer::applyNeutralization($html, is_array($regions) ? $regions : []);
@@ -169,6 +171,8 @@ try {
             GenerateTask::save($cmsRoot, $taskId, $task);
             continue;
         }
+        $task['generate_internal_active_key'] = $pageKey;
+        GenerateTask::save($cmsRoot, $taskId, $task);
         $subHtml = $generator->generate($subStruct, $clientData, $dataDir, $assetOverride);
         $subRegions = $pageRow['data_io_regions'] ?? [];
         $subHtml = LpIoNeutralizer::applyNeutralization($subHtml, is_array($subRegions) ? $subRegions : []);
@@ -187,6 +191,7 @@ try {
         GenerateTask::save($cmsRoot, $taskId, $task);
     }
 
+    unset($task['generate_internal_active_key']);
     $task['progress_text'] = sprintf('%03d/%03d', $total, $total);
     $task['status'] = 'done';
     $task['phase'] = 'generate_internal';

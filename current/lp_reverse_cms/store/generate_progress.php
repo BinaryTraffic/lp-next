@@ -85,6 +85,9 @@ try {
         'status' => $status,
         'phase' => (string) ($task['phase'] ?? ''),
         'progress_text' => (string) ($task['progress_text'] ?? '000/000'),
+        'generate_internal_active_key' => isset($task['generate_internal_active_key'])
+            ? (string) $task['generate_internal_active_key']
+            : null,
         'error' => (string) ($task['error'] ?? ''),
         'done' => in_array($status, ['done', 'error', 'stale'], true),
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
