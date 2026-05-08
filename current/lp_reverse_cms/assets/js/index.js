@@ -983,6 +983,7 @@
         window.clearInterval(generateEntryElapsedInterval);
         generateEntryElapsedInterval = null;
       }
+      document.getElementById('saveGenProgressWrap')?.classList.remove('d-none');
       setProgressBarIndeterminate(false);
       setSaveGenRowStatus('saveGenRowSave', 'done');
       setSaveGenRowStatus('saveGenRowGen', 'active');
