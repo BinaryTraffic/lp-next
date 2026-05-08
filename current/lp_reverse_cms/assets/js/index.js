@@ -627,7 +627,7 @@
     }
 
     const phase = String(data.phase || '');
-    const prog = String(data.progress_text || '000/000');
+    const prog = String(data.progress_text || '000/100');
     if (phase === 'fetch') {
       setProgState(progFetch, 'loading', `HTML/CSS/画像取得中... ${prog}`);
       setProgState(progAnalyze, 'idle');
@@ -641,24 +641,26 @@
       setProgState(progAnalyze, 'loading', `内部ページ解析中... ${prog}`);
       progAnalyzeBarWrap?.classList.remove('d-none');
       const m = prog.match(/^(\d+)\/(\d+)$/);
-      if (m && progAnalyzeBar) {
+      if (m && progAnalyzeBar && progAnalyzePct) {
         const done = Number(m[1]);
         const total = Math.max(1, Number(m[2]));
         const pct = Math.min(99, Math.round((100 * done) / total));
         progAnalyzeBar.style.width = `${pct}%`;
-        progAnalyzePct.textContent = `${pct}%/100%`;
+        progAnalyzePct.textContent = `${pct}%/${total}%`;
       }
     } else if (phase === 'finalize') {
       setProgState(progAnalyze, 'loading', `最終処理中... ${prog}`);
       progAnalyzeBarWrap?.classList.remove('d-none');
       const mf = prog.match(/^(\d+)\/(\d+)$/);
-      if (mf) {
-        const pctF = Math.min(99, Math.round((100 * Number(mf[1])) / Math.max(1, Number(mf[2]))));
-        if (progAnalyzeBar) progAnalyzeBar.style.width = `${pctF}%`;
-        if (progAnalyzePct) progAnalyzePct.textContent = `${pctF}%/100%`;
-      } else {
-        if (progAnalyzeBar) progAnalyzeBar.style.width = '99%';
-        if (progAnalyzePct) progAnalyzePct.textContent = '99%/100%';
+      if (mf && progAnalyzeBar && progAnalyzePct) {
+        const done = Number(mf[1]);
+        const total = Math.max(1, Number(mf[2]));
+        const pct = Math.min(100, Math.round((100 * done) / total));
+        progAnalyzeBar.style.width = `${pct}%`;
+        progAnalyzePct.textContent = `${pct}%/${total}%`;
+      } else if (progAnalyzeBar && progAnalyzePct) {
+        progAnalyzeBar.style.width = '99%';
+        progAnalyzePct.textContent = '99%/100%';
       }
     }
 
