@@ -34,27 +34,6 @@ function ana_task_save(string $cmsRoot, string $taskId, array &$task): void
     AnalyzeTask::save($cmsRoot, $taskId, $task);
 }
 
-function ana_fix_workspace_permissions(string $dataDir, string $outputDir): void
-{
-    foreach ([$dataDir, $outputDir] as $root) {
-        if (!is_dir($root)) {
-            continue;
-        }
-        @chmod($root, 0777);
-        @chgrp($root, 'lp-tool');
-        $it = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST
-        );
-        foreach ($it as $f) {
-            /** @var SplFileInfo $f */
-            $p = $f->getPathname();
-            @chgrp($p, 'lp-tool');
-            @chmod($p, $f->isDir() ? 0777 : 0666);
-        }
-    }
-}
-
 try {
     $task = AnalyzeTask::load($cmsRoot, $taskId);
     if (!is_array($task)) {
@@ -97,7 +76,7 @@ try {
     $task['pid'] = (int) getmypid();
     $task['started_at'] = time();
     $task['phase'] = 'fetch';
-    $task['progress_text'] = '000/000';
+    $task['progress_text'] = '000/100';
     ana_task_save($cmsRoot, $taskId, $task);
     $anaLog('worker started pid=' . getmypid());
 
@@ -113,7 +92,6 @@ try {
             throw new RuntimeException('mkdir failed: ' . $dir);
         }
     }
-    ana_fix_workspace_permissions($dataDir, $outputDir);
 
     foreach (['client_data.json', 'lp_structure.json', 'output_unreplaced.json', 'lp_project_profile.json', 'industry_suggest.json'] as $leaf) {
         $p = $dataDir . $leaf;
@@ -154,7 +132,7 @@ try {
     );
 
     $task['phase'] = 'analyze_entry';
-    $task['progress_text'] = '000/000';
+    $task['progress_text'] = '030/100';
     ana_task_save($cmsRoot, $taskId, $task);
     $anaLog('analyze_entry start');
 
@@ -166,6 +144,8 @@ try {
     $fetchRedirect = new LpFetcher();
     LpLinkRedirectVerifier::verifyAndAnnotate($structure, $fetchRedirect, null);
     $candidateUrls = LpInternalPagesPipeline::extractCandidateUrls($structure, $finalUrl);
+    $task['progress_text'] = '040/100';
+    ana_task_save($cmsRoot, $taskId, $task);
 
     $candidates = [];
     foreach ($candidateUrls as $idx => $canon) {
@@ -211,6 +191,7 @@ try {
 
     $total = max(1, count($candidates));
     $task['phase'] = 'analyze_internal';
+    $task['progress_text'] = '040/100';
     ana_task_save($cmsRoot, $taskId, $task);
     $anaLog('analyze_internal start total=' . $total);
     foreach ($candidates as $i => $row) {
@@ -251,11 +232,13 @@ try {
             (string) json_encode($structureNow, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
         );
 
-        $task['progress_text'] = sprintf('%03d/%03d', $i + 1, $total);
+        $pct = 40 + (int) round((50 * ($i + 1)) / $total); // 40% -> 90%
+        $task['progress_text'] = sprintf('%03d/%03d', min(90, $pct), 100);
         ana_task_save($cmsRoot, $taskId, $task);
     }
 
     $task['phase'] = 'finalize';
+    $task['progress_text'] = '095/100';
     ana_task_save($cmsRoot, $taskId, $task);
     $anaLog('finalize start');
 
@@ -316,8 +299,7 @@ try {
     $task['status'] = 'done';
     $task['phase'] = 'finalize';
     $task['ended_at'] = time();
-    $task['progress_text'] = sprintf('%03d/%03d', $total, $total);
-    ana_fix_workspace_permissions($dataDir, $outputDir);
+    $task['progress_text'] = '100/100';
     ana_task_save($cmsRoot, $taskId, $task);
     $anaLog('worker done');
 } catch (Throwable $e) {
