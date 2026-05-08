@@ -742,12 +742,25 @@
     return m > 0 ? `${m}分${s % 60}秒` : `${s}秒`;
   }
 
+  /** @param {boolean} on */
+  function setProgressBarIndeterminate(on) {
+    const bar = document.getElementById('saveGenProgressBar');
+    if (!bar) return;
+    if (on) {
+      bar.classList.add('progress-bar-striped', 'progress-bar-animated');
+      bar.style.width = '100%';
+    } else {
+      bar.classList.remove('progress-bar-striped', 'progress-bar-animated');
+    }
+  }
+
   function updateGenerateEntryLabel() {
     const elapsed = generateStartedAt > 0 ? (Date.now() / 1000 - generateStartedAt) : 0;
     const idle = generateLastUpdatedAt > 0 ? Math.floor(Date.now() / 1000 - generateLastUpdatedAt) : -1;
     const elapsedStr = generateStartedAt > 0 ? ` 経過 ${fmtElapsed(elapsed)}` : '';
     const idleStr = idle >= 0 ? ` (最終更新 ${idle}秒前)` : '';
-    setSaveGenProgress(0, 1, `トップページ生成中...${elapsedStr}${idleStr}`);
+    const labelEl = document.getElementById('saveGenProgressLabel');
+    if (labelEl) labelEl.textContent = `トップページ生成中...${elapsedStr}${idleStr}`;
   }
 
   function ensureSaveGenProgressUi() {
@@ -952,11 +965,15 @@
     const prog = String(data.progress_text || '000/000');
     if (phase === 'save') {
       setSaveGenRowStatus('saveGenRowSave', 'active');
-      setSaveGenProgress(0, 1, `保存中... ${prog}`);
+      document.getElementById('saveGenProgressWrap')?.classList.remove('d-none');
+      setProgressBarIndeterminate(true);
+      const labelEl = document.getElementById('saveGenProgressLabel');
+      if (labelEl) labelEl.textContent = '保存中...';
     } else if (phase === 'generate_entry') {
       setSaveGenRowStatus('saveGenRowSave', 'done');
       setSaveGenRowStatus('saveGenRowGen', 'active');
       document.getElementById('saveGenProgressWrap')?.classList.remove('d-none');
+      setProgressBarIndeterminate(true);
       if (generateEntryElapsedInterval === null) {
         generateEntryElapsedInterval = window.setInterval(updateGenerateEntryLabel, 1000);
       }
@@ -966,6 +983,7 @@
         window.clearInterval(generateEntryElapsedInterval);
         generateEntryElapsedInterval = null;
       }
+      setProgressBarIndeterminate(false);
       setSaveGenRowStatus('saveGenRowSave', 'done');
       setSaveGenRowStatus('saveGenRowGen', 'active');
       const m = prog.match(/^(\d+)\/(\d+)$/);
@@ -984,6 +1002,7 @@
       btnSaveGenerate.disabled = false;
       const st = String(data.status || '');
       if (st === 'done') {
+        setProgressBarIndeterminate(false);
         setSaveGenRowStatus('saveGenRowGen', 'done');
         setSaveGenProgress(1, 1, '生成完了');
         await sleep(350);
