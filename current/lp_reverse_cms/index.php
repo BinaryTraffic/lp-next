@@ -215,7 +215,8 @@ require_once __DIR__ . '/lib/AnalyzeTask.php';
 WorkspaceRegistry::touchCurrent($cmsRootAuth, $sessEmailUx);
 
 $workspaceDataDir = LpWorkspace::dataDir($cmsRootAuth);
-// If session workspace has no analysis data, use latest completed analyze task's workspace.
+// If session workspace has no analysis data, pivot to the latest completed analyze task's workspace.
+// Update the session so all LpWorkspace calls (outputDir, outputWebAbsPrefix, etc.) follow suit.
 if (!file_exists($workspaceDataDir . 'lp_structure.json')) {
     $latestAnaId = AnalyzeTask::latestTaskIdForActor($cmsRootAuth, $sessEmailUx);
     if ($latestAnaId !== '') {
@@ -223,9 +224,13 @@ if (!file_exists($workspaceDataDir . 'lp_structure.json')) {
         if (is_array($latestAna) && ($latestAna['status'] ?? '') === 'done') {
             $wsCandidate = (string) ($latestAna['workspace_id'] ?? '');
             if (preg_match('/^ws_[a-f0-9]{32}$/', $wsCandidate)) {
-                putenv('LP_WORKSPACE_ID=' . substr($wsCandidate, 3));
+                // In web context LpWorkspace reads from session, not putenv.
+                // Update session value then re-bootstrap so all subsequent calls use the fallback workspace.
+                $_SESSION['lp_reverse_ws'] = substr($wsCandidate, 3);
                 LpWorkspace::reset();
-                $workspaceDataDir = LpWorkspace::dataDir($cmsRootAuth);
+                $workspaceDataDir  = LpWorkspace::dataDir($cmsRootAuth);
+                $outputWsPrefix    = LpWorkspace::outputWebAbsPrefix();
+                $workspaceName     = $wsCandidate;
             }
         }
     }

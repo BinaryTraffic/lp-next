@@ -33,7 +33,12 @@ try {
     $task = AnalyzeTask::load($cmsRoot, $taskId);
     if (!is_array($task) || !AnalyzeTask::canView($task, $actor)) {
         http_response_code(404);
-        echo json_encode(['ok' => false, 'error' => 'task not found'], JSON_UNESCAPED_UNICODE);
+        echo json_encode([
+            'ok' => false,
+            'error' => 'task not found',
+            'task_id' => $taskId,
+            'loaded' => is_array($task),
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
