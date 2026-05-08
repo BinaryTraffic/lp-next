@@ -651,8 +651,15 @@
     } else if (phase === 'finalize') {
       setProgState(progAnalyze, 'loading', `最終処理中... ${prog}`);
       progAnalyzeBarWrap?.classList.remove('d-none');
-      if (progAnalyzeBar) progAnalyzeBar.style.width = '99%';
-      if (progAnalyzePct) progAnalyzePct.textContent = '99%/100%';
+      const mf = prog.match(/^(\d+)\/(\d+)$/);
+      if (mf) {
+        const pctF = Math.min(99, Math.round((100 * Number(mf[1])) / Math.max(1, Number(mf[2]))));
+        if (progAnalyzeBar) progAnalyzeBar.style.width = `${pctF}%`;
+        if (progAnalyzePct) progAnalyzePct.textContent = `${pctF}%/100%`;
+      } else {
+        if (progAnalyzeBar) progAnalyzeBar.style.width = '99%';
+        if (progAnalyzePct) progAnalyzePct.textContent = '99%/100%';
+      }
     }
 
     if (data.done === true) {
