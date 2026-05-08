@@ -32,6 +32,9 @@
   const btnFetchAnalyze = document.getElementById('btnFetchAnalyze');
   const fetchProgress   = document.getElementById('fetchProgress');
   const fetchError      = document.getElementById('fetchError');
+  const analyzeProgressModalEl  = document.getElementById('analyzeProgressModal');
+  const analyzeProgressCloseBtn = document.getElementById('analyzeProgressCloseBtn');
+  const analyzeProgressError    = document.getElementById('analyzeProgressError');
   const progFetch       = document.getElementById('prog_fetch');
   const progFetchDetail = document.getElementById('prog_fetch_detail');
   const progAnalyze     = document.getElementById('prog_analyze');
@@ -546,13 +549,18 @@
 
     btnFetchAnalyze.disabled = true;
     fetchError.classList.add('d-none');
-    fetchProgress.classList.remove('d-none');
+    if (analyzeProgressError) analyzeProgressError.classList.add('d-none');
+    if (analyzeProgressCloseBtn) analyzeProgressCloseBtn.disabled = true;
 
     // Reset progress items
     setProgState(progFetch, 'loading', 'HTMLおよびCSS・画像を取得中…');
     setProgState(progAnalyze, 'idle');
     resetAnalyzeProgressUi();
     progAnalyzeBarWrap?.classList.add('d-none');
+
+    if (analyzeProgressModalEl && typeof bootstrap !== 'undefined') {
+      bootstrap.Modal.getOrCreateInstance(analyzeProgressModalEl).show();
+    }
 
     try {
       // -- Phase 1: fetch HTML + download assets --
@@ -675,15 +683,20 @@
         `${analyzeRes.section_count}セクション / ${analyzeRes.total_elements}要素を抽出${diagNote}`);
       progAnalyzeBarWrap?.classList.add('d-none');
 
-      await sleep(600);
+      await sleep(800);
+      if (analyzeProgressModalEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(analyzeProgressModalEl).hide();
+      }
       window.location.href = window.location.pathname + '?step=2';
 
     } catch (err) {
       showError(fetchError, err.message);
+      if (analyzeProgressError) showError(analyzeProgressError, err.message);
       setProgState(progFetch,   'error');
       setProgState(progAnalyze, 'error');
       progAnalyzeBarWrap?.classList.add('d-none');
       btnFetchAnalyze.disabled = false;
+      if (analyzeProgressCloseBtn) analyzeProgressCloseBtn.disabled = false;
     }
   }
 

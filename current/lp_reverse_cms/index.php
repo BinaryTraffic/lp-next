@@ -527,6 +527,51 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
   </div>
 </div>
 
+<!-- 解析進捗モーダル（Step1 URL解析中） -->
+<div class="modal fade" id="analyzeProgressModal" tabindex="-1" aria-labelledby="analyzeProgressModalLabel" aria-hidden="true"
+     data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6" id="analyzeProgressModalLabel">
+          <i class="bi bi-search me-1"></i>サイトを解析中
+        </h5>
+      </div>
+      <div class="modal-body pb-2">
+        <div class="list-group list-group-flush rounded border" id="fetchProgress">
+          <div class="list-group-item d-flex align-items-center gap-3 py-3" id="prog_fetch">
+            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+            <div>
+              <div class="fw-semibold">HTML・CSS・画像を取得中…</div>
+              <div class="small text-muted" id="prog_fetch_detail"></div>
+            </div>
+          </div>
+          <div class="list-group-item d-flex align-items-center gap-3 py-3 text-muted" id="prog_analyze">
+            <div class="text-secondary"><i class="bi bi-circle fs-5"></i></div>
+            <div class="flex-grow-1">
+              <div class="fw-semibold">サイト構造を解析中…</div>
+              <div class="small text-muted" id="prog_analyze_detail"></div>
+              <div id="prog_analyze_bar_wrap" class="mt-2 d-none">
+                <div class="progress" style="height:8px;" role="progressbar"
+                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="prog_analyze_bar_outer">
+                  <div id="prog_analyze_bar" class="progress-bar progress-bar-striped progress-bar-animated"
+                       style="width: 0;"></div>
+                </div>
+                <div class="small fw-semibold text-body-secondary mt-1" id="prog_analyze_pct">0%/100%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="analyzeProgressError" class="alert alert-danger d-none mt-3 mb-0"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button id="analyzeProgressCloseBtn" type="button" class="btn btn-sm btn-secondary"
+                data-bs-dismiss="modal" disabled>閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 保存＆サイト生成 — 進捗モーダル -->
 <div class="modal fade" id="saveGenerateModal" tabindex="-1" aria-labelledby="saveGenerateModalLabel" aria-hidden="true"
      data-bs-backdrop="static" data-bs-keyboard="false">
@@ -657,34 +702,6 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
                   <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
                 </button>
               </span>
-            </div>
-
-            <!-- Progress steps inside fetch flow -->
-            <div id="fetchProgress" class="d-none mt-3">
-              <div class="list-group list-group-flush rounded border">
-                <div class="list-group-item d-flex align-items-center gap-3 py-3" id="prog_fetch">
-                  <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                  <div>
-                    <div class="fw-semibold">HTML・CSS・画像を取得中…</div>
-                    <div class="small text-muted" id="prog_fetch_detail"></div>
-                  </div>
-                </div>
-                <div class="list-group-item d-flex align-items-center gap-3 py-3 text-muted" id="prog_analyze">
-                  <div class="text-secondary"><i class="bi bi-circle fs-5"></i></div>
-                  <div class="flex-grow-1">
-                    <div class="fw-semibold">サイト構造を解析中…</div>
-                    <div class="small text-muted" id="prog_analyze_detail"></div>
-                    <div id="prog_analyze_bar_wrap" class="mt-2 d-none">
-                      <div class="progress" style="height:8px;" role="progressbar"
-                           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="prog_analyze_bar_outer">
-                        <div id="prog_analyze_bar" class="progress-bar progress-bar-striped progress-bar-animated"
-                             style="width: 0;"></div>
-                      </div>
-                      <div class="small fw-semibold text-body-secondary mt-1" id="prog_analyze_pct">0%/100%</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div id="fetchError" class="alert alert-danger d-none mt-3"></div>
