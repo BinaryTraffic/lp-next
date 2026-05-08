@@ -22,6 +22,10 @@
   let analyzePollTimer = null;
   /** @type {number|null} */
   let generatePollTimer = null;
+  /** @type {number|null} */
+  let generateEntryElapsedInterval = null;
+  let generateStartedAt = 0;
+  let generateLastUpdatedAt = 0;
 
   // -----------------------------------------------------------------------
   // DOM refs
@@ -730,6 +734,22 @@
   // -----------------------------------------------------------------------
   // Step 2 — Save & Generate (progress modal)
   // -----------------------------------------------------------------------
+
+  /** @param {number} secs */
+  function fmtElapsed(secs) {
+    const s = Math.max(0, Math.floor(secs));
+    const m = Math.floor(s / 60);
+    return m > 0 ? `${m}分${s % 60}秒` : `${s}秒`;
+  }
+
+  function updateGenerateEntryLabel() {
+    const elapsed = generateStartedAt > 0 ? (Date.now() / 1000 - generateStartedAt) : 0;
+    const idle = generateLastUpdatedAt > 0 ? Math.floor(Date.now() / 1000 - generateLastUpdatedAt) : -1;
+    const elapsedStr = generateStartedAt > 0 ? ` 経過 ${fmtElapsed(elapsed)}` : '';
+    const idleStr = idle >= 0 ? ` (最終更新 ${idle}秒前)` : '';
+    setSaveGenProgress(0, 1, `トップページ生成中...${elapsedStr}${idleStr}`);
+  }
+
   function ensureSaveGenProgressUi() {
     let wrap = document.getElementById('saveGenProgressWrap');
     if (wrap) {
@@ -748,6 +768,7 @@
       '<div class="progress" style="height:8px" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">'
       + '<div id="saveGenProgressBar" class="progress-bar" style="width:0%"></div></div>'
       + '<p id="saveGenProgressLabel" class="small text-muted mb-0 mt-2"></p>'
+      + '<p id="saveGenHeartbeat" class="small text-muted mb-0" style="font-size:0.75em"></p>'
       + '<button id="saveGenAbortBtn" type="button" class="btn btn-sm btn-outline-danger mt-2">■ 生成を停止</button>';
     const errEl = modalBody.querySelector('#saveGenModalErr');
     if (errEl) {
@@ -828,6 +849,7 @@
   function openSaveGenerateModal() {
     const modalEl = document.getElementById('saveGenerateModal');
     if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
+    ensureSaveGenProgressUi();
     resetSaveGenerateModal();
     bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false }).show();
   }
@@ -905,6 +927,10 @@
       window.clearInterval(generatePollTimer);
       generatePollTimer = null;
     }
+    if (generateEntryElapsedInterval !== null) {
+      window.clearInterval(generateEntryElapsedInterval);
+      generateEntryElapsedInterval = null;
+    }
   }
 
   async function tickGenerateProgress(taskId) {
@@ -919,6 +945,9 @@
     if (ws && taskWs && ws !== taskWs) {
       throw new Error('別ワークスペースの生成ジョブです。ページを再読み込みして再実行してください。');
     }
+    if (typeof data.started_at === 'number' && data.started_at > 0) generateStartedAt = data.started_at;
+    if (typeof data.updated_at === 'number' && data.updated_at > 0) generateLastUpdatedAt = data.updated_at;
+
     const phase = String(data.phase || '');
     const prog = String(data.progress_text || '000/000');
     if (phase === 'save') {
@@ -927,11 +956,22 @@
     } else if (phase === 'generate_entry') {
       setSaveGenRowStatus('saveGenRowSave', 'done');
       setSaveGenRowStatus('saveGenRowGen', 'active');
-      setSaveGenProgress(0, 1, `トップページ生成中... ${prog}`);
+      document.getElementById('saveGenProgressWrap')?.classList.remove('d-none');
+      if (generateEntryElapsedInterval === null) {
+        generateEntryElapsedInterval = window.setInterval(updateGenerateEntryLabel, 1000);
+      }
+      updateGenerateEntryLabel();
     } else if (phase === 'generate_internal') {
+      if (generateEntryElapsedInterval !== null) {
+        window.clearInterval(generateEntryElapsedInterval);
+        generateEntryElapsedInterval = null;
+      }
       setSaveGenRowStatus('saveGenRowSave', 'done');
       setSaveGenRowStatus('saveGenRowGen', 'active');
       const m = prog.match(/^(\d+)\/(\d+)$/);
+      const idleSec = generateLastUpdatedAt > 0 ? Math.floor(Date.now() / 1000 - generateLastUpdatedAt) : -1;
+      const hb = document.getElementById('saveGenHeartbeat');
+      if (hb) hb.textContent = idleSec >= 0 ? `最終更新 ${idleSec}秒前` : '';
       if (m) {
         setSaveGenProgress(Number(m[1]), Math.max(1, Number(m[2])), `内部ページ生成中... ${prog}`);
       } else {
@@ -947,9 +987,14 @@
         setSaveGenRowStatus('saveGenRowGen', 'done');
         setSaveGenProgress(1, 1, '生成完了');
         await sleep(350);
+        const genModalEl = document.getElementById('saveGenerateModal');
+        const genModalWasHidden = !genModalEl?.classList.contains('show');
         hideSaveGenerateModal();
         expandMaxReachable(3);
         tryNavigateToReachedStep(3);
+        if (genModalWasHidden) {
+          showToast('サイト生成が完了しました！', 'success');
+        }
       } else {
         const msg = st === 'stale'
           ? '生成ジョブが応答しなくなりました（stale）。'
@@ -2301,6 +2346,14 @@
 
     document.getElementById('btnSaveGenModalDismiss')?.addEventListener('click', () => {
       if (btnSaveGenerate) btnSaveGenerate.disabled = false;
+    });
+
+    // × button: close modal without aborting — polling continues in background
+    document.getElementById('btnSaveGenBg')?.addEventListener('click', () => {
+      const modalEl = document.getElementById('saveGenerateModal');
+      if (modalEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getInstance(modalEl)?.hide();
+      }
     });
 
     initAiTextReplace();

@@ -602,6 +602,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
         <h5 class="modal-title fs-6" id="saveGenerateModalLabel">
           <i class="bi bi-lightning-charge-fill text-primary me-1"></i>保存＆サイト生成
         </h5>
+        <button type="button" class="btn-close" id="btnSaveGenBg" aria-label="バックグラウンドで続行" title="閉じても生成はバックグラウンドで続行します"></button>
       </div>
       <div class="modal-body pt-0 pb-2">
         <ul class="list-unstyled mb-0 small" id="saveGenSteps">
@@ -617,7 +618,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
         <div id="saveGenModalErr" class="alert alert-danger d-none mt-3 mb-0 py-2 small" role="alert"></div>
       </div>
       <div class="modal-footer py-2 border-top-0 justify-content-between" id="saveGenFooterBusy">
-        <span class="small text-muted mb-0">完了までこの画面を閉じないでください。</span>
+        <span class="small text-muted mb-0">× で閉じてもバックグラウンドで続行します。</span>
       </div>
       <div class="modal-footer py-2 border-top-0 d-none" id="saveGenFooterDone">
         <button type="button" class="btn btn-primary btn-sm" id="btnSaveGenModalDismiss" data-bs-dismiss="modal">閉じる</button>

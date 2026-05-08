@@ -88,6 +88,8 @@ try {
         'generate_internal_active_key' => isset($task['generate_internal_active_key'])
             ? (string) $task['generate_internal_active_key']
             : null,
+        'started_at' => isset($task['started_at']) ? (int) $task['started_at'] : null,
+        'updated_at' => isset($task['updated_at']) ? (int) $task['updated_at'] : null,
         'error' => (string) ($task['error'] ?? ''),
         'done' => in_array($status, ['done', 'error', 'stale'], true),
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
