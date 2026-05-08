@@ -63,7 +63,12 @@ try {
     $structureFile = $dataDir . 'lp_structure.json';
     $siteMapPath = $dataDir . 'site_map.json';
     if (!file_exists($structureFile) || !is_readable($siteMapPath)) {
-        throw new RuntimeException('site_map or structure missing');
+        throw new RuntimeException(sprintf(
+            'site_map or structure missing (ws=%s, structure=%s, site_map=%s)',
+            $workspaceId,
+            file_exists($structureFile) ? 'ok' : 'MISSING',
+            is_readable($siteMapPath) ? 'ok' : 'MISSING'
+        ));
     }
     $siteMapRaw = json_decode((string) file_get_contents($siteMapPath), true);
     if (!is_array($siteMapRaw) || !is_array($siteMapRaw['pages']['index'] ?? null)) {
