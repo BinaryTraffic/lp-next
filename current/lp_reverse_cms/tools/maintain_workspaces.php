@@ -12,9 +12,13 @@ declare(strict_types=1);
  *
  * Without --apply, never deletes (only lists). --apply requires --older-than-days.
  * Run as www-data when deleting (dirs are typically owned by www-data).
+ *
+ * ⚠️ This CLI does NOT enforce per-user workspace ownership (see WorkspaceRegistry).
+ * Use only for emergency server cleanup; prefer CMS UI delete for day-to-day.
  */
 
 $cmsRoot = dirname(__DIR__);
+require_once $cmsRoot . '/lib/LpFs.php';
 
 $olderThanDays = null;
 $apply = false;
@@ -140,31 +144,6 @@ function humanBytes(int $b): string
     return sprintf('%.1f %s', $x, $u[$i]);
 }
 
-function rrmdir(string $dir): void
-{
-    if (!is_dir($dir)) {
-        return;
-    }
-    $path = realpath($dir);
-    if ($path === false) {
-        throw new RuntimeException('realpath failed: ' . $dir);
-    }
-    $it = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
-    );
-    foreach ($it as $f) {
-        /** @var SplFileInfo $f */
-        $p = $f->getPathname();
-        if ($f->isDir()) {
-            rmdir($p);
-        } else {
-            unlink($p);
-        }
-    }
-    rmdir($path);
-}
-
 $rows = [];
 foreach ($names as $name) {
     [$bytes, $mt] = workspaceStats($cmsRoot, $name);
@@ -244,7 +223,7 @@ foreach ($toDelete as $r) {
             continue;
         }
         try {
-            rrmdir($rp);
+            LpFs::removeTree($rp);
             fwrite(STDOUT, "Removed: {$rp}\n");
         } catch (Throwable $e) {
             fwrite(STDERR, "Failed {$rp}: " . $e->getMessage() . "\n");

@@ -73,6 +73,9 @@ if (!in_array($rolePv, ['preview', 'admin', 'super_admin'], true)) {
     exit;
 }
 
+require_once __DIR__ . '/lib/WorkspaceRegistry.php';
+WorkspaceRegistry::touchCurrent($cmsRootPreview, $sessMailPv);
+
 $outputDir  = LpWorkspace::outputDir($cmsRootPreview);
 $outputFile = $outputDir . 'index.html';
 
@@ -337,6 +340,32 @@ exit;
     <a href="store/auth_logout.php" class="btn btn-sm btn-outline-warning" title="ログアウト">ログアウト</a>
   </div>
 </div>
+
+<details id="workspaceManageDetails" class="shadow"
+         style="position:fixed;bottom:12px;right:12px;z-index:10002;max-width:min(96vw,440px);background:#f8f9fa;border-radius:8px;padding:10px;border:1px solid rgba(0,0,0,.25);">
+  <summary style="cursor:pointer;font-weight:600;color:#212529;list-style:inside;">ワークスペース管理</summary>
+  <div class="mt-2" style="max-height:50vh;overflow:auto">
+    <p class="small text-muted mb-2" id="workspaceManageHelp"></p>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered mb-0 bg-white align-middle d-none" id="workspaceManageTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>所有者</th>
+            <th>状態</th>
+            <th>サイズ</th>
+            <th>更新</th>
+            <th style="width:90px"></th>
+          </tr>
+        </thead>
+        <tbody id="workspaceManageTbody"></tbody>
+      </table>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="btnWorkspaceListRefresh">
+      <i class="bi bi-arrow-clockwise"></i> 再読込
+    </button>
+  </div>
+</details>
 
 <div class="iframe-container" id="iframeContainer">
   <iframe id="previewFrame" src="<?= htmlspecialchars(LpWorkspace::outputRelIndex() . '?v=' . filemtime($outputFile), ENT_QUOTES, 'UTF-8') ?>" title="生成サイトのプレビュー"></iframe>
@@ -729,6 +758,18 @@ exit;
     document.getElementById('btnMobile').classList.add('active');
   });
 })();
+</script>
+<script>
+window.LP_CMS = window.LP_CMS || {};
+window.LP_CMS.cmsRole = <?= json_encode($rolePv, JSON_THROW_ON_ERROR) ?>;
+</script>
+<?php
+$wmJsPv = __DIR__ . '/assets/js/workspace_manage.js';
+$wmVerPv = is_readable($wmJsPv) ? (string) filemtime($wmJsPv) : '1';
+?>
+<script src="assets/js/workspace_manage.js?v=<?= htmlspecialchars(rawurlencode($wmVerPv), ENT_QUOTES, 'UTF-8') ?>"></script>
+<script>
+lpInitWorkspaceManage('store/');
 </script>
 </body>
 </html>

@@ -210,6 +210,9 @@ $userApprovedUx  = $authManageUsers ? $registryUx->getApproved() : [];
 $superAdminUx    = (string) getenv('CMS_SUPER_ADMIN');
 $superAdminLw    = strtolower(trim($superAdminUx));
 
+require_once __DIR__ . '/lib/WorkspaceRegistry.php';
+WorkspaceRegistry::touchCurrent($cmsRootAuth, $sessEmailUx);
+
 $workspaceDataDir = LpWorkspace::dataDir($cmsRootAuth);
 $structureFile    = $workspaceDataDir . 'lp_structure.json';
 $clientFile       = $workspaceDataDir . 'client_data.json';
@@ -557,6 +560,41 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 <!-- ===== MAIN LAYOUT ===== -->
 <div class="container-fluid py-4" style="max-width: 1200px;">
 
+  <div class="card border-secondary shadow-sm mb-3" id="workspaceManageCard">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center"
+         style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#workspaceManageCollapse"
+         aria-expanded="false" aria-controls="workspaceManageCollapse">
+      <span>
+        <i class="bi bi-folder2-open me-2"></i><strong>ワークスペース</strong>
+        <span class="text-muted small fw-normal ms-1">（自分の ws_* のみ削除可<?= $currentRoleUx === 'super_admin' ? '／未登録フォルダも表示' : '' ?>）</span>
+      </span>
+      <i class="bi bi-chevron-down"></i>
+    </div>
+    <div class="collapse" id="workspaceManageCollapse">
+      <div class="card-body py-2">
+        <p class="small text-muted mb-2" id="workspaceManageHelp"></p>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered mb-0 align-middle d-none" id="workspaceManageTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>所有者</th>
+                <th>状態</th>
+                <th>サイズ</th>
+                <th>更新（UTC）</th>
+                <th style="width:90px"></th>
+              </tr>
+            </thead>
+            <tbody id="workspaceManageTbody"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="btnWorkspaceListRefresh">
+          <i class="bi bi-arrow-clockwise"></i> 再読込
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Step indicator -->
   <div class="d-flex align-items-center gap-0 mb-4" id="stepIndicator">
     <?php
@@ -888,6 +926,7 @@ window.LP_CMS = {
   hasOutput:    <?= $hasOutput    ? 'true' : 'false' ?>,
   sourceUrl:    <?= json_encode($sourceUrl, JSON_THROW_ON_ERROR) ?>,
   outputWsPrefix: <?= json_encode($outputWsPrefix, JSON_THROW_ON_ERROR) ?>,
+  cmsRole: <?= json_encode($currentRoleUx, JSON_THROW_ON_ERROR) ?>,
 };
 </script>
 
@@ -994,6 +1033,7 @@ window.LP_CMS = {
 </script>
 <?php endif; ?>
 
+<script src="assets/js/workspace_manage.js?v=<?= rawurlencode(APP_BUILD) ?>"></script>
 <script src="assets/js/index.js?v=<?= rawurlencode(APP_BUILD) ?>"></script>
 </body>
 </html>

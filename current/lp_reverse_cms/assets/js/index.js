@@ -2201,6 +2201,10 @@
         loadDiagnostics(diagSummary);
       }
     }
+
+    if (typeof lpInitWorkspaceManage === 'function') {
+      lpInitWorkspaceManage('store/');
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);
