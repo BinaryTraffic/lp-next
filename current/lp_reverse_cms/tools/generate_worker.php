@@ -16,6 +16,27 @@ if ($cmsRoot === '' || $taskId === '') {
 
 require_once $cmsRoot . '/lib/GenerateTask.php';
 
+function gen_fix_workspace_permissions(string $dataDir, string $outputDir): void
+{
+    foreach ([$dataDir, $outputDir] as $root) {
+        if (!is_dir($root)) {
+            continue;
+        }
+        @chmod($root, 0777);
+        @chgrp($root, 'lp-tool');
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+        foreach ($it as $f) {
+            /** @var SplFileInfo $f */
+            $p = $f->getPathname();
+            @chgrp($p, 'lp-tool');
+            @chmod($p, $f->isDir() ? 0777 : 0666);
+        }
+    }
+}
+
 try {
     $task = GenerateTask::load($cmsRoot, $taskId);
     if (!is_array($task)) {
@@ -49,6 +70,10 @@ try {
     if (!is_dir($dataDir)) {
         mkdir($dataDir, 0755, true);
     }
+    if (!is_dir($outputDir)) {
+        mkdir($outputDir, 0755, true);
+    }
+    gen_fix_workspace_permissions($dataDir, $outputDir);
 
     $clientData = is_array($task['client_data'] ?? null) ? $task['client_data'] : [];
     file_put_contents(
@@ -163,6 +188,7 @@ try {
     $task['status'] = 'done';
     $task['phase'] = 'generate_internal';
     $task['ended_at'] = time();
+    gen_fix_workspace_permissions($dataDir, $outputDir);
     GenerateTask::save($cmsRoot, $taskId, $task);
 } catch (Throwable $e) {
     $task = GenerateTask::load($cmsRoot, $taskId);

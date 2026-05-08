@@ -34,6 +34,27 @@ function ana_task_save(string $cmsRoot, string $taskId, array &$task): void
     AnalyzeTask::save($cmsRoot, $taskId, $task);
 }
 
+function ana_fix_workspace_permissions(string $dataDir, string $outputDir): void
+{
+    foreach ([$dataDir, $outputDir] as $root) {
+        if (!is_dir($root)) {
+            continue;
+        }
+        @chmod($root, 0777);
+        @chgrp($root, 'lp-tool');
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+        foreach ($it as $f) {
+            /** @var SplFileInfo $f */
+            $p = $f->getPathname();
+            @chgrp($p, 'lp-tool');
+            @chmod($p, $f->isDir() ? 0777 : 0666);
+        }
+    }
+}
+
 try {
     $task = AnalyzeTask::load($cmsRoot, $taskId);
     if (!is_array($task)) {
@@ -92,6 +113,7 @@ try {
             throw new RuntimeException('mkdir failed: ' . $dir);
         }
     }
+    ana_fix_workspace_permissions($dataDir, $outputDir);
 
     foreach (['client_data.json', 'lp_structure.json', 'output_unreplaced.json', 'lp_project_profile.json', 'industry_suggest.json'] as $leaf) {
         $p = $dataDir . $leaf;
@@ -295,6 +317,7 @@ try {
     $task['phase'] = 'finalize';
     $task['ended_at'] = time();
     $task['progress_text'] = sprintf('%03d/%03d', $total, $total);
+    ana_fix_workspace_permissions($dataDir, $outputDir);
     ana_task_save($cmsRoot, $taskId, $task);
     $anaLog('worker done');
 } catch (Throwable $e) {
