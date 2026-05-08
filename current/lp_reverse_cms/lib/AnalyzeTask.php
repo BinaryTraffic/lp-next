@@ -104,7 +104,7 @@ final class AnalyzeTask
                     if ($st === 'pending' || $st === 'running') {
                         return [
                             'task_id' => $latest,
-                            'progress_text' => (string) ($prev['progress_text'] ?? '000/000'),
+                            'progress_text' => (string) ($prev['progress_text'] ?? '000/100'),
                             'already_running' => true,
                         ];
                     }
@@ -118,7 +118,7 @@ final class AnalyzeTask
                 'owner_role' => (string) ($actor['role'] ?? ''),
                 'status' => 'pending',
                 'phase' => 'fetch',
-                'progress_text' => '000/000',
+                'progress_text' => '000/100',
                 'pid' => 0,
                 'started_at' => $now,
                 'ended_at' => 0,
@@ -130,7 +130,7 @@ final class AnalyzeTask
             self::writeJsonFile(self::taskPath($cmsRoot, $taskId), $task);
             self::writeTextFile(self::pointerPath($cmsRoot, (string) $actor['email']), $taskId . PHP_EOL);
 
-            return ['task_id' => $taskId, 'progress_text' => '000/000', 'already_running' => false];
+            return ['task_id' => $taskId, 'progress_text' => '000/100', 'already_running' => false];
         });
     }
 

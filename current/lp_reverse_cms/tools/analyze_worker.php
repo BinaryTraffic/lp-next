@@ -34,6 +34,19 @@ function ana_task_save(string $cmsRoot, string $taskId, array &$task): void
     AnalyzeTask::save($cmsRoot, $taskId, $task);
 }
 
+/**
+ * 進捗は常に 000–099 /100（完了時のみ 100/100）。内部ページ数 n 確定後は steps_total=n+3 で均等割当。
+ *
+ * @param array<string,mixed> $task
+ */
+function ana_apply_progress_pct(array &$task, string $cmsRoot, string $taskId, int &$cursorPct, int $pct): void
+{
+    $pct = max($cursorPct, min(99, $pct));
+    $cursorPct = $pct;
+    $task['progress_text'] = sprintf('%03d/100', $pct);
+    ana_task_save($cmsRoot, $taskId, $task);
+}
+
 try {
     $task = AnalyzeTask::load($cmsRoot, $taskId);
     if (!is_array($task)) {
@@ -99,6 +112,8 @@ try {
         }
     };
 
+    $progressCursor = 0;
+
     $task['status'] = 'running';
     $task['pid'] = (int) getmypid();
     $task['started_at'] = time();
@@ -159,8 +174,8 @@ try {
     );
 
     $task['phase'] = 'analyze_entry';
-    $task['progress_text'] = '030/100';
-    ana_task_save($cmsRoot, $taskId, $task);
+    // n はまだ不明なため最小ティックのみ（stale 回避）。比率割当は内部 URL 件数確定後から。
+    ana_apply_progress_pct($task, $cmsRoot, $taskId, $progressCursor, 1);
     $anaLog('analyze_entry start');
 
     $analyzer = new LpAnalyzer();
@@ -171,8 +186,6 @@ try {
     $fetchRedirect = new LpFetcher();
     LpLinkRedirectVerifier::verifyAndAnnotate($structure, $fetchRedirect, null);
     $candidateUrls = LpInternalPagesPipeline::extractCandidateUrls($structure, $finalUrl);
-    $task['progress_text'] = '040/100';
-    ana_task_save($cmsRoot, $taskId, $task);
 
     $candidates = [];
     foreach ($candidateUrls as $idx => $canon) {
@@ -216,11 +229,15 @@ try {
         (string) json_encode($siteMap, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
     );
 
-    $total = max(1, count($candidates));
+    $n = count($candidates);
+    $stepsTotal = $n + 3;
+    $task['analyze_steps_total'] = $stepsTotal;
+    $task['internal_page_count'] = $n;
+    $total = max(1, $n);
     $task['phase'] = 'analyze_internal';
-    $task['progress_text'] = '040/100';
-    ana_task_save($cmsRoot, $taskId, $task);
-    $anaLog('analyze_internal start total=' . $total);
+    // steps: 1=fetch 済, 2=エントリ+候補確定 済, 3..n+2=各内部ページ, n+3=finalize 完了
+    ana_apply_progress_pct($task, $cmsRoot, $taskId, $progressCursor, (int) floor(100 * 2 / $stepsTotal));
+    $anaLog('analyze_internal start total=' . $total . ' steps_total=' . $stepsTotal);
     foreach ($candidates as $i => $row) {
         $canon = (string) ($row['canonical_url'] ?? '');
         $anaLog(sprintf('processing %03d/%03d url=%s', $i + 1, $total, $canon));
@@ -259,14 +276,12 @@ try {
             (string) json_encode($structureNow, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
         );
 
-        $pct = 40 + (int) round((50 * ($i + 1)) / $total); // 40% -> 90%
-        $task['progress_text'] = sprintf('%03d/%03d', min(90, $pct), 100);
-        ana_task_save($cmsRoot, $taskId, $task);
+        ana_apply_progress_pct($task, $cmsRoot, $taskId, $progressCursor, (int) floor(100 * (3 + $i) / $stepsTotal));
     }
 
+    $baseFinalize = (int) floor(100 * ($n + 2) / $stepsTotal);
     $task['phase'] = 'finalize';
-    $task['progress_text'] = '095/100';
-    ana_task_save($cmsRoot, $taskId, $task);
+    ana_apply_progress_pct($task, $cmsRoot, $taskId, $progressCursor, $baseFinalize);
     $anaLog('finalize start');
 
     $structurePath = $dataDir . 'lp_structure.json';
@@ -301,8 +316,6 @@ try {
         LpInternalPagesPipeline::patchInternalRelativeHrefs($sub, $urlToOutput);
         ana_storage_put($subPath, (string) json_encode($sub, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
-    $task['progress_text'] = '096/100';
-    ana_task_save($cmsRoot, $taskId, $task);
 
     lp_reverse_load_env();
     $assetMapPath = $dataDir . 'asset_map.json';
@@ -313,16 +326,15 @@ try {
         $cmsRoot,
         $dataDir,
         $assetMap,
-        static function (int $done, int $total) use ($cmsRoot, $taskId, &$task): void {
+        static function (int $done, int $total) use ($cmsRoot, $taskId, &$task, &$progressCursor, $baseFinalize): void {
             $safeTotal = max(1, $total);
-            $ratio = min(1, max(0, $done / $safeTotal));
-            $pct = 96 + (int) floor($ratio * 3); // 096 -> 099
-            $task['progress_text'] = sprintf('%03d/%03d', min(99, $pct), 100);
-            ana_task_save($cmsRoot, $taskId, $task);
+            $ratio = min(1.0, max(0.0, $done / $safeTotal));
+            $span = max(0, 99 - $baseFinalize);
+            $pct = $baseFinalize + (int) floor($span * $ratio);
+            ana_apply_progress_pct($task, $cmsRoot, $taskId, $progressCursor, min(99, $pct));
         }
     );
-    $task['progress_text'] = '099/100';
-    ana_task_save($cmsRoot, $taskId, $task);
+    ana_apply_progress_pct($task, $cmsRoot, $taskId, $progressCursor, 99);
     require_once $cmsRoot . '/lib/suggest_industries.php';
     $industrySuggest = lp_reverse_suggest_industries_from_structure($structure);
     ana_storage_put(
@@ -342,6 +354,7 @@ try {
     $task['status'] = 'done';
     $task['phase'] = 'finalize';
     $task['ended_at'] = time();
+    $progressCursor = 100;
     $task['progress_text'] = '100/100';
     ana_task_save($cmsRoot, $taskId, $task);
     $anaLog('worker done');

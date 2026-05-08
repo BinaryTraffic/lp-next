@@ -47,7 +47,10 @@ try {
             'exists' => false,
             'status' => 'none',
             'phase' => '',
-            'progress_text' => '000/000',
+            'progress_text' => '000/100',
+            'progress_scale' => 100,
+            'analyze_steps_total' => null,
+            'internal_page_count' => null,
             'done' => true,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
@@ -83,6 +86,11 @@ try {
         }
     }
 
+    $progressText = (string) ($task['progress_text'] ?? '000/100');
+    if ($progressText === '000/000') {
+        $progressText = '000/100';
+    }
+
     echo json_encode([
         'ok' => true,
         'exists' => true,
@@ -90,7 +98,10 @@ try {
         'workspace_id' => (string) ($task['workspace_id'] ?? ''),
         'status' => $status,
         'phase' => (string) ($task['phase'] ?? ''),
-        'progress_text' => (string) ($task['progress_text'] ?? '000/000'),
+        'progress_text' => $progressText,
+        'progress_scale' => 100,
+        'analyze_steps_total' => isset($task['analyze_steps_total']) ? (int) $task['analyze_steps_total'] : null,
+        'internal_page_count' => isset($task['internal_page_count']) ? (int) $task['internal_page_count'] : null,
         'error' => (string) ($task['error'] ?? ''),
         'done' => in_array($status, ['done', 'error', 'stale'], true),
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

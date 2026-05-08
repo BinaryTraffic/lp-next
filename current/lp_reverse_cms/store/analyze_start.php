@@ -56,6 +56,9 @@ try {
         'workspace_id' => $workspaceId,
         'already_running' => !empty($created['already_running']),
         'progress_text' => $created['progress_text'],
+        'progress_scale' => 100,
+        'analyze_steps_total' => null,
+        'internal_page_count' => null,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (InvalidArgumentException $e) {
     header('Content-Type: application/json; charset=utf-8');
