@@ -5,6 +5,7 @@ declare(strict_types=1);
 final class WorkspaceDeleteTask
 {
     private const DIR_NAME = 'workspace_delete_tasks';
+    private const LOCK_FILE = '.workspace_delete_tasks.lock';
 
     private static function dir(string $cmsRoot): string
     {
@@ -36,6 +37,35 @@ final class WorkspaceDeleteTask
         return self::ensureDir($cmsRoot) . DIRECTORY_SEPARATOR . $taskId . '.json';
     }
 
+    private static function lockPath(string $cmsRoot): string
+    {
+        return self::ensureDir($cmsRoot) . DIRECTORY_SEPARATOR . self::LOCK_FILE;
+    }
+
+    /**
+     * @template T
+     * @param callable(): T $fn
+     * @return T
+     */
+    private static function withLock(string $cmsRoot, callable $fn): mixed
+    {
+        $fp = fopen(self::lockPath($cmsRoot), 'cb');
+        if ($fp === false) {
+            return $fn();
+        }
+        if (!flock($fp, LOCK_EX)) {
+            fclose($fp);
+
+            return $fn();
+        }
+        try {
+            return $fn();
+        } finally {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+        }
+    }
+
     /**
      * @param list<string> $ids
      * @param array{email: string, role: string} $actor
@@ -43,6 +73,49 @@ final class WorkspaceDeleteTask
      * @return array{task_id: string, progress_text: string}
      */
     public static function create(string $cmsRoot, array $actor, array $ids): array
+    {
+        return self::createTask($cmsRoot, $actor, $ids);
+    }
+
+    /**
+     * Atomically: check existing running task for actor, else create one.
+     *
+     * @param list<string> $ids
+     * @param array{email: string, role: string} $actor
+     *
+     * @return array{task_id: string, progress_text: string, already_running: bool}
+     */
+    public static function createIfNotRunning(string $cmsRoot, array $actor, array $ids): array
+    {
+        return self::withLock($cmsRoot, function () use ($cmsRoot, $actor, $ids): array {
+            $latest = self::latestTaskIdForActor($cmsRoot, (string) $actor['email']);
+            if ($latest !== '') {
+                $prev = self::load($cmsRoot, $latest);
+                if (is_array($prev)) {
+                    $st = (string) ($prev['status'] ?? '');
+                    if ($st === 'queued' || $st === 'running') {
+                        return [
+                            'task_id' => $latest,
+                            'progress_text' => (string) ($prev['progress_text'] ?? '000/000'),
+                            'already_running' => true,
+                        ];
+                    }
+                }
+            }
+            $created = self::createTask($cmsRoot, $actor, $ids);
+            $created['already_running'] = false;
+
+            return $created;
+        });
+    }
+
+    /**
+     * @param list<string> $ids
+     * @param array{email: string, role: string} $actor
+     *
+     * @return array{task_id: string, progress_text: string}
+     */
+    private static function createTask(string $cmsRoot, array $actor, array $ids): array
     {
         $taskId = 'wdt_' . bin2hex(random_bytes(12));
         $total = count($ids);
@@ -58,6 +131,7 @@ final class WorkspaceDeleteTask
             'deleted' => 0,
             'failed' => [],
             'current' => '',
+            'pid' => 0,
             'started_at' => $now,
             'updated_at' => $now,
             'ended_at' => 0,

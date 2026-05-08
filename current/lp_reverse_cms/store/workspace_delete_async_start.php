@@ -44,36 +44,21 @@ try {
         throw new InvalidArgumentException('valid workspace_ids required');
     }
 
-    $latest = WorkspaceDeleteTask::latestTaskIdForActor($cmsRoot, (string) $actor['email']);
-    if ($latest !== '') {
-        $prev = WorkspaceDeleteTask::load($cmsRoot, $latest);
-        if (is_array($prev)) {
-            $st = (string) ($prev['status'] ?? '');
-            if ($st === 'queued' || $st === 'running') {
-                echo json_encode([
-                    'ok' => true,
-                    'task_id' => $latest,
-                    'already_running' => true,
-                    'progress_text' => (string) ($prev['progress_text'] ?? '000/000'),
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                exit;
-            }
-        }
-    }
-
-    $created = WorkspaceDeleteTask::create($cmsRoot, $actor, $ids);
+    $created = WorkspaceDeleteTask::createIfNotRunning($cmsRoot, $actor, $ids);
     $taskId = $created['task_id'];
-    $worker = $cmsRoot . '/tools/workspace_delete_async_worker.php';
-    $cmd = 'php ' . escapeshellarg($worker) . ' '
-        . escapeshellarg($cmsRoot) . ' '
-        . escapeshellarg($taskId)
-        . ' > /dev/null 2>&1 &';
-    shell_exec($cmd);
+    if (empty($created['already_running'])) {
+        $worker = $cmsRoot . '/tools/workspace_delete_async_worker.php';
+        $cmd = 'nohup setsid php ' . escapeshellarg($worker) . ' '
+            . escapeshellarg($cmsRoot) . ' '
+            . escapeshellarg($taskId)
+            . ' > /dev/null 2>&1 &';
+        shell_exec($cmd);
+    }
 
     echo json_encode([
         'ok' => true,
         'task_id' => $taskId,
-        'already_running' => false,
+        'already_running' => !empty($created['already_running']),
         'progress_text' => $created['progress_text'],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (InvalidArgumentException $e) {

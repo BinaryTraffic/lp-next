@@ -38,6 +38,20 @@ try {
     }
 
     $status = (string) ($task['status'] ?? 'error');
+    if ($status === 'running') {
+        $pid = (int) ($task['pid'] ?? 0);
+        $startAt = (int) ($task['started_at'] ?? 0);
+        $age = $startAt > 0 ? (time() - $startAt) : PHP_INT_MAX;
+        $pidAlive = $pid > 0 && (function_exists('posix_kill') ? @posix_kill($pid, 0) : true);
+        if (!$pidAlive || $age > 600) {
+            $task['status'] = 'stale';
+            $task['error'] = $pidAlive
+                ? 'timeout (>600s)'
+                : 'worker process not found (pid=' . $pid . ')';
+            WorkspaceDeleteTask::save($cmsRoot, $taskId, $task);
+            $status = 'stale';
+        }
+    }
     echo json_encode([
         'ok' => true,
         'exists' => true,
@@ -48,7 +62,7 @@ try {
         'total_count' => (int) ($task['total'] ?? 0),
         'deleted_count' => (int) ($task['deleted'] ?? 0),
         'failed_count' => is_array($task['failed'] ?? null) ? count((array) $task['failed']) : 0,
-        'done' => in_array($status, ['done', 'error'], true),
+        'done' => in_array($status, ['done', 'error', 'stale'], true),
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     header('Content-Type: application/json; charset=utf-8');

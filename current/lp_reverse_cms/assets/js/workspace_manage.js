@@ -261,6 +261,9 @@ function lpInitWorkspaceManage(storeBase) {
         if (checkAll) checkAll.disabled = false;
         if (status === 'done') {
           await loadList();
+        } else if (status === 'stale') {
+          if (helpEl) helpEl.textContent = '削除ジョブが stale になりました。管理者に確認してください。';
+          window.alert('削除ジョブが応答しなくなりました（stale）。');
         } else {
           window.alert('削除ジョブが失敗しました。');
         }

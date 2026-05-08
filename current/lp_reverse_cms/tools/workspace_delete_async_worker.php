@@ -28,6 +28,8 @@ try {
     }
 
     $task['status'] = 'running';
+    $task['pid'] = (int) getmypid();
+    $task['started_at'] = time();
     WorkspaceDeleteTask::save($cmsRoot, $taskId, $task);
 
     $actor = [
