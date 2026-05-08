@@ -63,5 +63,14 @@ try {
 } catch (Throwable $e) {
     header('Content-Type: application/json; charset=utf-8');
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    $msg = $e->getMessage();
+    if (str_contains($msg, 'unlink failed')
+        || str_contains($msg, 'rmdir failed')
+        || str_contains($msg, 'Permission denied')) {
+        $msg = 'ファイル権限のため削除できません。Apache ユーザー（www-data）がグループ lp-tool に含まれ、'
+            . 'ワークスペースが shimizu:lp-tool で作成されている場合に必要です。サーバー管理者が '
+            . '`sudo usermod -aG lp-tool www-data` と Apache 再起動を実施してください。技術詳細: '
+            . $e->getMessage();
+    }
+    echo json_encode(['ok' => false, 'error' => $msg], JSON_UNESCAPED_UNICODE);
 }

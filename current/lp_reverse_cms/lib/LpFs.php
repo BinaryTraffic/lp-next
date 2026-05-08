@@ -27,11 +27,24 @@ final class LpFs
             /** @var SplFileInfo $f */
             $p = $f->getPathname();
             if ($f->isDir()) {
-                rmdir($p);
-            } else {
-                unlink($p);
+                if (!@rmdir($p)) {
+                    $last = error_get_last();
+                    throw new RuntimeException(
+                        'rmdir failed: ' . $p . ($last ? ' — ' . (string) ($last['message'] ?? '') : '')
+                    );
+                }
+            } elseif (!@unlink($p)) {
+                $last = error_get_last();
+                throw new RuntimeException(
+                    'unlink failed: ' . $p . ($last ? ' — ' . (string) ($last['message'] ?? '') : '')
+                );
             }
         }
-        rmdir($path);
+        if (!@rmdir($path)) {
+            $last = error_get_last();
+            throw new RuntimeException(
+                'rmdir failed (root): ' . $path . ($last ? ' — ' . (string) ($last['message'] ?? '') : '')
+            );
+        }
     }
 }
