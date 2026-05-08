@@ -331,7 +331,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
   <!-- Custom admin styles -->
-  <link rel="stylesheet" href="assets/css/index.css?v=<?= rawurlencode(APP_BUILD) ?>">
+  <link rel="stylesheet" href="assets/css/index.css?v=<?= rawurlencode(lp_reverse_asset_cache_buster(__DIR__, 'assets/css/index.css')) ?>">
 </head>
 <body class="bg-light">
 
@@ -1116,7 +1116,7 @@ window.LP_CMS = {
 </script>
 <?php endif; ?>
 
-<script src="assets/js/workspace_manage.js?v=<?= rawurlencode(APP_BUILD) ?>"></script>
-<script src="assets/js/index.js?v=<?= rawurlencode(APP_BUILD) ?>"></script>
+<script src="assets/js/workspace_manage.js?v=<?= rawurlencode(lp_reverse_asset_cache_buster(__DIR__, 'assets/js/workspace_manage.js')) ?>"></script>
+<script src="assets/js/index.js?v=<?= rawurlencode(lp_reverse_asset_cache_buster(__DIR__, 'assets/js/index.js')) ?>"></script>
 </body>
 </html>

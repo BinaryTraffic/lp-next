@@ -10,6 +10,7 @@ if (session_status() === PHP_SESSION_NONE) {
 $cmsRootPreview = __DIR__;
 require_once $cmsRootPreview . '/lib/env_load.php';
 lp_reverse_load_env();
+require_once $cmsRootPreview . '/lib/app_release.php';
 require_once $cmsRootPreview . '/lib/LpWorkspace.php';
 require_once $cmsRootPreview . '/lib/UserRegistry.php';
 
@@ -767,11 +768,7 @@ require_once __DIR__ . '/lib/lp_reverse_csrf.php';
 ?>
 window.LP_CMS.csrfToken = <?= json_encode(lp_reverse_csrf_token(), JSON_THROW_ON_ERROR) ?>;
 </script>
-<?php
-$wmJsPv = __DIR__ . '/assets/js/workspace_manage.js';
-$wmVerPv = is_readable($wmJsPv) ? (string) filemtime($wmJsPv) : '1';
-?>
-<script src="assets/js/workspace_manage.js?v=<?= htmlspecialchars(rawurlencode($wmVerPv), ENT_QUOTES, 'UTF-8') ?>"></script>
+<script src="assets/js/workspace_manage.js?v=<?= htmlspecialchars(rawurlencode(lp_reverse_asset_cache_buster(__DIR__, 'assets/js/workspace_manage.js')), ENT_QUOTES, 'UTF-8') ?>"></script>
 <script>
 lpInitWorkspaceManage('store/');
 </script>

@@ -30,6 +30,22 @@ function lp_reverse_app_build_label(string $cmsRoot): string
     return $max > 0 ? gmdate('Ymd', $max) : gmdate('Ymd');
 }
 
+/**
+ * 静的アセット URL の ?v= 用。Git 短ハッシュ（またはフォールバックラベル）にファイル mtime を付与し、デプロイだけでなくファイル更新でも必ずキャッシュが無効化されるようにする。
+ *
+ * @param non-empty-string $cmsRoot lp_reverse_cms ディレクトリ
+ * @param non-empty-string $relativeUnderCms 例 assets/js/index.js
+ */
+function lp_reverse_asset_cache_buster(string $cmsRoot, string $relativeUnderCms): string
+{
+    $cmsRoot = rtrim($cmsRoot, '/\\');
+    $rel = str_replace('\\', '/', ltrim($relativeUnderCms, '/'));
+    $path = $cmsRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+    $mt = is_file($path) ? (string) filemtime($path) : '0';
+
+    return lp_reverse_app_build_label($cmsRoot) . '-' . $mt;
+}
+
 /** @param non-empty-string $startDir cms root (lp_reverse_cms) */
 function lp_reverse_git_short_hash(string $startDir): ?string
 {
