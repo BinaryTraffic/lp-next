@@ -608,12 +608,29 @@
     }
   }
 
-  async function tickAnalyzeProgress(taskId) {
-    const q = `?task_id=${encodeURIComponent(taskId)}`;
+  async function fetchAnalyzeProgress(taskId) {
+    const q = taskId ? `?task_id=${encodeURIComponent(taskId)}` : '';
     const res = await fetch(`store/analyze_progress.php${q}`, { credentials: 'same-origin' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
       throw new Error((data && data.error) ? String(data.error) : (`HTTP ${res.status}`));
+    }
+    return data;
+  }
+
+  async function tickAnalyzeProgress(taskId) {
+    /** @type {Record<string, unknown>} */
+    let data;
+    try {
+      data = await fetchAnalyzeProgress(taskId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // 参照 task_id が消えた/無効でも最新タスクにフォールバックして継続する。
+      if (msg.includes('task not found')) {
+        data = await fetchAnalyzeProgress('');
+      } else {
+        throw e;
+      }
     }
 
     const phase = String(data.phase || '');
