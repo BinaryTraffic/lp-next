@@ -6,6 +6,7 @@ $cmsRoot = dirname(__DIR__);
 require_once $cmsRoot . '/lib/lp_reverse_store_auth.php';
 require_once $cmsRoot . '/lib/WorkspaceRegistry.php';
 require_once $cmsRoot . '/lib/LpWorkspace.php';
+require_once $cmsRoot . '/lib/lp_reverse_csrf.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     header('Content-Type: application/json; charset=utf-8');
@@ -20,6 +21,13 @@ try {
     $body  = $raw !== '' ? json_decode($raw, true) : null;
     if (!is_array($body)) {
         throw new InvalidArgumentException('JSON body required');
+    }
+    $csrf = isset($body['csrf']) ? trim((string) $body['csrf']) : '';
+    if (!lp_reverse_csrf_validate($csrf !== '' ? $csrf : null)) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'CSRF verification failed'], JSON_UNESCAPED_UNICODE);
+        exit;
     }
     $id = strtolower(trim((string) ($body['workspace_id'] ?? $body['id'] ?? '')));
     if ($id === '' || !preg_match('/^ws_[a-f0-9]{32}$/', $id)) {

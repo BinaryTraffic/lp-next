@@ -15,11 +15,15 @@ final class WorkspaceRegistry
 
     private string $filePath;
 
+    private string $lockPath;
+
     public function __construct(string $cmsRoot)
     {
         $this->cmsRoot = rtrim($cmsRoot, '/\\');
         $this->filePath = $this->cmsRoot . DIRECTORY_SEPARATOR . 'data'
             . DIRECTORY_SEPARATOR . 'workspace_registry.json';
+        $this->lockPath = $this->cmsRoot . DIRECTORY_SEPARATOR . 'data'
+            . DIRECTORY_SEPARATOR . '.workspace_registry.lock';
     }
 
     /** Notify activity for the current session workspace (first touch records owner). */
@@ -39,6 +43,40 @@ final class WorkspaceRegistry
         }
         $inst = new self($cmsRoot);
         $inst->touch('ws_' . $hex, $email);
+    }
+
+    /**
+     * Serialize registry mutations vs reads across tabs/processes (flock advisory lock).
+     * file_put_contents(..., LOCK_EX) alone does not cover read–modify–write.
+     *
+     * @template T
+     * @param callable(): T $fn
+     *
+     * @return T
+     */
+    private function withFileLock(int $lockFlag, callable $fn): mixed
+    {
+        $dir = dirname($this->lockPath);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $fp = fopen($this->lockPath, 'cb');
+        if ($fp === false) {
+            return $fn();
+        }
+        if (!flock($fp, $lockFlag)) {
+            fclose($fp);
+
+            return $fn();
+        }
+
+        try {
+            return $fn();
+        } finally {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+        }
     }
 
     /**
@@ -134,25 +172,31 @@ final class WorkspaceRegistry
         $email = strtolower(trim($actor['email']));
         $role  = $actor['role'];
 
-        $raw = $this->load();
-        /** @var array<string, array<string, mixed>> $map */
-        $map = $raw['workspaces'] ?? [];
-        if (!is_array($map)) {
-            $map = [];
-        }
-        $meta = $map[$workspaceFolder] ?? null;
-        $legacy = !is_array($meta);
+        $allowed = $this->withFileLock(LOCK_EX, function () use ($workspaceFolder, $email, $role): bool {
+            $raw = $this->readJsonFile();
+            /** @var array<string, array<string, mixed>> $map */
+            $map = $raw['workspaces'] ?? [];
+            if (!is_array($map)) {
+                $map = [];
+            }
+            $meta = $map[$workspaceFolder] ?? null;
+            $legacy = !is_array($meta);
 
-        if ($legacy) {
-            if ($role !== 'super_admin') {
-                return false;
+            if ($legacy) {
+                if ($role !== 'super_admin') {
+                    return false;
+                }
+
+                return true;
             }
-        } else {
+
             $owner = strtolower(trim((string) ($meta['owner_email'] ?? '')));
-            $allowed = ($owner !== '' && $owner === $email) || $role === 'super_admin';
-            if (!$allowed) {
-                return false;
-            }
+
+            return ($owner !== '' && $owner === $email) || $role === 'super_admin';
+        });
+
+        if (!$allowed) {
+            return false;
         }
 
         foreach (['output', 'data'] as $sub) {
@@ -170,11 +214,20 @@ final class WorkspaceRegistry
             }
         }
 
-        if (!$legacy) {
+        $this->withFileLock(LOCK_EX, function () use ($workspaceFolder): void {
+            $raw = $this->readJsonFile();
+            /** @var array<string, array<string, mixed>> $map */
+            $map = $raw['workspaces'] ?? [];
+            if (!is_array($map)) {
+                return;
+            }
+            if (!isset($map[$workspaceFolder])) {
+                return;
+            }
             unset($map[$workspaceFolder]);
             $raw['workspaces'] = $map;
-            $this->save($raw);
-        }
+            $this->writeJsonFile($raw);
+        });
 
         return true;
     }
@@ -187,38 +240,49 @@ final class WorkspaceRegistry
         $folderName = strtolower($folderName);
         $email      = strtolower(trim($email));
 
-        $raw = $this->load();
-        /** @var array<string, array<string, mixed>> $map */
-        $map = $raw['workspaces'] ?? [];
-        if (!is_array($map)) {
-            $map = [];
-        }
-        $now = gmdate('c');
-
-        if (!isset($map[$folderName])) {
-            $map[$folderName] = [
-                'owner_email'      => $email,
-                'created_at'       => $now,
-                'last_active_at'   => $now,
-                'state'            => 'active',
-            ];
-        } else {
-            $exOwner = strtolower(trim((string) ($map[$folderName]['owner_email'] ?? '')));
-            if ($exOwner !== '' && $exOwner !== $email) {
-                return;
+        $this->withFileLock(LOCK_EX, function () use ($folderName, $email): void {
+            $raw = $this->readJsonFile();
+            /** @var array<string, array<string, mixed>> $map */
+            $map = $raw['workspaces'] ?? [];
+            if (!is_array($map)) {
+                $map = [];
             }
-            if ($exOwner === '') {
-                $map[$folderName]['owner_email'] = $email;
-            }
-            $map[$folderName]['last_active_at'] = $now;
-        }
+            $now = gmdate('c');
 
-        $raw['workspaces'] = $map;
-        $this->save($raw);
+            if (!isset($map[$folderName])) {
+                $map[$folderName] = [
+                    'owner_email'      => $email,
+                    'created_at'       => $now,
+                    'last_active_at'   => $now,
+                    'state'            => 'active',
+                ];
+            } else {
+                $exOwner = strtolower(trim((string) ($map[$folderName]['owner_email'] ?? '')));
+                if ($exOwner !== '' && $exOwner !== $email) {
+                    return;
+                }
+                if ($exOwner === '') {
+                    $map[$folderName]['owner_email'] = $email;
+                }
+                $map[$folderName]['last_active_at'] = $now;
+            }
+
+            $raw['workspaces'] = $map;
+            $this->writeJsonFile($raw);
+        });
     }
 
     /** @return array<string, mixed> */
     private function load(): array
+    {
+        return $this->withFileLock(
+            LOCK_SH,
+            fn (): array => $this->readJsonFile()
+        );
+    }
+
+    /** @return array<string, mixed> */
+    private function readJsonFile(): array
     {
         if (!is_readable($this->filePath)) {
             return ['workspaces' => []];
@@ -229,7 +293,7 @@ final class WorkspaceRegistry
     }
 
     /** @param array<string, mixed> $data */
-    private function save(array $data): void
+    private function writeJsonFile(array $data): void
     {
         $dir = dirname($this->filePath);
         if (!is_dir($dir)) {
@@ -238,6 +302,7 @@ final class WorkspaceRegistry
         if (!isset($data['workspaces']) || !is_array($data['workspaces'])) {
             $data['workspaces'] = [];
         }
+
         file_put_contents(
             $this->filePath,
             json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),

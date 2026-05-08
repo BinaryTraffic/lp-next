@@ -762,6 +762,10 @@ exit;
 <script>
 window.LP_CMS = window.LP_CMS || {};
 window.LP_CMS.cmsRole = <?= json_encode($rolePv, JSON_THROW_ON_ERROR) ?>;
+<?php
+require_once __DIR__ . '/lib/lp_reverse_csrf.php';
+?>
+window.LP_CMS.csrfToken = <?= json_encode(lp_reverse_csrf_token(), JSON_THROW_ON_ERROR) ?>;
 </script>
 <?php
 $wmJsPv = __DIR__ . '/assets/js/workspace_manage.js';

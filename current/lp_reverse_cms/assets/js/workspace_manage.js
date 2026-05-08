@@ -100,11 +100,14 @@ function lpInitWorkspaceManage(storeBase) {
           const w = leg ? '（未登録フォルダ）' : '';
           if (!window.confirm(`${id} を削除しますか？${w} data と output の両方が消えます。`)) return;
           try {
+            const tok = (typeof window.LP_CMS !== 'undefined' && window.LP_CMS && window.LP_CMS.csrfToken)
+              ? String(window.LP_CMS.csrfToken)
+              : '';
             const rr = await fetch(storeBase + 'workspace_delete.php', {
               method: 'POST',
               credentials: 'same-origin',
               headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-              body: JSON.stringify({ workspace_id: id }),
+              body: JSON.stringify({ workspace_id: id, csrf: tok }),
             });
             const out = await rr.json().catch(() => ({}));
             if (!rr.ok || !out.ok) {

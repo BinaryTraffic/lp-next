@@ -219,6 +219,9 @@ $clientFile       = $workspaceDataDir . 'client_data.json';
 $outputFile       = LpWorkspace::outputDir($cmsRootAuth) . 'index.html';
 $sourceUrlFile    = $workspaceDataDir . 'source_url.txt';
 
+require_once __DIR__ . '/lib/lp_reverse_csrf.php';
+$csrfTokenUx = lp_reverse_csrf_token();
+
 $hasStructure = file_exists($structureFile);
 $hasOutput    = file_exists($outputFile);
 $sourceUrl    = file_exists($sourceUrlFile) ? trim((string) file_get_contents($sourceUrlFile)) : '';
@@ -927,6 +930,7 @@ window.LP_CMS = {
   sourceUrl:    <?= json_encode($sourceUrl, JSON_THROW_ON_ERROR) ?>,
   outputWsPrefix: <?= json_encode($outputWsPrefix, JSON_THROW_ON_ERROR) ?>,
   cmsRole: <?= json_encode($currentRoleUx, JSON_THROW_ON_ERROR) ?>,
+  csrfToken: <?= json_encode($csrfTokenUx, JSON_THROW_ON_ERROR) ?>,
 };
 </script>
 
