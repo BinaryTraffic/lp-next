@@ -57,7 +57,10 @@ final class LpInternalPagesPipeline
      *   error?: string
      * }
      */
-    public static function processSingleUrl(string $canonUrl, string $dataDir, string $outputDir): array
+    /**
+     * @param callable(string):void|null $log heartbeat logger — receives a plain message string
+     */
+    public static function processSingleUrl(string $canonUrl, string $dataDir, string $outputDir, ?callable $log = null): array
     {
         $dataDir   = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
         $outputDir = rtrim($outputDir, '/\\') . DIRECTORY_SEPARATOR;
@@ -82,12 +85,17 @@ final class LpInternalPagesPipeline
         $mapper     = new LpMapper();
 
         try {
+            if ($log) { $log('  fetch start'); }
+            $t0       = microtime(true);
             $res      = $fetcher->fetch($canonUrl);
             $html     = $res['html'];
             $finalUrl = $res['final_url'];
             $identity = LpUrlContext::canonicalHttpDocumentIdentity($finalUrl);
             $slug     = self::slugForCanonical($canonUrl);
+            if ($log) { $log(sprintf('  fetch done elapsed=%.1fs html_bytes=%d', microtime(true) - $t0, strlen($html))); }
 
+            if ($log) { $log('  asset_sync start existing=' . count($existing)); }
+            $t0     = microtime(true);
             $newMap = $downloader->downloadAll($html, $finalUrl, $existing, [
                 'max_new_downloads'   => self::INTERNAL_ASSET_MAX_NEW_DOWNLOADS,
                 'max_elapsed_seconds' => self::INTERNAL_ASSET_MAX_ELAPSED_SECONDS,
@@ -98,11 +106,19 @@ final class LpInternalPagesPipeline
                 json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
                 LOCK_EX
             );
+            if ($log) { $log(sprintf('  asset_sync done elapsed=%.1fs new=%d limited=%s', microtime(true) - $t0, count($newMap), $downloader->hasExceededBudget() ? 'true' : 'false')); }
 
+            if ($log) { $log('  analyze start html_bytes=' . strlen($html)); }
+            $t0  = microtime(true);
             $sub = $analyzer->analyze($html, $finalUrl);
             unset($sub['parse_diagnostics']);
+            if ($log) { $log(sprintf('  analyze done elapsed=%.1fs sections=%d', microtime(true) - $t0, count($sub['sections'] ?? []))); }
+
+            if ($log) { $log('  enrich start'); }
+            $t0  = microtime(true);
             $sub = $mapper->enrich($sub);
             $sub['internal_pages'] = [];
+            if ($log) { $log(sprintf('  enrich done elapsed=%.1fs', microtime(true) - $t0)); }
 
             $structureRel = 'internal_pages/' . $slug . '.json';
             self::storagePut(

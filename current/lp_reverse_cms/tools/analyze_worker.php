@@ -195,7 +195,7 @@ try {
         $canon = (string) ($row['canonical_url'] ?? '');
         $anaLog(sprintf('processing %03d/%03d url=%s', $i + 1, $total, $canon));
         $t0 = microtime(true);
-        $res = LpInternalPagesPipeline::processSingleUrl($canon, $dataDir, $outputDir);
+        $res = LpInternalPagesPipeline::processSingleUrl($canon, $dataDir, $outputDir, $anaLog);
         $elapsed = round(microtime(true) - $t0, 1);
         $anaLog(sprintf('done     %03d/%03d elapsed=%.1fs fetch_ok=%s', $i + 1, $total, $elapsed, ($res['fetch_ok'] ?? false) ? 'true' : 'false'));
         $index = (int) ($row['index'] ?? $i);
