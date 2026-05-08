@@ -597,8 +597,8 @@
       } else {
         const totalExplain =
           '（計 ' + total + '＝重複省略後のアセットファイル保存先の一意数）';
-        setProgState(
-          progFetch, 'done',
+      setProgState(
+        progFetch, 'done',
           `HTML ${htmlKb} KB | ${buckets}${totalExplain}`,
         );
       }
@@ -830,7 +830,18 @@
   function hideSaveGenerateModal() {
     const modalEl = document.getElementById('saveGenerateModal');
     if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
-    bootstrap.Modal.getInstance(modalEl)?.hide();
+    // Prefer Bootstrap instance hide, but force-clean classes/backdrop as fallback.
+    bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    window.setTimeout(() => {
+      if (modalEl.classList.contains('show')) {
+        modalEl.classList.remove('show');
+      }
+      modalEl.setAttribute('aria-hidden', 'true');
+      modalEl.style.display = 'none';
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('padding-right');
+      document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+    }, 180);
   }
 
   async function runSaveAndGenerate() {
@@ -939,7 +950,7 @@
             }
             completed++;
             if (typeof one.size === 'number') lastSize += one.size;
-          } catch (e) {
+        } catch (e) {
             if (e instanceof DOMException && e.name === 'AbortError') {
               generateStopRequested = true;
               break;
@@ -969,8 +980,8 @@
             `内部ページ ${toRun.length} 件ぶんの生成処理が完了しました。完了 (合計 ${formatDuration((Date.now() - genStartMs) / 1000)})`,
           );
           genRes = { success: true, size: lastSize };
-        }
-      } else {
+          }
+        } else {
         genRes = await apiPost('store/generate_lp.php', { job_id: currentGenerateJobId });
         if (!genRes.success) throw new Error(genRes.error ?? 'サイト生成に失敗しました。');
       }
@@ -1074,8 +1085,8 @@
       const industry = industryInp.value.trim();
       if (!industry) {
         setAiStatus('業種を入力してください', 'danger');
-        showToast('業種を入力してください。', 'warning');
-        industryInp.focus();
+          showToast('業種を入力してください。', 'warning');
+          industryInp.focus();
         return;
       }
 
@@ -1102,7 +1113,7 @@
 
       if (elements.length === 0) {
         setAiStatus('置換対象のテキストがありません（空欄はプレースホルダの元テキストで補完されます）', 'warning');
-        showToast('置換対象のテキストがありません', 'warning');
+          showToast('置換対象のテキストがありません', 'warning');
         backup = null;
         return;
       }
