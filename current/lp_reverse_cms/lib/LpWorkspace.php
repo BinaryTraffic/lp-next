@@ -23,7 +23,12 @@ final class LpWorkspace
         self::$bootstrapped = true;
 
         if (PHP_SAPI === 'cli') {
-            self::$id = 'cli';
+            $forced = strtolower(trim((string) getenv('LP_WORKSPACE_ID')));
+            if (self::isValidId($forced)) {
+                self::$id = $forced;
+            } else {
+                self::$id = 'cli';
+            }
 
             return;
         }

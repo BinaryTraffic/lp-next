@@ -18,6 +18,10 @@
   let currentAnalyzeJobId = '';
   /** @type {string} */
   let currentGenerateJobId = '';
+  /** @type {number|null} */
+  let analyzePollTimer = null;
+  /** @type {number|null} */
+  let generatePollTimer = null;
 
   // -----------------------------------------------------------------------
   // DOM refs
@@ -573,153 +577,132 @@
     }
 
     try {
-      currentAnalyzeJobId = await startManagedJob('analyze', purpose, url);
-      // -- Phase 1: fetch HTML + download assets --
-      const fetchRes = await apiPost('store/fetch_lp.php', { url, job_id: currentAnalyzeJobId });
-      if (!fetchRes.success) throw new Error(fetchRes.error ?? 'HTML取得に失敗しました。');
-
-      const htmlKb  = ((fetchRes.html_size ?? fetchRes.size ?? 0) / 1024).toFixed(1);
-      const css     = fetchRes.asset_css    ?? 0;
-      const img     = fetchRes.asset_img    ?? 0;
-      const js      = fetchRes.asset_js     ?? 0;
-      const fonts   = fetchRes.asset_fonts  ?? 0;
-      const uncat   = fetchRes.asset_uncategorized ?? 0;
-      const failed  = fetchRes.fetch_failed ?? 0;
-      const total   = fetchRes.asset_total  ?? 0;
-      const failList = fetchRes.fetch_failures;
-
-      const buckets = `CSS ${css} / 画像 ${img} / JS ${js} / フォント ${fonts}${
-        Number(uncat) > 0 ? ` / 未分類 ${uncat}` : ''
-      }`;
-      if (failed > 0) {
-        setProgState(progFetch, 'done', '', { skipDetail: true });
-        renderFetchProgDetail(htmlKb, buckets, total, failed, failList);
-      } else {
-        const totalExplain =
-          '（計 ' + total + '＝重複省略後のアセットファイル保存先の一意数）';
-      setProgState(
-        progFetch, 'done',
-          `HTML ${htmlKb} KB | ${buckets}${totalExplain}`,
-        );
-      }
-      resetAnalyzeProgressUi();
-      progAnalyzeBarWrap?.classList.remove('d-none');
-      setProgState(progAnalyze, 'loading', 'サイト構造を解析中…');
-
-      /** @type {Record<string, unknown>|null} */
-      let analyzeRes = null;
-      /** @type {Array<Record<string, unknown>>} */
-      let internalCandidateUrls = [];
-      let twoPhaseAnalyze = false;
-
-      try {
-        const entryRes = await apiPost('store/analyze_entry.php', { stream_progress: true, job_id: currentAnalyzeJobId });
-        if (!entryRes.ok && !entryRes.success) {
-          throw new Error(typeof entryRes.error === 'string' ? entryRes.error : 'analyze_entry failed');
-        }
-        analyzeRes = entryRes;
-        internalCandidateUrls = Array.isArray(entryRes.internal_candidate_urls)
-          ? /** @type {Array<Record<string, unknown>>} */ (entryRes.internal_candidate_urls)
-          : [];
-        twoPhaseAnalyze = true;
-      } catch {
-        twoPhaseAnalyze = false;
-      }
-
-      if (twoPhaseAnalyze) {
-        const total = Math.max(1, internalCandidateUrls.length);
-        const analyzeStartMs = Date.now();
-        if (progAnalyzeDetail) {
-          progAnalyzeDetail.textContent =
-            `【内部ページ取得】 内部ページ ${internalCandidateUrls.length} 件を検出。目安: ${roughEstimate(internalCandidateUrls.length, 'analyze')}`;
-        }
-        for (let i = 0; i < internalCandidateUrls.length; i++) {
-          const row = internalCandidateUrls[i];
-          const idx = typeof row.index === 'number' ? row.index : i;
-          const canonical = typeof row.canonical_url === 'string' ? row.canonical_url : '';
-          const pct = Math.min(98, 50 + Math.round((45 * (i + 1)) / total));
-          if (progAnalyzeBar) progAnalyzeBar.style.width = `${pct}%`;
-          progAnalyzeBarOuter?.setAttribute('aria-valuenow', String(pct));
-          progAnalyzeBarOuter?.setAttribute('aria-valuetext', `${pct}%/100%`);
-          if (progAnalyzePct) progAnalyzePct.textContent = `${pct}%/100%`;
-          if (progAnalyzeDetail) {
-            const shown = canonical.length > 100 ? `${canonical.slice(0, 97)}...` : canonical;
-            const eta = etaString(analyzeStartMs, i + 1, total);
-            const etaLabel = eta ? ` ${eta}` : '';
-            progAnalyzeDetail.textContent = `【内部ページ取得】 ${i + 1} / ${total} 内部ページ解析中... ${shown}${etaLabel}`;
-          }
-
-          try {
-            await apiPost('store/analyze_internal_page.php', { index: idx, job_id: currentAnalyzeJobId }, { timeoutMs: 240000 });
-          } catch (e) {
-            console.warn('analyze_internal_page skipped', idx, e);
-          }
-        }
-
-        if (progAnalyzeDetail) {
-          progAnalyzeDetail.textContent = '【最終処理】 画像メモ・業種推定を処理しています...';
-        }
-        const finalizeRes = await apiPost('store/finalize_analyze.php', { job_id: currentAnalyzeJobId });
-        if (!finalizeRes.ok && !finalizeRes.success) {
-          throw new Error(
-            typeof finalizeRes.error === 'string'
-              ? finalizeRes.error
-              : '最終処理に失敗しました。',
-          );
-        }
-      } else {
-        analyzeRes = await apiPostAnalyzeStream('store/analyze_lp.php', { job_id: currentAnalyzeJobId });
-        if (!analyzeRes.success) throw new Error(analyzeRes.error ?? '解析に失敗しました。');
-      }
-
-      if (!analyzeRes) {
-        throw new Error('解析結果の取得に失敗しました。');
-      }
-
-      let diagNote = '';
-      const diag = analyzeRes.parse_diagnostics;
-      if (diag && typeof diag === 'object') {
-        const dx = /** @type {{ walk_total_steps?: number, walk_completed_steps?: number, walk_incomplete?: boolean, section_errors?: unknown[] }} */ (diag);
-        if (typeof dx.walk_total_steps === 'number' && typeof dx.walk_completed_steps === 'number') {
-          diagNote += ` | ツリー ${dx.walk_completed_steps.toLocaleString()}/${dx.walk_total_steps.toLocaleString()} ステップ`;
-          if (dx.walk_incomplete) diagNote += '（部分的）';
-        }
-        if (Array.isArray(dx.section_errors) && dx.section_errors.length > 0) {
-          diagNote += ` | セクションエラー ${dx.section_errors.length}件（ログ: data/lp_structure_analyze.log）`;
-          showToast('一部セクションをスキップしました（ログを確認してください）', 'warning');
-        }
-      }
-
-      setProgState(progAnalyze, 'done',
-        `${analyzeRes.section_count}セクション / ${analyzeRes.total_elements}要素を抽出${diagNote}`);
-      progAnalyzeBarWrap?.classList.add('d-none');
-
-      await sleep(800);
-      await finishManagedJob(currentAnalyzeJobId, 'done', '', {
-        section_count: analyzeRes.section_count,
-        total_elements: analyzeRes.total_elements,
+      const out = await apiPost('store/analyze_start.php', {
+        url,
+        csrf: String(window.LP_CMS?.csrfToken || ''),
       });
-      currentAnalyzeJobId = '';
-      if (analyzeProgressModalEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Modal.getOrCreateInstance(analyzeProgressModalEl).hide();
+      if (!out.ok) {
+        throw new Error(typeof out.error === 'string' ? out.error : '解析ジョブ開始に失敗しました。');
       }
-      window.location.href = window.location.pathname + '?step=2';
-
+      const taskId = String(out.task_id || '');
+      if (!taskId) {
+        throw new Error('task_id が取得できませんでした。');
+      }
+      startAnalyzePolling(taskId);
     } catch (err) {
-      await finishManagedJob(
-        currentAnalyzeJobId,
-        'error',
-        err instanceof Error ? err.message : String(err),
-      );
-      currentAnalyzeJobId = '';
-      showError(fetchError, err.message);
-      if (analyzeProgressError) showError(analyzeProgressError, err.message);
-      setProgState(progFetch,   'error');
+      const message = err instanceof Error ? err.message : String(err);
+      showError(fetchError, message);
+      if (analyzeProgressError) showError(analyzeProgressError, message);
+      setProgState(progFetch, 'error');
       setProgState(progAnalyze, 'error');
       progAnalyzeBarWrap?.classList.add('d-none');
       btnFetchAnalyze.disabled = false;
       if (analyzeProgressCloseBtn) analyzeProgressCloseBtn.disabled = false;
     }
+  }
+
+  function stopAnalyzePolling() {
+    if (analyzePollTimer !== null) {
+      window.clearInterval(analyzePollTimer);
+      analyzePollTimer = null;
+    }
+  }
+
+  async function tickAnalyzeProgress(taskId) {
+    const q = `?task_id=${encodeURIComponent(taskId)}`;
+    const res = await fetch(`store/analyze_progress.php${q}`, { credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      throw new Error((data && data.error) ? String(data.error) : (`HTTP ${res.status}`));
+    }
+
+    const phase = String(data.phase || '');
+    const prog = String(data.progress_text || '000/000');
+    if (phase === 'fetch') {
+      setProgState(progFetch, 'loading', `HTML/CSS/画像取得中... ${prog}`);
+      setProgState(progAnalyze, 'idle');
+      progAnalyzeBarWrap?.classList.add('d-none');
+    } else if (phase === 'analyze_entry') {
+      setProgState(progFetch, 'done', '取得完了');
+      setProgState(progAnalyze, 'loading', `エントリ解析中... ${prog}`);
+      progAnalyzeBarWrap?.classList.remove('d-none');
+    } else if (phase === 'analyze_internal') {
+      setProgState(progFetch, 'done', '取得完了');
+      setProgState(progAnalyze, 'loading', `内部ページ解析中... ${prog}`);
+      progAnalyzeBarWrap?.classList.remove('d-none');
+      const m = prog.match(/^(\d+)\/(\d+)$/);
+      if (m && progAnalyzeBar) {
+        const done = Number(m[1]);
+        const total = Math.max(1, Number(m[2]));
+        const pct = Math.min(99, Math.round((100 * done) / total));
+        progAnalyzeBar.style.width = `${pct}%`;
+        progAnalyzePct.textContent = `${pct}%/100%`;
+      }
+    } else if (phase === 'finalize') {
+      setProgState(progAnalyze, 'loading', `最終処理中... ${prog}`);
+      progAnalyzeBarWrap?.classList.remove('d-none');
+      if (progAnalyzeBar) progAnalyzeBar.style.width = '99%';
+      if (progAnalyzePct) progAnalyzePct.textContent = '99%/100%';
+    }
+
+    if (data.done === true) {
+      stopAnalyzePolling();
+      btnFetchAnalyze.disabled = false;
+      if (analyzeProgressCloseBtn) analyzeProgressCloseBtn.disabled = false;
+      const st = String(data.status || '');
+      if (st === 'done') {
+        setProgState(progAnalyze, 'done', '解析が完了しました。');
+        if (progAnalyzeBar) progAnalyzeBar.style.width = '100%';
+        if (progAnalyzePct) progAnalyzePct.textContent = '100%/100%';
+        await sleep(600);
+        if (analyzeProgressModalEl && typeof bootstrap !== 'undefined') {
+          bootstrap.Modal.getOrCreateInstance(analyzeProgressModalEl).hide();
+        }
+        window.location.href = window.location.pathname + '?step=2';
+      } else {
+        const msg = st === 'stale'
+          ? '解析ジョブが応答しなくなりました（stale）。'
+          : String(data.error || '解析ジョブが失敗しました。');
+        if (analyzeProgressError) showError(analyzeProgressError, msg);
+        showError(fetchError, msg);
+        setProgState(progAnalyze, 'error');
+      }
+    }
+  }
+
+  function startAnalyzePolling(taskId) {
+    stopAnalyzePolling();
+    void tickAnalyzeProgress(taskId).catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (analyzeProgressError) showError(analyzeProgressError, msg);
+      btnFetchAnalyze.disabled = false;
+    });
+    analyzePollTimer = window.setInterval(() => {
+      void tickAnalyzeProgress(taskId).catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (analyzeProgressError) showError(analyzeProgressError, msg);
+        stopAnalyzePolling();
+        btnFetchAnalyze.disabled = false;
+      });
+    }, 2500);
+  }
+
+  function resumeAnalyzePollingIfNeeded() {
+    void (async () => {
+      try {
+        const res = await fetch('store/analyze_progress.php', { credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok || data.exists !== true || data.done === true) return;
+        const taskId = String(data.task_id || '');
+        if (!taskId) return;
+        if (analyzeProgressModalEl && typeof bootstrap !== 'undefined') {
+          bootstrap.Modal.getOrCreateInstance(analyzeProgressModalEl).show();
+        }
+        startAnalyzePolling(taskId);
+      } catch {
+        void 0;
+      }
+    })();
   }
 
   // -----------------------------------------------------------------------
@@ -859,159 +842,24 @@
 
     openSaveGenerateModal();
 
-    let savePhaseDone = false;
-
     try {
-      currentGenerateJobId = await startManagedJob('generate', purpose, String(window.LP_CMS?.sourceUrl || ''));
       const clientData = collectFormData();
-
-      setSaveGenRowStatus('saveGenRowSave', 'active');
-      const saveRes = await apiPost('store/save_client.php', clientData);
-      if (!saveRes.success) throw new Error(saveRes.error ?? '保存に失敗しました。');
-      setSaveGenRowStatus('saveGenRowSave', 'done');
-      savePhaseDone = true;
-
-      setSaveGenRowStatus('saveGenRowGen', 'active');
-
-      /** site_map が取れるときは 2フェーズ分割生成 */
-      /** @type {Record<string, unknown>|null} */
-      let listProbe = null;
-      try {
-        listProbe = await apiGet('store/list_internal_urls.php');
-      } catch {
-        listProbe = null;
-      }
-
-      const useTwoPhase = listProbe !== null;
-
       ensureSaveGenProgressUi();
-
-      /** @type {Record<string, unknown>} */
-      let genRes;
-
-      if (useTwoPhase) {
-        ensureSaveGenProgressUi()?.classList.remove('d-none');
-        genRes = await apiPost('store/generate_entry.php', { job_id: currentGenerateJobId }, { signal: generateSignal });
-        if (genRes.aborted === true) {
-          throw new DOMException('aborted', 'AbortError');
-        }
-        if (genRes.success !== true && genRes.ok !== true) {
-          throw new Error(
-            typeof genRes.error === 'string' ? genRes.error : 'エントリー生成に失敗しました。',
-          );
-        }
-
-        const internals = Array.isArray(listProbe.internals) ? listProbe.internals : [];
-
-        /** 解析エラー行はクライアントでもスキップ（サーバーは 400） */
-        const toRun = internals.filter(it => String(it.status ?? '') !== 'error');
-        const totalBar = Math.max(1, 1 + toRun.length);
-        const genStartMs = Date.now();
-        let completed = 1;
-        let lastSize = typeof genRes.size === 'number' ? genRes.size : 0;
-
-        setSaveGenProgress(
-          0,
-          totalBar,
-          `${totalBar} 件を生成します。目安: ${roughEstimate(totalBar, 'generate')}`,
-        );
-        const entryEta = etaString(genStartMs, completed, totalBar);
-        setSaveGenProgress(
-          completed,
-          totalBar,
-          `トップページ（index）の生成が完了しました。${entryEta || '内部ページ生成を継続します。'}`,
-        );
-
-        for (let i = 0; i < toRun.length; i++) {
-          if (generateStopRequested) {
-            break;
-          }
-          const row = /** @type {Record<string, unknown>} */ (toRun[i]);
-          const key = typeof row.key === 'string' ? row.key : '';
-          if (!key || !/^internal_\d+$/.test(key)) {
-            continue;
-          }
-
-          const n = i + 1;
-          setSaveGenProgress(
-            completed,
-            totalBar,
-            `内部ページ ${n} / ${toRun.length} 件目を生成しています…（キー「${key}」は site_map のページ ID であり、URL の並び順と一致するとは限りません）`,
-          );
-
-          try {
-            const one = await apiPost(
-              'store/generate_internal.php',
-              { key, job_id: currentGenerateJobId },
-              { timeoutMs: 180000, signal: generateSignal },
-            );
-            if (one.aborted === true) {
-              throw new DOMException('aborted', 'AbortError');
-            }
-            completed++;
-            if (typeof one.size === 'number') lastSize += one.size;
-        } catch (e) {
-            if (e instanceof DOMException && e.name === 'AbortError') {
-              generateStopRequested = true;
-              break;
-            }
-            const msgSkip = `${key}: `;
-            const reason = e instanceof Error ? e.message : String(e);
-            console.warn('generate_internal skipped', msgSkip + reason);
-            completed++;
-          }
-
-          setSaveGenProgress(
-            completed,
-            totalBar,
-            completed < totalBar
-              ? `内部ページ ${n} / ${toRun.length} 件目の処理が終わりました。${etaString(genStartMs, completed, totalBar)}`
-              : `完了 (合計 ${formatDuration((Date.now() - genStartMs) / 1000)})`,
-          );
-        }
-
-        if (generateStopRequested) {
-          setSaveGenProgress(0, 1, '停止しました。');
-          genRes = { success: false, aborted: true, size: lastSize };
-        } else {
-          setSaveGenProgress(
-            totalBar,
-            totalBar,
-            `内部ページ ${toRun.length} 件ぶんの生成処理が完了しました。完了 (合計 ${formatDuration((Date.now() - genStartMs) / 1000)})`,
-          );
-          genRes = { success: true, size: lastSize };
-          }
-        } else {
-        genRes = await apiPost('store/generate_lp.php', { job_id: currentGenerateJobId });
-        if (!genRes.success) throw new Error(genRes.error ?? 'サイト生成に失敗しました。');
+      const out = await apiPost('store/generate_start.php', {
+        csrf: String(window.LP_CMS?.csrfToken || ''),
+        client_data: clientData,
+      }, { signal: generateSignal });
+      if (!out.ok) {
+        throw new Error(typeof out.error === 'string' ? out.error : '生成ジョブ開始に失敗しました。');
       }
-
-      if (genRes.aborted === true || generateStopRequested) {
-        throw new DOMException('aborted', 'AbortError');
+      const taskId = String(out.task_id || '');
+      if (!taskId) {
+        throw new Error('task_id が取得できませんでした。');
       }
-
-      setSaveGenRowStatus('saveGenRowGen', 'done');
-      ensureSaveGenProgressUi()?.classList.add('d-none');
-
-      /** @type {number} */
-      const szNum = typeof genRes.size === 'number' ? genRes.size : 0;
-      showToast(`サイト生成完了！ (${(szNum / 1024).toFixed(1)} KB)`, 'success');
-      await finishManagedJob(currentGenerateJobId, 'done', '', { size: szNum });
-      currentGenerateJobId = '';
-
-      await sleep(350);
-      hideSaveGenerateModal();
-
-      btnSaveGenerate.disabled = false;
-
-      expandMaxReachable(3);
-
-      tryNavigateToReachedStep(3);
+      startGeneratePolling(taskId);
     } catch (err) {
       const isAbort = err instanceof DOMException && err.name === 'AbortError';
       const message = isAbort ? '生成を停止しました。' : (err instanceof Error ? err.message : String(err));
-      await finishManagedJob(currentGenerateJobId, isAbort ? 'stopped' : 'error', message);
-      currentGenerateJobId = '';
       showError(generateError, message);
       const msgEl = document.getElementById('saveGenModalErr');
       if (msgEl) {
@@ -1019,14 +867,8 @@
         msgEl.classList.remove('d-none');
       }
       document.getElementById('saveGenProgressWrap')?.classList.add('d-none');
-
-      if (isAbort && savePhaseDone) {
-        setSaveGenRowStatus('saveGenRowGen', 'pending');
-      } else if (!savePhaseDone) {
-        setSaveGenRowStatus('saveGenRowSave', 'error');
-      } else {
-        setSaveGenRowStatus('saveGenRowGen', 'error');
-      }
+      setSaveGenRowStatus('saveGenRowSave', 'error');
+      setSaveGenRowStatus('saveGenRowGen', 'error');
       document.getElementById('saveGenFooterBusy')?.classList.add('d-none');
       document.getElementById('saveGenFooterDone')?.classList.remove('d-none');
       btnSaveGenerate.disabled = false;
@@ -1034,6 +876,101 @@
       generateAbortController = null;
       generateStopRequested = false;
     }
+  }
+
+  function stopGeneratePolling() {
+    if (generatePollTimer !== null) {
+      window.clearInterval(generatePollTimer);
+      generatePollTimer = null;
+    }
+  }
+
+  async function tickGenerateProgress(taskId) {
+    const q = `?task_id=${encodeURIComponent(taskId)}`;
+    const res = await fetch(`store/generate_progress.php${q}`, { credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      throw new Error((data && data.error) ? String(data.error) : (`HTTP ${res.status}`));
+    }
+    const phase = String(data.phase || '');
+    const prog = String(data.progress_text || '000/000');
+    if (phase === 'save') {
+      setSaveGenRowStatus('saveGenRowSave', 'active');
+      setSaveGenProgress(0, 1, `保存中... ${prog}`);
+    } else if (phase === 'generate_entry') {
+      setSaveGenRowStatus('saveGenRowSave', 'done');
+      setSaveGenRowStatus('saveGenRowGen', 'active');
+      setSaveGenProgress(0, 1, `トップページ生成中... ${prog}`);
+    } else if (phase === 'generate_internal') {
+      setSaveGenRowStatus('saveGenRowSave', 'done');
+      setSaveGenRowStatus('saveGenRowGen', 'active');
+      const m = prog.match(/^(\d+)\/(\d+)$/);
+      if (m) {
+        setSaveGenProgress(Number(m[1]), Math.max(1, Number(m[2])), `内部ページ生成中... ${prog}`);
+      } else {
+        setSaveGenProgress(0, 1, `内部ページ生成中... ${prog}`);
+      }
+    }
+
+    if (data.done === true) {
+      stopGeneratePolling();
+      btnSaveGenerate.disabled = false;
+      const st = String(data.status || '');
+      if (st === 'done') {
+        setSaveGenRowStatus('saveGenRowGen', 'done');
+        setSaveGenProgress(1, 1, '生成完了');
+        await sleep(350);
+        hideSaveGenerateModal();
+        expandMaxReachable(3);
+        tryNavigateToReachedStep(3);
+      } else {
+        const msg = st === 'stale'
+          ? '生成ジョブが応答しなくなりました（stale）。'
+          : String(data.error || '生成ジョブが失敗しました。');
+        showError(generateError, msg);
+        const msgEl = document.getElementById('saveGenModalErr');
+        if (msgEl) {
+          msgEl.textContent = msg;
+          msgEl.classList.remove('d-none');
+        }
+        setSaveGenRowStatus('saveGenRowGen', 'error');
+        document.getElementById('saveGenFooterBusy')?.classList.add('d-none');
+        document.getElementById('saveGenFooterDone')?.classList.remove('d-none');
+      }
+    }
+  }
+
+  function startGeneratePolling(taskId) {
+    stopGeneratePolling();
+    void tickGenerateProgress(taskId).catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(generateError, msg);
+      btnSaveGenerate.disabled = false;
+    });
+    generatePollTimer = window.setInterval(() => {
+      void tickGenerateProgress(taskId).catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        showError(generateError, msg);
+        stopGeneratePolling();
+        btnSaveGenerate.disabled = false;
+      });
+    }, 2500);
+  }
+
+  function resumeGeneratePollingIfNeeded() {
+    void (async () => {
+      try {
+        const res = await fetch('store/generate_progress.php', { credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok || data.exists !== true || data.done === true) return;
+        const taskId = String(data.task_id || '');
+        if (!taskId) return;
+        openSaveGenerateModal();
+        startGeneratePolling(taskId);
+      } catch {
+        void 0;
+      }
+    })();
   }
 
   // -----------------------------------------------------------------------
@@ -2374,6 +2311,9 @@
     if (typeof lpInitWorkspaceManage === 'function') {
       lpInitWorkspaceManage('store/');
     }
+
+    resumeAnalyzePollingIfNeeded();
+    resumeGeneratePollingIfNeeded();
 
     document.getElementById('btnJobListRefresh')?.addEventListener('click', () => {
       void refreshJobList();
