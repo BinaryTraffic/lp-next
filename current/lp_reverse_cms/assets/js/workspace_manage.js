@@ -11,6 +11,7 @@ function lpInitWorkspaceManage(storeBase) {
   const btnDeleteSelected = document.getElementById('btnWorkspaceDeleteSelected');
   const checkAll = document.getElementById('workspaceManageCheckAll');
   const selectedIds = new Set();
+  let bulkDeleting = false;
 
   const role = (typeof window.LP_CMS !== 'undefined' && window.LP_CMS && window.LP_CMS.cmsRole)
     ? String(window.LP_CMS.cmsRole)
@@ -185,37 +186,62 @@ function lpInitWorkspaceManage(storeBase) {
   }
 
   async function deleteSelected() {
-    if (selectedIds.size === 0) return;
+    if (selectedIds.size === 0 || bulkDeleting) return;
     const ids = Array.from(selectedIds);
     if (!window.confirm(`${ids.length} 件のワークスペースを削除しますか？ data と output の両方が消えます。`)) {
       return;
     }
+    bulkDeleting = true;
+    if (btnDeleteSelected) btnDeleteSelected.disabled = true;
+    if (btnRef) btnRef.disabled = true;
+    if (checkAll) checkAll.disabled = true;
     try {
       const tok = (typeof window.LP_CMS !== 'undefined' && window.LP_CMS && window.LP_CMS.csrfToken)
         ? String(window.LP_CMS.csrfToken)
         : '';
-      const rr = await fetch(storeBase + 'workspace_delete_bulk.php', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-        body: JSON.stringify({ workspace_ids: ids, csrf: tok }),
-      });
-      const out = await rr.json().catch(() => ({}));
-      if (!rr.ok || !out.ok) {
-        window.alert((out && out.error) ? String(out.error) : ('HTTP ' + rr.status));
-        return;
+      const failed = [];
+      let deletedCount = 0;
+      let clearedSession = false;
+      const total = ids.length;
+      for (let i = 0; i < total; i += 1) {
+        const id = ids[i];
+        if (helpEl) helpEl.textContent = `削除中… ${i + 1}/${total}`;
+        if (btnDeleteSelected) btnDeleteSelected.textContent = `削除中 ${i + 1}/${total}`;
+        // 長時間ブロックを避けるため、1件ずつ Ajax で削除する
+        const rr = await fetch(storeBase + 'workspace_delete.php', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+          body: JSON.stringify({ workspace_id: id, csrf: tok }),
+        });
+        const out = await rr.json().catch(() => ({}));
+        if (!rr.ok || !out.ok) {
+          failed.push(id);
+        } else {
+          deletedCount += 1;
+          if (out.cleared_session) {
+            clearedSession = true;
+            break;
+          }
+          selectedIds.delete(id);
+        }
+        await new Promise(resolve => window.requestAnimationFrame(resolve));
       }
-      const failed = Array.isArray(out.failed) ? out.failed : [];
-      if (failed.length > 0) {
-        window.alert(`一部削除できませんでした: ${failed.map(f => String(f.id || '')).join(', ')}`);
-      }
-      if (out.cleared_session) {
+      if (clearedSession) {
         window.location.reload();
         return;
+      }
+      if (failed.length > 0) {
+        window.alert(`削除完了: ${deletedCount}/${total} 件。失敗: ${failed.join(', ')}`);
       }
       await loadList();
     } catch {
       window.alert('通信に失敗しました');
+    } finally {
+      bulkDeleting = false;
+      if (btnRef) btnRef.disabled = false;
+      if (checkAll) checkAll.disabled = false;
+      updateBulkDeleteState();
     }
   }
 
