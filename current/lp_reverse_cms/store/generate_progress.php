@@ -67,11 +67,11 @@ try {
         $age = $startAt > 0 ? (time() - $startAt) : PHP_INT_MAX;
         $idleSec = $updatedAt > 0 ? (time() - $updatedAt) : PHP_INT_MAX;
         $pidAlive = lp_generate_pid_matches_task($pid, $taskId);
-        if (!$pidAlive || $age > 900 || $idleSec > 600) {
+        if (!$pidAlive || $age > 3600 || $idleSec > 1800) {
             $task['status'] = 'stale';
             $task['error'] = !$pidAlive
                 ? 'worker process not found or pid reused (pid=' . $pid . ')'
-                : ($age > 900 ? 'timeout (>900s)' : 'no heartbeat/update (>600s)');
+                : ($age > 3600 ? 'timeout (>3600s)' : 'no heartbeat/update (>1800s)');
             GenerateTask::save($cmsRoot, $taskId, $task);
             $status = 'stale';
         }

@@ -16,27 +16,6 @@ if ($cmsRoot === '' || $taskId === '') {
 
 require_once $cmsRoot . '/lib/GenerateTask.php';
 
-function gen_fix_workspace_permissions(string $dataDir, string $outputDir): void
-{
-    foreach ([$dataDir, $outputDir] as $root) {
-        if (!is_dir($root)) {
-            continue;
-        }
-        @chmod($root, 0777);
-        @chgrp($root, 'lp-tool');
-        $it = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST
-        );
-        foreach ($it as $f) {
-            /** @var SplFileInfo $f */
-            $p = $f->getPathname();
-            @chgrp($p, 'lp-tool');
-            @chmod($p, $f->isDir() ? 0777 : 0666);
-        }
-    }
-}
-
 try {
     $task = GenerateTask::load($cmsRoot, $taskId);
     if (!is_array($task)) {
@@ -51,6 +30,33 @@ try {
         throw new RuntimeException('invalid workspace_id');
     }
     putenv('LP_WORKSPACE_ID=' . $m[1]);
+
+    register_shutdown_function(static function () use ($cmsRoot, $taskId): void {
+        $task = GenerateTask::load($cmsRoot, $taskId);
+        if (!is_array($task)) {
+            return;
+        }
+        $st = (string) ($task['status'] ?? '');
+        if (in_array($st, ['done', 'error', 'stale'], true)) {
+            return;
+        }
+        $last = error_get_last();
+        if ($last === null) {
+            return;
+        }
+        $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR];
+        if (!in_array((int) ($last['type'] ?? 0), $fatalTypes, true)) {
+            return;
+        }
+        $task['status'] = 'error';
+        $task['error'] = sprintf(
+            'fatal (%s): %s',
+            (string) ($last['type'] ?? ''),
+            (string) ($last['message'] ?? ''),
+        );
+        $task['ended_at'] = time();
+        GenerateTask::save($cmsRoot, $taskId, $task);
+    });
 
     require_once $cmsRoot . '/lib/LpWorkspace.php';
     require_once $cmsRoot . '/lib/LpGenerator.php';
@@ -70,10 +76,6 @@ try {
     if (!is_dir($dataDir)) {
         mkdir($dataDir, 0755, true);
     }
-    if (!is_dir($outputDir)) {
-        mkdir($outputDir, 0755, true);
-    }
-    gen_fix_workspace_permissions($dataDir, $outputDir);
 
     $clientData = is_array($task['client_data'] ?? null) ? $task['client_data'] : [];
     file_put_contents(
@@ -185,10 +187,10 @@ try {
         GenerateTask::save($cmsRoot, $taskId, $task);
     }
 
+    $task['progress_text'] = sprintf('%03d/%03d', $total, $total);
     $task['status'] = 'done';
     $task['phase'] = 'generate_internal';
     $task['ended_at'] = time();
-    gen_fix_workspace_permissions($dataDir, $outputDir);
     GenerateTask::save($cmsRoot, $taskId, $task);
 } catch (Throwable $e) {
     $task = GenerateTask::load($cmsRoot, $taskId);

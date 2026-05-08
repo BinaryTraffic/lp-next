@@ -51,6 +51,33 @@ try {
     $workspaceHex = $m[1];
     putenv('LP_WORKSPACE_ID=' . $workspaceHex);
 
+    register_shutdown_function(static function () use ($cmsRoot, $taskId): void {
+        $task = AnalyzeTask::load($cmsRoot, $taskId);
+        if (!is_array($task)) {
+            return;
+        }
+        $st = (string) ($task['status'] ?? '');
+        if (in_array($st, ['done', 'error', 'stale'], true)) {
+            return;
+        }
+        $last = error_get_last();
+        if ($last === null) {
+            return;
+        }
+        $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR];
+        if (!in_array((int) ($last['type'] ?? 0), $fatalTypes, true)) {
+            return;
+        }
+        $task['status'] = 'error';
+        $task['error'] = sprintf(
+            'fatal (%s): %s',
+            (string) ($last['type'] ?? ''),
+            (string) ($last['message'] ?? ''),
+        );
+        $task['ended_at'] = time();
+        AnalyzeTask::save($cmsRoot, $taskId, $task);
+    });
+
     require_once $cmsRoot . '/lib/LpWorkspace.php';
     require_once $cmsRoot . '/lib/LpFetcher.php';
     require_once $cmsRoot . '/lib/LpAssetDownloader.php';

@@ -88,6 +88,11 @@ function lp_reverse_enrich_structure_image_text_memos(
                 continue;
             }
 
+            // Vision/API が数十秒〜数分かかるため、その手前でも進捗コールバックで heartbeat させる
+            if ($memoProgressCb !== null) {
+                $memoProgressCb($memoProcessed, $denMemo);
+            }
+
             $resolved = lp_reverse_load_image_bin_for_memo($src, $outputDir, $assetMap, $maxBytes, $cmsRoot);
             if ($resolved === null) {
                 $bumpMemo();
@@ -98,6 +103,10 @@ function lp_reverse_enrich_structure_image_text_memos(
             if (!in_array($mime, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)) {
                 $bumpMemo();
                 continue;
+            }
+
+            if ($memoProgressCb !== null) {
+                $memoProgressCb($memoProcessed, $denMemo);
             }
 
             $memoRes = lp_reverse_claude_image_embedded_text_memo(

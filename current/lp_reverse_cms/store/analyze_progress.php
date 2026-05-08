@@ -72,11 +72,12 @@ try {
         $age = $startAt > 0 ? (time() - $startAt) : PHP_INT_MAX;
         $idleSec = $updatedAt > 0 ? (time() - $updatedAt) : PHP_INT_MAX;
         $pidAlive = lp_analyze_pid_matches_task($pid, $taskId);
-        if (!$pidAlive || $age > 1800 || $idleSec > 900) {
+        // finalize の Vision 1 リクエストが長時間になるため、無更新判定は緩める（heartbeat は lp_image_text_memo 側）
+        if (!$pidAlive || $age > 7200 || $idleSec > 5400) {
             $task['status'] = 'stale';
             $task['error'] = !$pidAlive
                 ? 'worker process not found or pid reused (pid=' . $pid . ')'
-                : ($age > 1800 ? 'timeout (>1800s)' : 'no heartbeat/update (>900s)');
+                : ($age > 7200 ? 'timeout (>7200s)' : 'no heartbeat/update (>5400s)');
             AnalyzeTask::save($cmsRoot, $taskId, $task);
             $status = 'stale';
         }
