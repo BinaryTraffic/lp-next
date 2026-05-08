@@ -4,6 +4,24 @@ declare(strict_types=1);
 
 final class GenerateTask
 {
+    private static function writeJsonFile(string $path, array $data): void
+    {
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        if (!is_string($json)) {
+            throw new RuntimeException('json_encode failed: ' . $path);
+        }
+        if (file_put_contents($path, $json, LOCK_EX) === false) {
+            throw new RuntimeException('write failed: ' . $path);
+        }
+    }
+
+    private static function writeTextFile(string $path, string $body): void
+    {
+        if (file_put_contents($path, $body, LOCK_EX) === false) {
+            throw new RuntimeException('write failed: ' . $path);
+        }
+    }
+
     private const DIR_NAME = 'generate_tasks';
     private const LOCK_FILE = '.generate_tasks.lock';
 
@@ -110,12 +128,8 @@ final class GenerateTask
                 'updated_at' => $now,
                 'client_data' => $clientData,
             ];
-            file_put_contents(
-                self::taskPath($cmsRoot, $taskId),
-                json_encode($task, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-                LOCK_EX
-            );
-            file_put_contents(self::pointerPath($cmsRoot, (string) $actor['email']), $taskId . PHP_EOL, LOCK_EX);
+            self::writeJsonFile(self::taskPath($cmsRoot, $taskId), $task);
+            self::writeTextFile(self::pointerPath($cmsRoot, (string) $actor['email']), $taskId . PHP_EOL);
 
             return ['task_id' => $taskId, 'progress_text' => '000/000', 'already_running' => false];
         });
@@ -140,11 +154,7 @@ final class GenerateTask
     public static function save(string $cmsRoot, string $taskId, array $task): void
     {
         $task['updated_at'] = time();
-        file_put_contents(
-            self::taskPath($cmsRoot, $taskId),
-            json_encode($task, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-            LOCK_EX
-        );
+        self::writeJsonFile(self::taskPath($cmsRoot, $taskId), $task);
     }
 
     public static function latestTaskIdForActor(string $cmsRoot, string $email): string
