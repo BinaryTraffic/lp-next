@@ -625,6 +625,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           <table class="table table-sm table-bordered mb-0 align-middle d-none" id="workspaceManageTable">
             <thead>
               <tr>
+                <th style="width:38px"><input class="form-check-input" type="checkbox" id="workspaceManageCheckAll" aria-label="全選択"></th>
                 <th>ID</th>
                 <th>所有者</th>
                 <th>状態</th>
@@ -638,6 +639,9 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
         </div>
         <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="btnWorkspaceListRefresh">
           <i class="bi bi-arrow-clockwise"></i> 再読込
+        </button>
+        <button type="button" class="btn btn-sm btn-danger mt-2 ms-2" id="btnWorkspaceDeleteSelected" disabled>
+          <i class="bi bi-trash"></i> 選択削除
         </button>
       </div>
     </div>

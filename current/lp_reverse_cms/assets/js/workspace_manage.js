@@ -1,5 +1,5 @@
 /**
- * Workspace list + owner-scoped delete (store/workspace_list.php, workspace_delete.php).
+ * Workspace list + owner-scoped delete (single/bulk).
  * @param {string} storeBase e.g. "store/" (relative to CMS root)
  */
 // eslint-disable-next-line no-unused-vars
@@ -8,6 +8,9 @@ function lpInitWorkspaceManage(storeBase) {
   const tbody = document.getElementById('workspaceManageTbody');
   const table = document.getElementById('workspaceManageTable');
   const btnRef = document.getElementById('btnWorkspaceListRefresh');
+  const btnDeleteSelected = document.getElementById('btnWorkspaceDeleteSelected');
+  const checkAll = document.getElementById('workspaceManageCheckAll');
+  const selectedIds = new Set();
 
   const role = (typeof window.LP_CMS !== 'undefined' && window.LP_CMS && window.LP_CMS.cmsRole)
     ? String(window.LP_CMS.cmsRole)
@@ -42,6 +45,9 @@ function lpInitWorkspaceManage(storeBase) {
           : `${rows.length} 件（削除は自分が所有者の ws_* のみ。未登録フォルダの削除は super_admin のみ）`;
       }
       table.classList.toggle('d-none', rows.length === 0);
+      if (checkAll) checkAll.checked = false;
+      selectedIds.clear();
+      updateBulkDeleteState();
       const cur = (data.current_ws && String(data.current_ws)) || '';
 
       rows.forEach(row => {
@@ -51,6 +57,22 @@ function lpInitWorkspaceManage(storeBase) {
         const leg = row.legacy === true;
         const isCur = row.is_current === true || id === cur;
         if (isCur) tr.classList.add('table-primary');
+
+        const canDelete = !(leg && role !== 'super_admin');
+        const tdSel = document.createElement('td');
+        tdSel.className = 'text-center';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'form-check-input';
+        cb.disabled = !canDelete;
+        cb.checked = selectedIds.has(id);
+        cb.addEventListener('change', () => {
+          if (cb.checked) selectedIds.add(id);
+          else selectedIds.delete(id);
+          updateBulkDeleteState();
+          syncCheckAll();
+        });
+        tdSel.appendChild(cb);
 
         const tdId = document.createElement('td');
         const code = document.createElement('code');
@@ -92,7 +114,7 @@ function lpInitWorkspaceManage(storeBase) {
         del.type = 'button';
         del.className = 'btn btn-sm btn-outline-danger';
         del.textContent = '削除';
-        del.disabled = leg && role !== 'super_admin';
+        del.disabled = !canDelete;
         if (leg && role === 'super_admin') {
           del.title = 'registry 未登録（旧データ）';
         }
@@ -127,6 +149,7 @@ function lpInitWorkspaceManage(storeBase) {
         const tdDel = document.createElement('td');
         tdDel.appendChild(del);
 
+        tr.appendChild(tdSel);
         tr.appendChild(tdId);
         tr.appendChild(tdOwn);
         tr.appendChild(tdSt);
@@ -137,6 +160,62 @@ function lpInitWorkspaceManage(storeBase) {
       });
     } catch {
       if (helpEl) helpEl.textContent = '一覧の取得に失敗しました。';
+    }
+  }
+
+  function updateBulkDeleteState() {
+    if (!btnDeleteSelected) return;
+    btnDeleteSelected.disabled = selectedIds.size === 0;
+    btnDeleteSelected.textContent = selectedIds.size > 0
+      ? `選択削除 (${selectedIds.size})`
+      : '選択削除';
+  }
+
+  function syncCheckAll() {
+    if (!checkAll || !tbody) return;
+    const boxes = Array.from(tbody.querySelectorAll('input.form-check-input[type="checkbox"]:not(:disabled)'));
+    if (boxes.length === 0) {
+      checkAll.checked = false;
+      checkAll.indeterminate = false;
+      return;
+    }
+    const checked = boxes.filter(b => b.checked).length;
+    checkAll.checked = checked > 0 && checked === boxes.length;
+    checkAll.indeterminate = checked > 0 && checked < boxes.length;
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    if (!window.confirm(`${ids.length} 件のワークスペースを削除しますか？ data と output の両方が消えます。`)) {
+      return;
+    }
+    try {
+      const tok = (typeof window.LP_CMS !== 'undefined' && window.LP_CMS && window.LP_CMS.csrfToken)
+        ? String(window.LP_CMS.csrfToken)
+        : '';
+      const rr = await fetch(storeBase + 'workspace_delete_bulk.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify({ workspace_ids: ids, csrf: tok }),
+      });
+      const out = await rr.json().catch(() => ({}));
+      if (!rr.ok || !out.ok) {
+        window.alert((out && out.error) ? String(out.error) : ('HTTP ' + rr.status));
+        return;
+      }
+      const failed = Array.isArray(out.failed) ? out.failed : [];
+      if (failed.length > 0) {
+        window.alert(`一部削除できませんでした: ${failed.map(f => String(f.id || '')).join(', ')}`);
+      }
+      if (out.cleared_session) {
+        window.location.reload();
+        return;
+      }
+      await loadList();
+    } catch {
+      window.alert('通信に失敗しました');
     }
   }
 
@@ -162,6 +241,25 @@ function lpInitWorkspaceManage(storeBase) {
   }
 
   if (btnRef) btnRef.addEventListener('click', () => { void loadList(); });
+  if (btnDeleteSelected) btnDeleteSelected.addEventListener('click', () => { void deleteSelected(); });
+  if (checkAll && tbody) {
+    checkAll.addEventListener('change', () => {
+      const boxes = Array.from(tbody.querySelectorAll('input.form-check-input[type="checkbox"]:not(:disabled)'));
+      boxes.forEach(b => {
+        b.checked = checkAll.checked;
+        const tr = b.closest('tr');
+        if (!tr) return;
+        const idEl = tr.querySelector('code');
+        const id = idEl ? String(idEl.textContent || '') : '';
+        if (id !== '') {
+          if (b.checked) selectedIds.add(id);
+          else selectedIds.delete(id);
+        }
+      });
+      updateBulkDeleteState();
+      syncCheckAll();
+    });
+  }
 
   void 0;
 }

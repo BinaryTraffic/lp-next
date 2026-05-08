@@ -76,6 +76,10 @@ try {
             json_encode($sub, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
             LOCK_EX
         );
+        if ($jobId !== '') {
+            $jobRegistry->heartbeat($jobId, 'finalize_analyze internal patch loop');
+            lp_job_check_abort($jobRegistry, $jobId, '解析ジョブが停止されました。');
+        }
     }
 
     lp_reverse_load_env();
@@ -88,13 +92,26 @@ try {
             $assetMap = $rawMap;
         }
     }
+    $memoProgressCb = null;
+    if ($jobId !== '') {
+        $memoProgressCb = static function (int $done, int $total) use ($jobRegistry, $jobId): void {
+            // 進行中に止められるように、画像メモループの中でも heartbeat + stop check を行う。
+            $jobRegistry->heartbeat($jobId, sprintf('finalize_analyze memos %d/%d', $done, $total));
+            lp_job_check_abort($jobRegistry, $jobId, '解析ジョブが停止されました。');
+        };
+    }
+
     $structure = lp_reverse_enrich_structure_image_text_memos(
         $structure,
         $cmsRoot,
         $dataDir,
         $assetMap,
-        null
+        $memoProgressCb
     );
+    if ($jobId !== '') {
+        $jobRegistry->heartbeat($jobId, 'finalize_analyze memos done');
+        lp_job_check_abort($jobRegistry, $jobId, '解析ジョブが停止されました。');
+    }
 
     require_once dirname(__DIR__) . '/lib/suggest_industries.php';
     $industrySuggest = lp_reverse_suggest_industries_from_structure($structure);
