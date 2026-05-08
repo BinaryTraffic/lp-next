@@ -62,12 +62,23 @@ try {
     require_once $cmsRoot . '/lib/env_load.php';
     require_once $cmsRoot . '/lib/lp_image_text_memo.php';
 
+    $logFile = sys_get_temp_dir() . '/analyze_worker_' . $taskId . '.log';
+    $logFh = @fopen($logFile, 'w');
+    $anaLog = static function (string $msg) use ($logFh, $taskId): void {
+        $line = date('Y-m-d H:i:s') . ' [' . $taskId . '] ' . $msg . "\n";
+        if ($logFh) {
+            fwrite($logFh, $line);
+            fflush($logFh);
+        }
+    };
+
     $task['status'] = 'running';
     $task['pid'] = (int) getmypid();
     $task['started_at'] = time();
     $task['phase'] = 'fetch';
     $task['progress_text'] = '000/000';
     ana_task_save($cmsRoot, $taskId, $task);
+    $anaLog('worker started pid=' . getmypid());
 
     $sourceUrl = trim((string) ($task['source_url'] ?? ''));
     if ($sourceUrl === '') {
@@ -95,18 +106,22 @@ try {
         @unlink($f);
     }
 
+    $anaLog('fetch start url=' . $sourceUrl);
     $fetcher = new LpFetcher();
     $result = $fetcher->fetch($sourceUrl);
     $html = (string) ($result['html'] ?? '');
     $finalUrl = (string) ($result['final_url'] ?? $sourceUrl);
+    $anaLog('fetch done final_url=' . $finalUrl . ' html_bytes=' . strlen($html));
     ana_storage_put($dataDir . 'source.html', $html);
     ana_storage_put($dataDir . 'fetched.html', $html);
     ana_storage_put($dataDir . 'source_url.txt', $finalUrl);
     ana_storage_put($dataDir . 'clone_id.txt', bin2hex(random_bytes(16)));
     ana_storage_put($dataDir . 'asset_map.json', '{}');
 
+    $anaLog('asset download start');
     $downloader = new LpAssetDownloader($outputDir);
     $assetMap = $downloader->downloadAll($html, $finalUrl);
+    $anaLog('asset download done count=' . count($assetMap));
     ana_storage_put(
         $dataDir . 'asset_map.json',
         (string) json_encode($assetMap, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
@@ -119,6 +134,7 @@ try {
     $task['phase'] = 'analyze_entry';
     $task['progress_text'] = '000/000';
     ana_task_save($cmsRoot, $taskId, $task);
+    $anaLog('analyze_entry start');
 
     $analyzer = new LpAnalyzer();
     $structure = $analyzer->analyze($html, $finalUrl);
@@ -174,9 +190,14 @@ try {
     $total = max(1, count($candidates));
     $task['phase'] = 'analyze_internal';
     ana_task_save($cmsRoot, $taskId, $task);
+    $anaLog('analyze_internal start total=' . $total);
     foreach ($candidates as $i => $row) {
         $canon = (string) ($row['canonical_url'] ?? '');
+        $anaLog(sprintf('processing %03d/%03d url=%s', $i + 1, $total, $canon));
+        $t0 = microtime(true);
         $res = LpInternalPagesPipeline::processSingleUrl($canon, $dataDir, $outputDir);
+        $elapsed = round(microtime(true) - $t0, 1);
+        $anaLog(sprintf('done     %03d/%03d elapsed=%.1fs fetch_ok=%s', $i + 1, $total, $elapsed, ($res['fetch_ok'] ?? false) ? 'true' : 'false'));
         $index = (int) ($row['index'] ?? $i);
         $key = 'internal_' . (string) $index;
         $outputRel = $key . '/index.html';
@@ -214,6 +235,7 @@ try {
 
     $task['phase'] = 'finalize';
     ana_task_save($cmsRoot, $taskId, $task);
+    $anaLog('finalize start');
 
     $structurePath = $dataDir . 'lp_structure.json';
     $structure = json_decode((string) file_get_contents($structurePath), true);
@@ -274,7 +296,11 @@ try {
     $task['ended_at'] = time();
     $task['progress_text'] = sprintf('%03d/%03d', $total, $total);
     ana_task_save($cmsRoot, $taskId, $task);
+    $anaLog('worker done');
 } catch (Throwable $e) {
+    if (isset($anaLog)) {
+        $anaLog('ERROR ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    }
     $task = AnalyzeTask::load($cmsRoot, $taskId);
     if (is_array($task)) {
         $task['status'] = 'error';
