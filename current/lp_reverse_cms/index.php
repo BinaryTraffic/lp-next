@@ -211,9 +211,25 @@ $superAdminUx    = (string) getenv('CMS_SUPER_ADMIN');
 $superAdminLw    = strtolower(trim($superAdminUx));
 
 require_once __DIR__ . '/lib/WorkspaceRegistry.php';
+require_once __DIR__ . '/lib/AnalyzeTask.php';
 WorkspaceRegistry::touchCurrent($cmsRootAuth, $sessEmailUx);
 
 $workspaceDataDir = LpWorkspace::dataDir($cmsRootAuth);
+// If session workspace has no analysis data, use latest completed analyze task's workspace.
+if (!file_exists($workspaceDataDir . 'lp_structure.json')) {
+    $latestAnaId = AnalyzeTask::latestTaskIdForActor($cmsRootAuth, $sessEmailUx);
+    if ($latestAnaId !== '') {
+        $latestAna = AnalyzeTask::load($cmsRootAuth, $latestAnaId);
+        if (is_array($latestAna) && ($latestAna['status'] ?? '') === 'done') {
+            $wsCandidate = (string) ($latestAna['workspace_id'] ?? '');
+            if (preg_match('/^ws_[a-f0-9]{32}$/', $wsCandidate)) {
+                putenv('LP_WORKSPACE_ID=' . substr($wsCandidate, 3));
+                LpWorkspace::reset();
+                $workspaceDataDir = LpWorkspace::dataDir($cmsRootAuth);
+            }
+        }
+    }
+}
 $structureFile    = $workspaceDataDir . 'lp_structure.json';
 $clientFile       = $workspaceDataDir . 'client_data.json';
 $outputFile       = LpWorkspace::outputDir($cmsRootAuth) . 'index.html';

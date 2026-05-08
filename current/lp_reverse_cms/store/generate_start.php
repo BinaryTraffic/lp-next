@@ -7,6 +7,7 @@ require_once $cmsRoot . '/lib/lp_reverse_store_auth.php';
 require_once $cmsRoot . '/lib/lp_reverse_csrf.php';
 require_once $cmsRoot . '/lib/LpWorkspace.php';
 require_once $cmsRoot . '/lib/GenerateTask.php';
+require_once $cmsRoot . '/lib/AnalyzeTask.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     header('Content-Type: application/json; charset=utf-8');
@@ -32,7 +33,22 @@ try {
     if (!is_array($clientData)) {
         throw new InvalidArgumentException('client_data required');
     }
+    // Use session workspace; fall back to latest completed analyze task's workspace
+    // if the session workspace has no analysis data (e.g. session changed after analyze completed).
     $workspaceId = 'ws_' . LpWorkspace::id();
+    $dataDir = rtrim($cmsRoot, '/\\') . '/data/' . $workspaceId . '/';
+    if (!is_readable($dataDir . 'lp_structure.json')) {
+        $latestAnalyzeId = AnalyzeTask::latestTaskIdForActor($cmsRoot, (string) $actor['email']);
+        if ($latestAnalyzeId !== '') {
+            $latestAnalyze = AnalyzeTask::load($cmsRoot, $latestAnalyzeId);
+            if (is_array($latestAnalyze) && ($latestAnalyze['status'] ?? '') === 'done') {
+                $wsCandidate = (string) ($latestAnalyze['workspace_id'] ?? '');
+                if (preg_match('/^ws_[a-f0-9]{32}$/', $wsCandidate)) {
+                    $workspaceId = $wsCandidate;
+                }
+            }
+        }
+    }
     $created = GenerateTask::createIfNotRunning($cmsRoot, $actor, $workspaceId, $clientData);
     if (empty($created['already_running'])) {
         $worker = $cmsRoot . '/tools/generate_worker.php';

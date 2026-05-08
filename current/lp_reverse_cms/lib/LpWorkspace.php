@@ -58,6 +58,13 @@ final class LpWorkspace
         return self::$id;
     }
 
+    /** Force re-bootstrap (use after putenv to switch workspace mid-request). */
+    public static function reset(): void
+    {
+        self::$bootstrapped = false;
+        self::$id = '';
+    }
+
     public static function dataDir(string $cmsRoot): string
     {
         self::bootstrap();
