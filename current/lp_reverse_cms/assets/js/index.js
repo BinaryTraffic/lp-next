@@ -619,18 +619,11 @@
   }
 
   async function tickAnalyzeProgress(taskId) {
-    /** @type {Record<string, unknown>} */
-    let data;
-    try {
-      data = await fetchAnalyzeProgress(taskId);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      // 参照 task_id が消えた/無効でも最新タスクにフォールバックして継続する。
-      if (msg.includes('task not found')) {
-        data = await fetchAnalyzeProgress('');
-      } else {
-        throw e;
-      }
+    const data = await fetchAnalyzeProgress(taskId);
+    const ws = String(window.LP_CMS?.workspaceName || '');
+    const taskWs = String(data.workspace_id || '');
+    if (ws && taskWs && ws !== taskWs) {
+      throw new Error('別ワークスペースの解析ジョブです。ページを再読み込みして再実行してください。');
     }
 
     const phase = String(data.phase || '');
@@ -711,6 +704,9 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok || data.exists !== true || data.done === true) return;
         const taskId = String(data.task_id || '');
+        const ws = String(window.LP_CMS?.workspaceName || '');
+        const taskWs = String(data.workspace_id || '');
+        if (ws && taskWs && ws !== taskWs) return;
         if (!taskId) return;
         if (analyzeProgressModalEl && typeof bootstrap !== 'undefined') {
           bootstrap.Modal.getOrCreateInstance(analyzeProgressModalEl).show();
@@ -909,6 +905,11 @@
     if (!res.ok || !data.ok) {
       throw new Error((data && data.error) ? String(data.error) : (`HTTP ${res.status}`));
     }
+    const ws = String(window.LP_CMS?.workspaceName || '');
+    const taskWs = String(data.workspace_id || '');
+    if (ws && taskWs && ws !== taskWs) {
+      throw new Error('別ワークスペースの生成ジョブです。ページを再読み込みして再実行してください。');
+    }
     const phase = String(data.phase || '');
     const prog = String(data.progress_text || '000/000');
     if (phase === 'save') {
@@ -981,6 +982,9 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok || data.exists !== true || data.done === true) return;
         const taskId = String(data.task_id || '');
+        const ws = String(window.LP_CMS?.workspaceName || '');
+        const taskWs = String(data.workspace_id || '');
+        if (ws && taskWs && ws !== taskWs) return;
         if (!taskId) return;
         openSaveGenerateModal();
         startGeneratePolling(taskId);

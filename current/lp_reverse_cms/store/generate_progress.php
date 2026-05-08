@@ -57,6 +57,7 @@ try {
         'ok' => true,
         'exists' => true,
         'task_id' => $taskId,
+        'workspace_id' => (string) ($task['workspace_id'] ?? ''),
         'status' => $status,
         'phase' => (string) ($task['phase'] ?? ''),
         'progress_text' => (string) ($task['progress_text'] ?? '000/000'),

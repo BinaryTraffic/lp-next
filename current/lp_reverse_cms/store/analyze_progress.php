@@ -32,17 +32,6 @@ try {
     }
     $task = AnalyzeTask::load($cmsRoot, $taskId);
     if (!is_array($task) || !AnalyzeTask::canView($task, $actor)) {
-        // 指定 task_id が消えていても、同一ユーザーの最新タスクがあれば自動フォールバックする。
-        $fallbackId = AnalyzeTask::latestTaskIdForActor($cmsRoot, (string) $actor['email']);
-        if ($fallbackId !== '' && $fallbackId !== $taskId) {
-            $fallbackTask = AnalyzeTask::load($cmsRoot, $fallbackId);
-            if (is_array($fallbackTask) && AnalyzeTask::canView($fallbackTask, $actor)) {
-                $taskId = $fallbackId;
-                $task = $fallbackTask;
-            }
-        }
-    }
-    if (!is_array($task) || !AnalyzeTask::canView($task, $actor)) {
         http_response_code(404);
         echo json_encode(['ok' => false, 'error' => 'task not found'], JSON_UNESCAPED_UNICODE);
         exit;
@@ -68,6 +57,7 @@ try {
         'ok' => true,
         'exists' => true,
         'task_id' => $taskId,
+        'workspace_id' => (string) ($task['workspace_id'] ?? ''),
         'status' => $status,
         'phase' => (string) ($task['phase'] ?? ''),
         'progress_text' => (string) ($task['progress_text'] ?? '000/000'),

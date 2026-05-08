@@ -53,6 +53,7 @@ try {
     echo json_encode([
         'ok' => true,
         'task_id' => $created['task_id'],
+        'workspace_id' => $workspaceId,
         'already_running' => !empty($created['already_running']),
         'progress_text' => $created['progress_text'],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
