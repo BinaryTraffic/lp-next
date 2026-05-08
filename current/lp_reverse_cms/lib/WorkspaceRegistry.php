@@ -119,8 +119,8 @@ final class WorkspaceRegistry
                     'mtime'             => $mtime,
                     'is_current'        => $name === $current,
                     'legacy'            => true,
-                    // deleteIfAllowed と同じ（未登録は super_admin のみ）
-                    'can_delete'      => $roleLc === 'super_admin',
+                    // この行が一覧に載る時点で API は super_admin のみ。常に true（実削除は deleteIfAllowed で再検証）
+                    'can_delete'      => true,
                 ];
 
                 continue;

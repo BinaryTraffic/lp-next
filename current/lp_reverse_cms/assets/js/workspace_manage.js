@@ -19,6 +19,7 @@ function lpInitWorkspaceManage(storeBase) {
   const role = (typeof window.LP_CMS !== 'undefined' && window.LP_CMS && window.LP_CMS.cmsRole)
     ? String(window.LP_CMS.cmsRole)
     : '';
+  const roleLc = role.toLowerCase().trim();
 
   function humanBytes(n) {
     const u = ['B', 'KB', 'MB', 'GB'];
@@ -62,9 +63,15 @@ function lpInitWorkspaceManage(storeBase) {
         const isCur = row.is_current === true || id === cur;
         if (isCur) tr.classList.add('table-primary');
 
-        const canDelete = typeof row.can_delete === 'boolean'
-          ? row.can_delete
-          : !(leg && role !== 'super_admin');
+        // legacy はサーバーが super_admin にのみ返す契約 → can_delete の値に依存せず UI を有効化（実削除は POST で検証）
+        let canDelete;
+        if (leg) {
+          canDelete = true;
+        } else if (typeof row.can_delete === 'boolean') {
+          canDelete = row.can_delete;
+        } else {
+          canDelete = !(leg && roleLc !== 'super_admin');
+        }
         const tdSel = document.createElement('td');
         tdSel.className = 'text-center';
         const cb = document.createElement('input');
@@ -72,7 +79,7 @@ function lpInitWorkspaceManage(storeBase) {
         cb.className = 'form-check-input';
         cb.disabled = !canDelete;
         if (!canDelete && leg) {
-          cb.title = '未登録フォルダは super_admin のみ削除できます';
+          cb.title = '削除権限がありません（サーバー側の検証に失敗した可能性があります）';
         }
         cb.checked = selectedIds.has(id);
         cb.addEventListener('change', () => {
@@ -125,9 +132,9 @@ function lpInitWorkspaceManage(storeBase) {
         del.textContent = '削除';
         del.disabled = !canDelete;
         if (leg && canDelete) {
-          del.title = 'registry 未登録（旧データ）。super_admin のみ削除可';
+          del.title = 'registry 未登録（旧データ）。super_admin のみ一覧表示されます';
         } else if (leg && !canDelete) {
-          del.title = '未登録フォルダは super_admin のみ削除できます';
+          del.title = '削除できません（権限またはサーバー側エラー）';
         }
         del.addEventListener('click', async () => {
           const w = leg ? '（未登録フォルダ）' : '';
