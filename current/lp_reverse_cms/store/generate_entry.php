@@ -9,6 +9,8 @@ require_once __DIR__ . '/../lib/LpIoNeutralizer.php';
 require_once __DIR__ . '/../lib/LpOutputAudit.php';
 require_once __DIR__ . '/../lib/LpSiteMapper.php';
 require_once __DIR__ . '/../lib/LpWorkspace.php';
+require_once __DIR__ . '/../lib/JobRegistry.php';
+require_once __DIR__ . '/../lib/lp_job_runtime.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -19,8 +21,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
+    [$body, $jobId] = lp_job_parse_body_and_id();
     $cmsRoot       = dirname(__DIR__);
     $dataDir       = LpWorkspace::dataDir($cmsRoot);
+    $jobRegistry   = new JobRegistry($cmsRoot);
+    if ($jobId !== '') {
+        $jobRegistry->heartbeat($jobId, 'generate_entry start');
+        lp_job_check_abort($jobRegistry, $jobId, '生成ジョブが停止されました。');
+    }
     $abortFlag     = $dataDir . 'abort.flag';
     $outputDir     = LpWorkspace::outputDir($cmsRoot);
     $structureFile = $dataDir . 'lp_structure.json';
@@ -29,6 +37,9 @@ try {
 
     if (file_exists($abortFlag)) {
         @unlink($abortFlag);
+        if ($jobId !== '') {
+            $jobRegistry->finish($jobId, 'stopped', null, 'abort.flag detected');
+        }
         echo json_encode([
             'ok'      => false,
             'aborted' => true,
@@ -87,6 +98,10 @@ try {
     $indexPage = $siteMapRaw['pages']['index'];
 
     $html = $generator->generate($structure, $clientData, $dataDir, $assetOverride);
+    if ($jobId !== '') {
+        $jobRegistry->heartbeat($jobId, 'generate_entry html ready');
+        lp_job_check_abort($jobRegistry, $jobId, '生成ジョブが停止されました。');
+    }
 
     $regions = $indexPage['data_io_regions'] ?? [];
     $html = LpIoNeutralizer::applyNeutralization($html, is_array($regions) ? $regions : []);

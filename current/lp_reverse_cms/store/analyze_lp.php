@@ -12,6 +12,8 @@ require_once __DIR__ . '/../lib/LpWorkspace.php';
 require_once __DIR__ . '/../lib/env_load.php';
 require_once __DIR__ . '/../lib/lp_analyze_log.php';
 require_once __DIR__ . '/../lib/lp_image_text_memo.php';
+require_once __DIR__ . '/../lib/JobRegistry.php';
+require_once __DIR__ . '/../lib/lp_job_runtime.php';
 
 header('Cache-Control: no-store');
 
@@ -25,6 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $bodyRaw = file_get_contents('php://input');
 $bodyIn  = ($bodyRaw !== false && trim($bodyRaw) !== '')
     ? json_decode($bodyRaw, true) : [];
+$jobIdAnalyze = '';
+if (is_array($bodyIn)) {
+    $jobIdAnalyze = trim((string) ($bodyIn['job_id'] ?? ''));
+}
 $streamProgress = is_array($bodyIn) && !empty($bodyIn['stream_progress']);
 
 if ($streamProgress) {
@@ -55,7 +61,13 @@ $emitNd = static function (array $row) use ($streamProgress): void {
     flush();
 };
 
-$dataDir = LpWorkspace::dataDir(dirname(__DIR__));
+$cmsRootAnalyze = dirname(__DIR__);
+$dataDir = LpWorkspace::dataDir($cmsRootAnalyze);
+$jobRegistryAnalyze = new JobRegistry($cmsRootAnalyze);
+if ($jobIdAnalyze !== '') {
+    $jobRegistryAnalyze->heartbeat($jobIdAnalyze, 'analyze_lp start');
+    lp_job_check_abort($jobRegistryAnalyze, $jobIdAnalyze, '解析ジョブが停止されました。');
+}
 
 if ($streamProgress) {
     $GLOBALS['lp_reverse_analyze_stream_progress']      = true;
@@ -100,7 +112,7 @@ if ($streamProgress) {
  *
  * @throws Throwable
  */
-$runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
+$runAnalyze = function () use ($dataDir, $emitNd, $streamProgress, $jobRegistryAnalyze, $jobIdAnalyze): array {
     $requestId = substr(bin2hex(random_bytes(8)), 0, 12);
     $startedAt = microtime(true);
     $mark = static function (string $phase, array $context = []) use ($dataDir, $requestId, $startedAt): void {
@@ -161,6 +173,10 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
 
     $mark('phase:analyzer:start');
     $structure = $analyzer->analyze($html, $sourceUrl, $walkProgressCb);
+    if ($jobIdAnalyze !== '') {
+        $jobRegistryAnalyze->heartbeat($jobIdAnalyze, 'analyze_lp analyzed');
+        lp_job_check_abort($jobRegistryAnalyze, $jobIdAnalyze, '解析ジョブが停止されました。');
+    }
     $mark('phase:analyzer:done', [
         'sections'       => count($structure['sections'] ?? []),
         'total_elements' => (int) ($structure['total_elements'] ?? 0),
@@ -201,6 +217,10 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress): array {
     $outputDirAnalyze = LpWorkspace::outputDir($cmsRootAnalyze);
     $mark('phase:internal_pages:start');
     LpInternalPagesPipeline::run($structure, $dataDir, $outputDirAnalyze, $emitProgressOnly);
+    if ($jobIdAnalyze !== '') {
+        $jobRegistryAnalyze->heartbeat($jobIdAnalyze, 'analyze_lp internal run done');
+        lp_job_check_abort($jobRegistryAnalyze, $jobIdAnalyze, '解析ジョブが停止されました。');
+    }
     $mark('phase:internal_pages:done', [
         'internal_pages_seen' => count($structure['internal_pages'] ?? []),
     ]);

@@ -9,6 +9,8 @@ require_once __DIR__ . '/../lib/LpSiteMapper.php';
 require_once __DIR__ . '/../lib/LpWorkspace.php';
 require_once __DIR__ . '/../lib/env_load.php';
 require_once __DIR__ . '/../lib/lp_image_text_memo.php';
+require_once __DIR__ . '/../lib/JobRegistry.php';
+require_once __DIR__ . '/../lib/lp_job_runtime.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -19,7 +21,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 }
 
 try {
+    [$body, $jobId] = lp_job_parse_body_and_id();
     $cmsRoot = dirname(__DIR__);
+    $jobRegistry = new JobRegistry($cmsRoot);
+    if ($jobId !== '') {
+        $jobRegistry->heartbeat($jobId, 'finalize_analyze start');
+        lp_job_check_abort($jobRegistry, $jobId, '解析ジョブが停止されました。');
+    }
     $dataDir = LpWorkspace::dataDir($cmsRoot);
     $outputDir = LpWorkspace::outputDir($cmsRoot);
     $structurePath = $dataDir . 'lp_structure.json';
@@ -44,6 +52,10 @@ try {
         }
     }
     LpInternalPagesPipeline::patchInternalRelativeHrefs($structure, $urlToOutput);
+    if ($jobId !== '') {
+        $jobRegistry->heartbeat($jobId, 'finalize_analyze patched');
+        lp_job_check_abort($jobRegistry, $jobId, '解析ジョブが停止されました。');
+    }
 
     // 内部ページ構造 JSON にも同じパッチを適用（内部ページ同士のリンクを pages/slug.html に書き換える）
     foreach ($structure['internal_pages'] ?? [] as $row) {

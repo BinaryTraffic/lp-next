@@ -12,6 +12,8 @@ require_once __DIR__ . '/../lib/LpMapper.php';
 require_once __DIR__ . '/../lib/LpSiteMapper.php';
 require_once __DIR__ . '/../lib/LpWorkspace.php';
 require_once __DIR__ . '/../lib/env_load.php';
+require_once __DIR__ . '/../lib/JobRegistry.php';
+require_once __DIR__ . '/../lib/lp_job_runtime.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -22,7 +24,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 }
 
 try {
+    [$body, $jobId] = lp_job_parse_body_and_id();
     $cmsRoot = dirname(__DIR__);
+    $jobRegistry = new JobRegistry($cmsRoot);
+    if ($jobId !== '') {
+        $jobRegistry->heartbeat($jobId, 'analyze_entry start');
+        lp_job_check_abort($jobRegistry, $jobId, '解析ジョブが停止されました。');
+    }
     $dataDir = LpWorkspace::dataDir($cmsRoot);
     $outputDir = LpWorkspace::outputDir($cmsRoot);
     $htmlFile = $dataDir . 'fetched.html';
@@ -39,6 +47,10 @@ try {
 
     $analyzer = new LpAnalyzer();
     $structure = $analyzer->analyze($html, $sourceUrl);
+    if ($jobId !== '') {
+        $jobRegistry->heartbeat($jobId, 'analyze_entry analyzed');
+        lp_job_check_abort($jobRegistry, $jobId, '解析ジョブが停止されました。');
+    }
     $diag = $structure['parse_diagnostics'] ?? null;
 
     $mapper = new LpMapper();

@@ -643,6 +643,41 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
     </div>
   </div>
 
+  <div class="card border-secondary shadow-sm mb-3" id="jobManageCard">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center"
+         style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#jobManageCollapse"
+         aria-expanded="false" aria-controls="jobManageCollapse">
+      <span>
+        <i class="bi bi-cpu me-2"></i><strong>実行中ジョブ</strong>
+        <span class="text-muted small fw-normal ms-1">（誰が・目的・対象WS）</span>
+      </span>
+      <i class="bi bi-chevron-down"></i>
+    </div>
+    <div class="collapse" id="jobManageCollapse">
+      <div class="card-body py-2">
+        <p class="small text-muted mb-2" id="jobManageHelp">読み込み中…</p>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered mb-0 align-middle d-none" id="jobManageTable">
+            <thead>
+              <tr>
+                <th>種別</th>
+                <th>実行者</th>
+                <th>目的</th>
+                <th>対象WS</th>
+                <th>開始（UTC）</th>
+                <th style="width:90px"></th>
+              </tr>
+            </thead>
+            <tbody id="jobManageTbody"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="btnJobListRefresh">
+          <i class="bi bi-arrow-clockwise"></i> 再読込
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Step indicator -->
   <div class="d-flex align-items-center gap-0 mb-4" id="stepIndicator">
     <?php
@@ -946,6 +981,7 @@ window.LP_CMS = {
   hasOutput:    <?= $hasOutput    ? 'true' : 'false' ?>,
   sourceUrl:    <?= json_encode($sourceUrl, JSON_THROW_ON_ERROR) ?>,
   outputWsPrefix: <?= json_encode($outputWsPrefix, JSON_THROW_ON_ERROR) ?>,
+  workspaceName: <?= json_encode($workspaceName, JSON_THROW_ON_ERROR) ?>,
   cmsRole: <?= json_encode($currentRoleUx, JSON_THROW_ON_ERROR) ?>,
   csrfToken: <?= json_encode($csrfTokenUx, JSON_THROW_ON_ERROR) ?>,
 };

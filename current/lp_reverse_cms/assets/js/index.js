@@ -14,6 +14,10 @@
   /** @type {AbortController|null} */
   let generateAbortController = null;
   let generateStopRequested = false;
+  /** @type {string} */
+  let currentAnalyzeJobId = '';
+  /** @type {string} */
+  let currentGenerateJobId = '';
 
   // -----------------------------------------------------------------------
   // DOM refs
@@ -377,11 +381,12 @@
   }
 
   /** @returns {Promise<Record<string, unknown>>} */
-  async function apiPostAnalyzeStream(endpoint) {
+  async function apiPostAnalyzeStream(endpoint, extra = {}) {
+    const body = Object.assign({ stream_progress: true }, (extra && typeof extra === 'object') ? extra : {});
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8', Accept: 'application/x-ndjson, application/json' },
-      body: JSON.stringify({ stream_progress: true }),
+      body: JSON.stringify(body),
     });
     const ctype = (res.headers.get('Content-Type') || '').toLowerCase();
 
@@ -546,6 +551,11 @@
       lpUrlInput.focus();
       return;
     }
+    const purpose = (prompt('この解析の目的を入力してください（必須）', `解析: ${url}`) || '').trim();
+    if (!purpose) {
+      showError(fetchError, '目的は必須です。');
+      return;
+    }
 
     btnFetchAnalyze.disabled = true;
     fetchError.classList.add('d-none');
@@ -563,8 +573,9 @@
     }
 
     try {
+      currentAnalyzeJobId = await startManagedJob('analyze', purpose, url);
       // -- Phase 1: fetch HTML + download assets --
-      const fetchRes = await apiPost('store/fetch_lp.php', { url });
+      const fetchRes = await apiPost('store/fetch_lp.php', { url, job_id: currentAnalyzeJobId });
       if (!fetchRes.success) throw new Error(fetchRes.error ?? 'HTML取得に失敗しました。');
 
       const htmlKb  = ((fetchRes.html_size ?? fetchRes.size ?? 0) / 1024).toFixed(1);
@@ -602,7 +613,7 @@
       let twoPhaseAnalyze = false;
 
       try {
-        const entryRes = await apiPost('store/analyze_entry.php', { stream_progress: true });
+        const entryRes = await apiPost('store/analyze_entry.php', { stream_progress: true, job_id: currentAnalyzeJobId });
         if (!entryRes.ok && !entryRes.success) {
           throw new Error(typeof entryRes.error === 'string' ? entryRes.error : 'analyze_entry failed');
         }
@@ -639,7 +650,7 @@
           }
 
           try {
-            await apiPost('store/analyze_internal_page.php', { index: idx }, { timeoutMs: 240000 });
+            await apiPost('store/analyze_internal_page.php', { index: idx, job_id: currentAnalyzeJobId }, { timeoutMs: 240000 });
           } catch (e) {
             console.warn('analyze_internal_page skipped', idx, e);
           }
@@ -648,7 +659,7 @@
         if (progAnalyzeDetail) {
           progAnalyzeDetail.textContent = '【最終処理】 画像メモ・業種推定を処理しています...';
         }
-        const finalizeRes = await apiPost('store/finalize_analyze.php', {});
+        const finalizeRes = await apiPost('store/finalize_analyze.php', { job_id: currentAnalyzeJobId });
         if (!finalizeRes.ok && !finalizeRes.success) {
           throw new Error(
             typeof finalizeRes.error === 'string'
@@ -657,7 +668,7 @@
           );
         }
       } else {
-        analyzeRes = await apiPostAnalyzeStream('store/analyze_lp.php');
+        analyzeRes = await apiPostAnalyzeStream('store/analyze_lp.php', { job_id: currentAnalyzeJobId });
         if (!analyzeRes.success) throw new Error(analyzeRes.error ?? '解析に失敗しました。');
       }
 
@@ -684,12 +695,23 @@
       progAnalyzeBarWrap?.classList.add('d-none');
 
       await sleep(800);
+      await finishManagedJob(currentAnalyzeJobId, 'done', '', {
+        section_count: analyzeRes.section_count,
+        total_elements: analyzeRes.total_elements,
+      });
+      currentAnalyzeJobId = '';
       if (analyzeProgressModalEl && typeof bootstrap !== 'undefined') {
         bootstrap.Modal.getOrCreateInstance(analyzeProgressModalEl).hide();
       }
       window.location.href = window.location.pathname + '?step=2';
 
     } catch (err) {
+      await finishManagedJob(
+        currentAnalyzeJobId,
+        'error',
+        err instanceof Error ? err.message : String(err),
+      );
+      currentAnalyzeJobId = '';
       showError(fetchError, err.message);
       if (analyzeProgressError) showError(analyzeProgressError, err.message);
       setProgState(progFetch,   'error');
@@ -733,6 +755,12 @@
       generateStopRequested = true;
       generateAbortController?.abort();
       try {
+        if (currentGenerateJobId) {
+          await apiPost('store/job_stop.php', {
+            csrf: String(window.LP_CMS?.csrfToken || ''),
+            job_id: currentGenerateJobId,
+          });
+        }
         await fetch('store/abort_generate.php', { method: 'POST' });
       } catch {}
       setSaveGenProgress(0, 1, '停止しました。');
@@ -806,6 +834,11 @@
   }
 
   async function runSaveAndGenerate() {
+    const purpose = (prompt('この生成の目的を入力してください（必須）', '編集反映のため再生成') || '').trim();
+    if (!purpose) {
+      showError(generateError, '目的は必須です。');
+      return;
+    }
     generateAbortController = new AbortController();
     generateStopRequested = false;
     const generateSignal = generateAbortController.signal;
@@ -818,6 +851,7 @@
     let savePhaseDone = false;
 
     try {
+      currentGenerateJobId = await startManagedJob('generate', purpose, String(window.LP_CMS?.sourceUrl || ''));
       const clientData = collectFormData();
 
       setSaveGenRowStatus('saveGenRowSave', 'active');
@@ -846,7 +880,7 @@
 
       if (useTwoPhase) {
         ensureSaveGenProgressUi()?.classList.remove('d-none');
-        genRes = await apiPost('store/generate_entry.php', {}, { signal: generateSignal });
+        genRes = await apiPost('store/generate_entry.php', { job_id: currentGenerateJobId }, { signal: generateSignal });
         if (genRes.aborted === true) {
           throw new DOMException('aborted', 'AbortError');
         }
@@ -897,7 +931,7 @@
           try {
             const one = await apiPost(
               'store/generate_internal.php',
-              { key },
+              { key, job_id: currentGenerateJobId },
               { timeoutMs: 180000, signal: generateSignal },
             );
             if (one.aborted === true) {
@@ -937,7 +971,7 @@
           genRes = { success: true, size: lastSize };
         }
       } else {
-        genRes = await apiPost('store/generate_lp.php', {});
+        genRes = await apiPost('store/generate_lp.php', { job_id: currentGenerateJobId });
         if (!genRes.success) throw new Error(genRes.error ?? 'サイト生成に失敗しました。');
       }
 
@@ -951,6 +985,8 @@
       /** @type {number} */
       const szNum = typeof genRes.size === 'number' ? genRes.size : 0;
       showToast(`サイト生成完了！ (${(szNum / 1024).toFixed(1)} KB)`, 'success');
+      await finishManagedJob(currentGenerateJobId, 'done', '', { size: szNum });
+      currentGenerateJobId = '';
 
       await sleep(350);
       hideSaveGenerateModal();
@@ -963,6 +999,8 @@
     } catch (err) {
       const isAbort = err instanceof DOMException && err.name === 'AbortError';
       const message = isAbort ? '生成を停止しました。' : (err instanceof Error ? err.message : String(err));
+      await finishManagedJob(currentGenerateJobId, isAbort ? 'stopped' : 'error', message);
+      currentGenerateJobId = '';
       showError(generateError, message);
       const msgEl = document.getElementById('saveGenModalErr');
       if (msgEl) {
@@ -1817,6 +1855,42 @@
     }
   }
 
+  function resolveCurrentWorkspaceId() {
+    const fromName = (window.LP_CMS?.workspaceName || '').trim();
+    if (/^ws_[a-f0-9]{32}$/.test(fromName)) return fromName;
+    const m = String(window.LP_CMS?.outputWsPrefix || '').match(/ws_[a-f0-9]{32}/i);
+    return m ? m[0].toLowerCase() : '';
+  }
+
+  async function startManagedJob(type, purpose, sourceUrl = '') {
+    const csrf = String(window.LP_CMS?.csrfToken || '');
+    const ws = resolveCurrentWorkspaceId();
+    const res = await apiPost('store/job_start.php', {
+      csrf,
+      type,
+      purpose,
+      source_url: sourceUrl,
+      workspace_id: ws,
+    });
+    const job = (res && typeof res === 'object' && res.job && typeof res.job === 'object') ? res.job : null;
+    const id = job && typeof job.id === 'string' ? job.id : '';
+    if (!id) throw new Error('job_id の取得に失敗しました。');
+    return id;
+  }
+
+  async function finishManagedJob(jobId, status, message = '', result = null) {
+    if (!jobId) return;
+    try {
+      await apiPost('store/job_finish.php', {
+        csrf: String(window.LP_CMS?.csrfToken || ''),
+        job_id: jobId,
+        status,
+        error: message || null,
+        result: result && typeof result === 'object' ? result : null,
+      });
+    } catch {}
+  }
+
   async function apiPost(endpoint, data, options = {}) {
     const timeoutMs = Number.isFinite(options.timeoutMs) ? Number(options.timeoutMs) : 0;
     const externalSignal = options.signal instanceof AbortSignal ? options.signal : null;
@@ -1936,6 +2010,77 @@
     const hiMin = Math.ceil((n * hi) / 60);
     if (loMin === hiMin) return `約 ${loMin} 分`;
     return `約 ${loMin}〜${hiMin} 分`;
+  }
+
+  function fmtUtc(iso) {
+    const s = String(iso || '').trim();
+    if (!s) return '—';
+    return s.replace('T', ' ').replace('Z', ' UTC');
+  }
+
+  async function refreshJobList() {
+    const help = document.getElementById('jobManageHelp');
+    const table = document.getElementById('jobManageTable');
+    const tbody = document.getElementById('jobManageTbody');
+    if (!help || !table || !tbody) return;
+    help.textContent = '読み込み中…';
+    tbody.innerHTML = '';
+    try {
+      const res = await apiGet('store/job_list.php');
+      const jobs = Array.isArray(res.jobs) ? res.jobs : [];
+      if (jobs.length === 0) {
+        help.textContent = '実行中ジョブはありません。';
+        table.classList.add('d-none');
+        return;
+      }
+      table.classList.remove('d-none');
+      help.textContent = `${jobs.length} 件のジョブが稼働中です。`;
+
+      jobs.forEach((j) => {
+        const tr = document.createElement('tr');
+        const id = String(j.id || '');
+        const owner = String(j.owner_email || '');
+        const status = String(j.status || '');
+        const type = String(j.type || '');
+        const purpose = String(j.purpose || '');
+        const ws = String(j.workspace_id || '');
+        const started = fmtUtc(String(j.started_at || ''));
+        const stopBtn = document.createElement('button');
+        stopBtn.type = 'button';
+        stopBtn.className = 'btn btn-sm btn-outline-danger';
+        stopBtn.textContent = (status === 'stopping') ? '停止中' : '停止';
+        stopBtn.disabled = status === 'stopping';
+        stopBtn.addEventListener('click', async () => {
+          if (!confirm(`ジョブ ${id} を停止しますか？`)) return;
+          try {
+            await apiPost('store/job_stop.php', {
+              csrf: String(window.LP_CMS?.csrfToken || ''),
+              job_id: id,
+            });
+            if (currentAnalyzeJobId === id) {
+              currentAnalyzeJobId = '';
+            }
+            if (currentGenerateJobId === id) {
+              currentGenerateJobId = '';
+              generateStopRequested = true;
+              generateAbortController?.abort();
+              try { await fetch('store/abort_generate.php', { method: 'POST' }); } catch {}
+            }
+            await refreshJobList();
+          } catch (e) {
+            alert(e instanceof Error ? e.message : String(e));
+          }
+        });
+        tr.innerHTML = `<td>${type}</td><td class="small">${owner}</td><td class="small">${purpose}</td><td><code>${ws}</code></td><td class="small text-muted">${started}</td>`;
+        const td = document.createElement('td');
+        td.appendChild(stopBtn);
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      });
+    } catch (e) {
+      table.classList.add('d-none');
+      help.textContent = e instanceof Error ? e.message : 'ジョブ一覧の取得に失敗しました。';
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -2218,6 +2363,13 @@
     if (typeof lpInitWorkspaceManage === 'function') {
       lpInitWorkspaceManage('store/');
     }
+
+    document.getElementById('btnJobListRefresh')?.addEventListener('click', () => {
+      void refreshJobList();
+    });
+    document.getElementById('jobManageCollapse')?.addEventListener('shown.bs.collapse', () => {
+      void refreshJobList();
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);

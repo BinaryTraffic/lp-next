@@ -6,6 +6,8 @@ set_time_limit(0);
 
 require_once __DIR__ . '/../lib/LpInternalPagesPipeline.php';
 require_once __DIR__ . '/../lib/LpWorkspace.php';
+require_once __DIR__ . '/../lib/JobRegistry.php';
+require_once __DIR__ . '/../lib/lp_job_runtime.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -17,11 +19,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 
 try {
     $cmsRoot = dirname(__DIR__);
+    $jobRegistry = new JobRegistry($cmsRoot);
     $dataDir = LpWorkspace::dataDir($cmsRoot);
     $outputDir = LpWorkspace::outputDir($cmsRoot);
 
-    $raw = file_get_contents('php://input');
-    $body = $raw ? (json_decode($raw, true) ?? []) : [];
+    [$body, $jobId] = lp_job_parse_body_and_id();
+    if ($jobId !== '') {
+        $jobRegistry->heartbeat($jobId, 'analyze_internal start');
+        lp_job_check_abort($jobRegistry, $jobId, '解析ジョブが停止されました。');
+    }
     $index = (int) ($body['index'] ?? -1);
     if ($index < 0) {
         throw new RuntimeException('index が不正です。');
@@ -61,6 +67,10 @@ try {
     }
 
     $res = LpInternalPagesPipeline::processSingleUrl($canon, $dataDir, $outputDir);
+    if ($jobId !== '') {
+        $jobRegistry->heartbeat($jobId, 'analyze_internal done');
+        lp_job_check_abort($jobRegistry, $jobId, '解析ジョブが停止されました。');
+    }
     $key = 'internal_' . (string) $index;
     $wsFolder = basename(rtrim(str_replace('\\', '/', $outputDir), '/'));
     $outputRel = $key . '/index.html';
