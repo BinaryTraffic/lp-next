@@ -6,6 +6,28 @@ $cmsRoot = dirname(__DIR__);
 require_once $cmsRoot . '/lib/lp_reverse_store_auth.php';
 require_once $cmsRoot . '/lib/GenerateTask.php';
 
+function lp_generate_pid_matches_task(int $pid, string $taskId): bool
+{
+    if ($pid <= 0) {
+        return false;
+    }
+    if (!function_exists('posix_kill') || !@posix_kill($pid, 0)) {
+        return false;
+    }
+    $cmdlinePath = '/proc/' . $pid . '/cmdline';
+    if (!is_readable($cmdlinePath)) {
+        return true;
+    }
+    $cmdline = (string) file_get_contents($cmdlinePath);
+    if ($cmdline === '') {
+        return true;
+    }
+    $cmdline = str_replace("\0", ' ', $cmdline);
+
+    return str_contains($cmdline, 'tools/generate_worker.php')
+        && str_contains($cmdline, $taskId);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
     header('Content-Type: application/json; charset=utf-8');
     http_response_code(405);
@@ -41,13 +63,15 @@ try {
     if ($status === 'running') {
         $pid = (int) ($task['pid'] ?? 0);
         $startAt = (int) ($task['started_at'] ?? 0);
+        $updatedAt = (int) ($task['updated_at'] ?? $startAt);
         $age = $startAt > 0 ? (time() - $startAt) : PHP_INT_MAX;
-        $pidAlive = $pid > 0 && (function_exists('posix_kill') ? @posix_kill($pid, 0) : true);
-        if (!$pidAlive || $age > 900) {
+        $idleSec = $updatedAt > 0 ? (time() - $updatedAt) : PHP_INT_MAX;
+        $pidAlive = lp_generate_pid_matches_task($pid, $taskId);
+        if (!$pidAlive || $age > 900 || $idleSec > 600) {
             $task['status'] = 'stale';
-            $task['error'] = $pidAlive
-                ? 'timeout (>900s)'
-                : 'worker process not found (pid=' . $pid . ')';
+            $task['error'] = !$pidAlive
+                ? 'worker process not found or pid reused (pid=' . $pid . ')'
+                : ($age > 900 ? 'timeout (>900s)' : 'no heartbeat/update (>600s)');
             GenerateTask::save($cmsRoot, $taskId, $task);
             $status = 'stale';
         }

@@ -274,12 +274,28 @@ try {
         LpInternalPagesPipeline::patchInternalRelativeHrefs($sub, $urlToOutput);
         ana_storage_put($subPath, (string) json_encode($sub, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
+    $task['progress_text'] = '096/100';
+    ana_task_save($cmsRoot, $taskId, $task);
 
     lp_reverse_load_env();
     $assetMapPath = $dataDir . 'asset_map.json';
     $assetMapRaw = is_readable($assetMapPath) ? json_decode((string) file_get_contents($assetMapPath), true) : [];
     $assetMap = is_array($assetMapRaw) ? $assetMapRaw : [];
-    $structure = lp_reverse_enrich_structure_image_text_memos($structure, $cmsRoot, $dataDir, $assetMap, null);
+    $structure = lp_reverse_enrich_structure_image_text_memos(
+        $structure,
+        $cmsRoot,
+        $dataDir,
+        $assetMap,
+        static function (int $done, int $total) use ($cmsRoot, $taskId, &$task): void {
+            $safeTotal = max(1, $total);
+            $ratio = min(1, max(0, $done / $safeTotal));
+            $pct = 96 + (int) floor($ratio * 3); // 096 -> 099
+            $task['progress_text'] = sprintf('%03d/%03d', min(99, $pct), 100);
+            ana_task_save($cmsRoot, $taskId, $task);
+        }
+    );
+    $task['progress_text'] = '099/100';
+    ana_task_save($cmsRoot, $taskId, $task);
     require_once $cmsRoot . '/lib/suggest_industries.php';
     $industrySuggest = lp_reverse_suggest_industries_from_structure($structure);
     ana_storage_put(
