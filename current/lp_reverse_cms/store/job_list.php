@@ -16,7 +16,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
 try {
     $actor = lp_reverse_store_auth_actor($cmsRoot);
     $reg = new JobRegistry($cmsRoot);
+    $reg->reconcileStaleJobs();
     $jobs = $reg->list($actor, true);
+    foreach ($jobs as $idx => $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $wid = strtolower(trim((string) ($row['workspace_id'] ?? '')));
+        if (preg_match('/^ws_[a-f0-9]{32}$/', $wid) !== 1) {
+            $jobs[$idx]['workspace_disk_present'] = false;
+
+            continue;
+        }
+        $dataDir = $cmsRoot . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . $wid;
+        $outDir = $cmsRoot . DIRECTORY_SEPARATOR . 'output' . DIRECTORY_SEPARATOR . $wid;
+        $jobs[$idx]['workspace_disk_present'] = is_dir($dataDir) || is_dir($outDir);
+    }
     echo json_encode(['ok' => true, 'jobs' => $jobs], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     header('Content-Type: application/json; charset=utf-8');

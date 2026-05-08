@@ -82,12 +82,13 @@ final class WorkspaceRegistry
     /**
      * @param array{'email': string, 'role': string} $actor
      *
-     * @return list<array{id: string, owner_email: string, created_at: string, last_active_at: string, state: string, bytes: int, mtime: int, is_current: bool, legacy: bool}>
+     * @return list<array{id: string, owner_email: string, created_at: string, last_active_at: string, state: string, bytes: int, mtime: int, is_current: bool, legacy: bool, can_delete: bool}>
      */
     public function listForActor(array $actor): array
     {
         $email = strtolower(trim($actor['email']));
         $role  = $actor['role'];
+        $roleLc = strtolower(trim((string) $role));
         $raw   = $this->load();
         /** @var array<string, array<string, mixed>> $ws */
         $ws = $raw['workspaces'] ?? [];
@@ -104,7 +105,7 @@ final class WorkspaceRegistry
             $legacy = $meta === null;
 
             if ($legacy) {
-                if ($role !== 'super_admin') {
+                if ($roleLc !== 'super_admin') {
                     continue;
                 }
                 [$bytes, $mtime] = $this->dirStats($name);
@@ -118,6 +119,8 @@ final class WorkspaceRegistry
                     'mtime'             => $mtime,
                     'is_current'        => $name === $current,
                     'legacy'            => true,
+                    // deleteIfAllowed と同じ（未登録は super_admin のみ）
+                    'can_delete'      => $roleLc === 'super_admin',
                 ];
 
                 continue;
@@ -127,11 +130,11 @@ final class WorkspaceRegistry
             if ($owner === '') {
                 continue;
             }
-            if ($role !== 'super_admin' && $role !== 'admin' && $owner !== $email) {
+            if ($roleLc !== 'super_admin' && $roleLc !== 'admin' && $owner !== $email) {
                 continue;
             }
             // admin sees only own (same as owner) per product rule; super_admin sees all
-            if ($role === 'admin' && $owner !== $email) {
+            if ($roleLc === 'admin' && $owner !== $email) {
                 continue;
             }
 
@@ -150,6 +153,8 @@ final class WorkspaceRegistry
                 'mtime'              => $mtime,
                 'is_current'         => $name === $current,
                 'legacy'             => false,
+                'can_delete'       => $roleLc === 'super_admin'
+                    || ($owner !== '' && $owner === $email),
             ];
         }
 
@@ -170,9 +175,9 @@ final class WorkspaceRegistry
         }
         $workspaceFolder = strtolower($workspaceFolder);
         $email = strtolower(trim($actor['email']));
-        $role  = $actor['role'];
+        $roleLc = strtolower(trim((string) ($actor['role'] ?? '')));
 
-        $allowed = $this->withFileLock(LOCK_EX, function () use ($workspaceFolder, $email, $role): bool {
+        $allowed = $this->withFileLock(LOCK_EX, function () use ($workspaceFolder, $email, $roleLc): bool {
             $raw = $this->readJsonFile();
             /** @var array<string, array<string, mixed>> $map */
             $map = $raw['workspaces'] ?? [];
@@ -183,7 +188,7 @@ final class WorkspaceRegistry
             $legacy = !is_array($meta);
 
             if ($legacy) {
-                if ($role !== 'super_admin') {
+                if ($roleLc !== 'super_admin') {
                     return false;
                 }
 
@@ -192,7 +197,7 @@ final class WorkspaceRegistry
 
             $owner = strtolower(trim((string) ($meta['owner_email'] ?? '')));
 
-            return ($owner !== '' && $owner === $email) || $role === 'super_admin';
+            return ($owner !== '' && $owner === $email) || $roleLc === 'super_admin';
         });
 
         if (!$allowed) {

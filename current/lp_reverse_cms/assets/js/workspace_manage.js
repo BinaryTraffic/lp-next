@@ -62,13 +62,18 @@ function lpInitWorkspaceManage(storeBase) {
         const isCur = row.is_current === true || id === cur;
         if (isCur) tr.classList.add('table-primary');
 
-        const canDelete = !(leg && role !== 'super_admin');
+        const canDelete = typeof row.can_delete === 'boolean'
+          ? row.can_delete
+          : !(leg && role !== 'super_admin');
         const tdSel = document.createElement('td');
         tdSel.className = 'text-center';
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.className = 'form-check-input';
         cb.disabled = !canDelete;
+        if (!canDelete && leg) {
+          cb.title = '未登録フォルダは super_admin のみ削除できます';
+        }
         cb.checked = selectedIds.has(id);
         cb.addEventListener('change', () => {
           if (cb.checked) selectedIds.add(id);
@@ -119,8 +124,10 @@ function lpInitWorkspaceManage(storeBase) {
         del.className = 'btn btn-sm btn-outline-danger';
         del.textContent = '削除';
         del.disabled = !canDelete;
-        if (leg && role === 'super_admin') {
-          del.title = 'registry 未登録（旧データ）';
+        if (leg && canDelete) {
+          del.title = 'registry 未登録（旧データ）。super_admin のみ削除可';
+        } else if (leg && !canDelete) {
+          del.title = '未登録フォルダは super_admin のみ削除できます';
         }
         del.addEventListener('click', async () => {
           const w = leg ? '（未登録フォルダ）' : '';

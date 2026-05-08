@@ -234,6 +234,85 @@ final class JobRegistry
     }
 
     /**
+     * UI に残り続ける orphaned ジョブを整理する。
+     * - stopping が長時間続く → stopped（ワーカーが job_finish を呼ばず落ちた場合）
+     * - running が heartbeat 途絶え → error
+     *
+     * @return int 状態を更新したジョブ件数
+     */
+    public function reconcileStaleJobs(int $stoppingStaleSec = 900, int $runningStaleSec = 7200): int
+    {
+        $now = time();
+
+        return $this->withLock(LOCK_EX, function () use ($now, $stoppingStaleSec, $runningStaleSec): int {
+            $root = $this->readRoot();
+            /** @var array<string, array<string, mixed>> $jobs */
+            $jobs = $root['jobs'];
+            $changed = 0;
+
+            foreach ($jobs as $jid => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $st = (string) ($row['status'] ?? '');
+                $hbIso = trim((string) ($row['last_heartbeat_at'] ?? ''));
+                $hb = 0;
+                if ($hbIso !== '') {
+                    $hbParsed = strtotime($hbIso);
+                    if ($hbParsed !== false) {
+                        $hb = $hbParsed;
+                    }
+                }
+
+                if ($st === 'stopping') {
+                    $abortIso = trim((string) ($row['abort_requested_at'] ?? ''));
+                    $abortAt = 0;
+                    if ($abortIso !== '') {
+                        $abParsed = strtotime($abortIso);
+                        if ($abParsed !== false) {
+                            $abortAt = $abParsed;
+                        }
+                    }
+                    $refs = [];
+                    if ($hb > 0) {
+                        $refs[] = $hb;
+                    }
+                    if ($abortAt > 0) {
+                        $refs[] = $abortAt;
+                    }
+                    $ref = $refs !== [] ? min($refs) : $now;
+                    if ($now - $ref >= $stoppingStaleSec) {
+                        $row['status'] = 'stopped';
+                        $row['ended_at'] = gmdate('c');
+                        $row['last_heartbeat_at'] = gmdate('c');
+                        $row['error'] = 'reconciled: stopping timeout (worker did not finish)';
+                        $jobs[$jid] = $row;
+                        ++$changed;
+                    }
+
+                    continue;
+                }
+
+                if ($st === 'running' && $hb > 0 && $now - $hb >= $runningStaleSec) {
+                    $row['status'] = 'error';
+                    $row['ended_at'] = gmdate('c');
+                    $row['last_heartbeat_at'] = gmdate('c');
+                    $row['error'] = 'reconciled: heartbeat timeout';
+                    $jobs[$jid] = $row;
+                    ++$changed;
+                }
+            }
+
+            if ($changed > 0) {
+                $root['jobs'] = $jobs;
+                $this->writeRoot($root);
+            }
+
+            return $changed;
+        });
+    }
+
+    /**
      * @template T
      * @param callable(): T $fn
      * @return T

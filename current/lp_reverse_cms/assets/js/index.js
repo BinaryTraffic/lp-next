@@ -2087,6 +2087,7 @@
         const type = String(j.type || '');
         const purpose = String(j.purpose || '');
         const ws = String(j.workspace_id || '');
+        const wsFolderMissing = j.workspace_disk_present === false;
         const started = fmtUtc(String(j.started_at || ''));
         const stopBtn = document.createElement('button');
         stopBtn.type = 'button';
@@ -2114,7 +2115,10 @@
             alert(e instanceof Error ? e.message : String(e));
           }
         });
-        tr.innerHTML = `<td>${type}</td><td class="small">${owner}</td><td class="small">${purpose}</td><td><code>${ws}</code></td><td class="small text-muted">${started}</td>`;
+        const wsCell = wsFolderMissing
+          ? `<td><code>${ws}</code> <span class="badge bg-secondary">フォルダ無し</span></td>`
+          : `<td><code>${ws}</code></td>`;
+        tr.innerHTML = `<td>${type}</td><td class="small">${owner}</td><td class="small">${purpose}</td>${wsCell}<td class="small text-muted">${started}</td>`;
         const td = document.createElement('td');
         td.appendChild(stopBtn);
         tr.appendChild(td);
