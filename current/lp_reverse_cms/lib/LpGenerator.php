@@ -411,8 +411,9 @@ HTML;
      * &lt;/body&gt; 直前にクリックインターセプター JS を注入する（静的プレビュー内リンク → generate_internal）
      *
      * @param array<string,string> $internalUrlMap source_url variant → internal_N
+     * @param string $wsId ワークスペース ID（HTML に埋め込み、session 依存を排除）
      */
-    public function injectClickInterceptorScript(string $html, string $entryOrigin, array $internalUrlMap, int $pageDepth = 0): string
+    public function injectClickInterceptorScript(string $html, string $entryOrigin, array $internalUrlMap, int $pageDepth = 0, string $wsId = ''): string
     {
         $entryOrigin = trim($entryOrigin);
         if ($entryOrigin === '' || $internalUrlMap === []) {
@@ -423,11 +424,12 @@ HTML;
         if ($mapJson === false) {
             return $html;
         }
-        $originJson = json_encode($entryOrigin, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $cmsPath = '/current/lp_reverse_cms/store/generate_internal.php';
-        $cmsJson = json_encode($cmsPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $rootPath = $pageDepth > 0 ? str_repeat('../', $pageDepth) : '';
+        $originJson  = json_encode($entryOrigin, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $cmsPath     = '/current/lp_reverse_cms/store/generate_internal.php';
+        $cmsJson     = json_encode($cmsPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $rootPath    = $pageDepth > 0 ? str_repeat('../', $pageDepth) : '';
         $rootPathJson = json_encode($rootPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $wsIdJson    = json_encode($wsId, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $script =
             '<script data-lp-interceptor>' . "\n"
@@ -436,6 +438,7 @@ HTML;
             . '  var CMS      = ' . $cmsJson . ';' . "\n"
             . '  var MAP      = ' . $mapJson . ';' . "\n"
             . '  var LP_ROOT  = ' . $rootPathJson . ';' . "\n"
+            . '  var WS_ID    = ' . $wsIdJson . ';' . "\n"
             . '  document.addEventListener(\'click\', function(e){' . "\n"
             . '    var a = e.target.closest(\'a[href]\');' . "\n"
             . '    if (!a) return;' . "\n"
@@ -454,8 +457,9 @@ HTML;
             . '    e.preventDefault();' . "\n"
             . '    fetch(CMS, {' . "\n"
             . '      method: \'POST\',' . "\n"
+            . '      credentials: \'same-origin\',' . "\n"
             . '      headers: {\'Content-Type\': \'application/json\'},' . "\n"
-            . '      body: JSON.stringify({key: key})' . "\n"
+            . '      body: JSON.stringify({key: key, ws_id: WS_ID})' . "\n"
             . '    })' . "\n"
             . '    .then(function(r){ return r.json(); })' . "\n"
             . '    .then(function(d){' . "\n"

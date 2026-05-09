@@ -78,11 +78,28 @@ try {
     }
 
     $clientData = is_array($task['client_data'] ?? null) ? $task['client_data'] : [];
-    file_put_contents(
-        $dataDir . 'client_data.json',
-        (string) json_encode($clientData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-        LOCK_EX
-    );
+    $cdPath = $dataDir . 'client_data.json';
+    // Read existing client_data.json (written by save_page_client.php whenever the
+    // user saves the index page).  Only seed the file for brand-new workspaces so
+    // that a re-generation triggered from an internal page cannot overwrite the
+    // index-page customisations that were already persisted.
+    $existingClientData = [];
+    if (is_readable($cdPath)) {
+        $dec = json_decode((string) file_get_contents($cdPath), true);
+        if (is_array($dec)) {
+            $existingClientData = $dec;
+        }
+    }
+    if (!file_exists($cdPath)) {
+        file_put_contents(
+            $cdPath,
+            (string) json_encode($clientData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            LOCK_EX
+        );
+    }
+    // Authoritative fallback for pages without a page_client/<key>.json.
+    // Prefer the preserved client_data.json over the task payload.
+    $clientDataFallback = $existingClientData !== [] ? $existingClientData : $clientData;
 
     /**
      * Load per-page client data from page_client/<key>.json if present.
@@ -146,13 +163,13 @@ try {
     $indexPage = $siteMapRaw['pages']['index'];
     // LpGenerator::generate が長時間ブロックする間も updated_at を進める（stale 誤判定回避）
     GenerateTask::save($cmsRoot, $taskId, $task);
-    $indexClientData = $loadPageClient($dataDir, 'index', $clientData);
+    $indexClientData = $loadPageClient($dataDir, 'index', $clientDataFallback);
     $html = $generator->generate($structure, $indexClientData, $dataDir, $assetOverride);
     $regions = $indexPage['data_io_regions'] ?? [];
     $html = LpIoNeutralizer::applyNeutralization($html, is_array($regions) ? $regions : []);
     $urlMap = LpGenerator::buildInternalUrlToPageKeyMap($siteMapRaw);
     $origin = LpGenerator::entryOriginFromSiteMap($siteMapRaw);
-    $html = $generator->injectClickInterceptorScript($html, $origin, $urlMap, 0);
+    $html = $generator->injectClickInterceptorScript($html, $origin, $urlMap, 0, LpWorkspace::id());
     $localPathRel = trim((string) ($indexPage['local_path'] ?? ''));
     if ($localPathRel === '') {
         throw new RuntimeException('index local_path empty');
@@ -194,22 +211,23 @@ try {
         }
         $task['generate_internal_active_key'] = $pageKey;
         GenerateTask::save($cmsRoot, $taskId, $task);
-        $subClientData = $loadPageClient($dataDir, $pageKey, $clientData);
+        $subClientData = $loadPageClient($dataDir, $pageKey, $clientDataFallback);
         $subHtml = $generator->generate($subStruct, $subClientData, $dataDir, $assetOverride);
         $subRegions = $pageRow['data_io_regions'] ?? [];
         $subHtml = LpIoNeutralizer::applyNeutralization($subHtml, is_array($subRegions) ? $subRegions : []);
         $subLocal = trim((string) ($pageRow['local_path'] ?? ''));
         $subDepth = LpGenerator::computeLocalPathDepth($subLocal);
         $subHtml = LpGenerator::fixOutputAssetPaths($subHtml, $subDepth);
-        $subHtml = $generator->injectClickInterceptorScript($subHtml, $origin, $urlMap, $subDepth);
+        $subHtml = $generator->injectClickInterceptorScript($subHtml, $origin, $urlMap, $subDepth, LpWorkspace::id());
         if ($subLocal !== '') {
             $subTarget = $generator->filesystemPathForSiteMapLocal($outputDir, $subLocal);
             $subDir = dirname($subTarget);
             if (!is_dir($subDir)) {
                 mkdir($subDir, 0755, true);
             }
-            @file_put_contents($subTarget, $subHtml);
-            LpSiteMapper::persistSinglePageGenerated($dataDir, $siteMapRaw, $pageKey);
+            if (file_put_contents($subTarget, $subHtml) !== false) {
+                LpSiteMapper::persistSinglePageGenerated($dataDir, $siteMapRaw, $pageKey);
+            }
         }
         $task['progress_text'] = sprintf('%03d/%03d', $i + 1, $total);
         GenerateTask::save($cmsRoot, $taskId, $task);

@@ -45,6 +45,14 @@ try {
         exit;
     }
 
+    // クリックインターセプターが HTML に埋め込んだ ws_id を優先する。
+    // iframe 内 fetch からセッションクッキーが届かないケースをカバー。
+    $bodyWsId = strtolower(trim((string) ($body['ws_id'] ?? '')));
+    if (LpWorkspace::isValidId($bodyWsId)) {
+        putenv('LP_WORKSPACE_ID=' . $bodyWsId);
+        LpWorkspace::reset();
+    }
+
     $cmsRoot       = dirname(__DIR__);
     $jobRegistry   = new JobRegistry($cmsRoot);
     if ($jobId !== '') {
@@ -169,7 +177,7 @@ try {
     $origin    = LpGenerator::entryOriginFromSiteMap($siteMapRaw);
     $pageDepth = LpGenerator::computeLocalPathDepth($localPathRel);
     $html      = LpGenerator::fixOutputAssetPaths($html, $pageDepth);
-    $html      = $generator->injectClickInterceptorScript($html, $origin, $urlMap, $pageDepth);
+    $html      = $generator->injectClickInterceptorScript($html, $origin, $urlMap, $pageDepth, LpWorkspace::id());
 
     if (!is_dir($outputDir)) {
         mkdir($outputDir, 0755, true);

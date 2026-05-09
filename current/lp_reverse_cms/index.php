@@ -255,8 +255,11 @@ if ($hasStructure) {
         $structure = $decoded;
     }
 }
-if (file_exists($clientFile)) {
-    $decoded = json_decode((string) file_get_contents($clientFile), true);
+// Prefer per-page index data (saved by tree UI) over the top-level fallback.
+$pageClientIndexFile = $workspaceDataDir . 'page_client/index.json';
+$clientDataSource = is_readable($pageClientIndexFile) ? $pageClientIndexFile : $clientFile;
+if (file_exists($clientDataSource)) {
+    $decoded = json_decode((string) file_get_contents($clientDataSource), true);
     if (is_array($decoded)) {
         $clientData = $decoded;
     }
