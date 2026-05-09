@@ -121,6 +121,12 @@ body {
   box-shadow: 0 0 0 .2rem rgba(13,110,253,.15);
 }
 
+/* Step 1 URL — placeholder lighter than real input text */
+#lpUrlInput::placeholder {
+  color: #adb5bd;
+  opacity: 1;
+}
+
 /* ---------- Toast-like status badge ---------- */
 #statusToast {
   position: fixed;
