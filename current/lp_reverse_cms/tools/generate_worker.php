@@ -200,6 +200,7 @@ try {
         $subHtml = LpIoNeutralizer::applyNeutralization($subHtml, is_array($subRegions) ? $subRegions : []);
         $subLocal = trim((string) ($pageRow['local_path'] ?? ''));
         $subDepth = LpGenerator::computeLocalPathDepth($subLocal);
+        $subHtml = LpGenerator::fixOutputAssetPaths($subHtml, $subDepth);
         $subHtml = $generator->injectClickInterceptorScript($subHtml, $origin, $urlMap, $subDepth);
         if ($subLocal !== '') {
             $subTarget = $generator->filesystemPathForSiteMapLocal($outputDir, $subLocal);

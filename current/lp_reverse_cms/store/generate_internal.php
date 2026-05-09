@@ -168,6 +168,7 @@ try {
     $urlMap    = LpGenerator::buildInternalUrlToPageKeyMap($siteMapRaw);
     $origin    = LpGenerator::entryOriginFromSiteMap($siteMapRaw);
     $pageDepth = LpGenerator::computeLocalPathDepth($localPathRel);
+    $html      = LpGenerator::fixOutputAssetPaths($html, $pageDepth);
     $html      = $generator->injectClickInterceptorScript($html, $origin, $urlMap, $pageDepth);
 
     if (!is_dir($outputDir)) {

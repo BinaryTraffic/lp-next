@@ -353,6 +353,61 @@ HTML;
     }
 
     /**
+     * サブディレクトリに置かれたページ（depth ≥ 1）の HTML に含まれる
+     * 出力ルート相対アセットパス（assets/img/… 等）を、正しい相対深さに補正する。
+     *
+     * LpAssetDownloader はすべてのアセットを output/ws_XXX/assets/ 以下に保存し、
+     * HTML 内のパスを "assets/img/foo.png" のようなルート相対形式に書き換える。
+     * ページが output/ws_XXX/items/gold.html のように1段深い場合は
+     * "../assets/img/foo.png" と書かなければブラウザが解決できない。
+     *
+     * 対象属性: src, href, srcset, および CSS url() 内のパス
+     *
+     * @param string $html       生成済み HTML
+     * @param int    $depth      ページの深さ（computeLocalPathDepth の戻り値）
+     * @return string            パス補正済み HTML
+     */
+    public static function fixOutputAssetPaths(string $html, int $depth): string
+    {
+        if ($depth <= 0) {
+            return $html;
+        }
+
+        $prefix = str_repeat('../', $depth);
+
+        // 1. src="assets/  /  href="assets/
+        $html = (string) preg_replace(
+            '/\b(src|href)="assets\//i',
+            '$1="' . $prefix . 'assets/',
+            $html
+        );
+
+        // 2. url('assets/  /  url("assets/  /  url(assets/
+        $html = (string) preg_replace(
+            '/url\(([\'"]?)assets\//i',
+            'url($1' . $prefix . 'assets/',
+            $html
+        );
+
+        // 3. srcset="..."  (カンマ区切りのエントリそれぞれを補正)
+        $html = (string) preg_replace_callback(
+            '/\bsrcset="([^"]*)"/i',
+            static function (array $m) use ($prefix): string {
+                // エントリ先頭の "assets/" を補正（スペース・カンマ・先頭）
+                $fixed = (string) preg_replace(
+                    '/((?:^|,)\s*)assets\//m',
+                    '$1' . $prefix . 'assets/',
+                    $m[1]
+                );
+                return 'srcset="' . $fixed . '"';
+            },
+            $html
+        );
+
+        return $html;
+    }
+
+    /**
      * &lt;/body&gt; 直前にクリックインターセプター JS を注入する（静的プレビュー内リンク → generate_internal）
      *
      * @param array<string,string> $internalUrlMap source_url variant → internal_N
