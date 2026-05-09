@@ -859,11 +859,31 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
       </div>
     </div>
 
-    <!-- Edit form (rendered by PHP template) -->
-    <div id="editFormWrapper">
-      <?php if ($hasStructure): ?>
-        <?php include __DIR__ . '/template/editPage.php'; ?>
-      <?php endif; ?>
+    <!-- Explorer-style two-column layout: tree (left) + editor (right) -->
+    <div id="step2Explorer">
+
+      <!-- Left: Page tree panel -->
+      <div id="pageTreePanel">
+        <?php if ($hasStructure): ?>
+          <div id="pageTree">
+            <div class="lp-tree-loading">
+              <span class="spinner-border spinner-border-sm me-1"></span>読み込み中…
+            </div>
+          </div>
+        <?php else: ?>
+          <div class="text-muted small px-2 py-3">
+            <i class="bi bi-info-circle me-1"></i>解析後に表示されます
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <!-- Right: Edit form -->
+      <div id="editFormWrapper">
+        <?php if ($hasStructure): ?>
+          <?php include __DIR__ . '/template/editPage.php'; ?>
+        <?php endif; ?>
+      </div>
+
     </div>
 
     <!-- Save/generate status -->

@@ -27,6 +27,12 @@
   let generateStartedAt = 0;
   let generateLastUpdatedAt = 0;
 
+  // Page tree state (Step 2 Explorer UI)
+  /** @type {string} currently selected page key ('index' | 'internal_N') */
+  let currentPageKey = 'index';
+  /** @type {boolean} has the tree been built yet */
+  let treeInitialized = false;
+
   // -----------------------------------------------------------------------
   // DOM refs
   // -----------------------------------------------------------------------
@@ -103,6 +109,11 @@
     currentStep = n;
     Object.values(panels).forEach(p => p && p.classList.add('d-none'));
     panels[n] && panels[n].classList.remove('d-none');
+
+    // Initialize tree when entering Step 2
+    if (n === 2) {
+      void initPageTree();
+    }
 
     stepItems.forEach((item, idx) => {
       const s = parseInt(item.dataset.step, 10);
@@ -914,6 +925,9 @@
     openSaveGenerateModal();
 
     try {
+      // Save current page's form data before generating
+      await saveCurrentPageData();
+
       const clientData = collectFormData();
       ensureSaveGenProgressUi();
       const out = await apiPost('store/generate_start.php', {
@@ -2336,6 +2350,295 @@
         showToast('通信に失敗しました', 'danger');
       }
     });
+  }
+
+  // -----------------------------------------------------------------------
+  // Step 2 — Explorer tree (page navigator)
+  // -----------------------------------------------------------------------
+
+  /** Simple HTML escape helper */
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Initialize the page tree from site_map.json.
+   * Only runs once; subsequent calls are no-ops.
+   */
+  async function initPageTree() {
+    if (treeInitialized || !window.LP_CMS?.hasStructure) return;
+    treeInitialized = true;
+
+    const treeEl = document.getElementById('pageTree');
+    if (!treeEl) return;
+
+    try {
+      const r = await fetch('store/get_site_map.php', { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('site_map fetch failed: ' + r.status);
+      const siteMap = await r.json();
+      if (!siteMap || typeof siteMap !== 'object') throw new Error('invalid site_map');
+      buildAndRenderTree(treeEl, siteMap);
+    } catch (e) {
+      treeEl.innerHTML =
+        `<div class="text-danger small px-2 py-2">` +
+        `<i class="bi bi-exclamation-triangle me-1"></i>` +
+        `ツリー読み込みに失敗しました。` +
+        `</div>`;
+    }
+  }
+
+  /**
+   * Build tree data from site_map and render into treeEl.
+   * @param {HTMLElement} treeEl
+   * @param {object} siteMap
+   */
+  function buildAndRenderTree(treeEl, siteMap) {
+    const pages = siteMap.pages || {};
+    const baseUrl = (siteMap.meta?.base_url || siteMap.meta?.entry_url || '').replace(/\/$/, '');
+
+    let domain = 'site';
+    try { domain = new URL(baseUrl || 'https://unknown').hostname; } catch { /* keep default */ }
+
+    // Build flat page list with parsed path segments
+    /** @type {Array<{key:string, sourceUrl:string, pathSegs:string[], status:string}>} */
+    const pageList = [];
+    for (const [key, page] of Object.entries(pages)) {
+      if (!page || typeof page !== 'object') continue;
+      let pathSegs = [];
+      try {
+        const u = new URL(page.source_url || '');
+        const p = u.pathname.replace(/\/$/, '') || '/';
+        pathSegs = p === '/' ? [] : p.replace(/^\//, '').split('/').filter(Boolean);
+      } catch { /* keep empty */ }
+      pageList.push({ key, sourceUrl: page.source_url || '', pathSegs, status: page.status || 'ok' });
+    }
+
+    // Sort: index first, then by depth, then alphabetically
+    pageList.sort((a, b) => {
+      if (a.key === 'index') return -1;
+      if (b.key === 'index') return 1;
+      if (a.pathSegs.length !== b.pathSegs.length) return a.pathSegs.length - b.pathSegs.length;
+      return a.sourceUrl.localeCompare(b.sourceUrl);
+    });
+
+    // Build tree structure
+    /** @type {{seg:string, pageKey:string|null, status:string, sourceUrl:string, children:object}} */
+    const root = { seg: '', pageKey: null, status: 'ok', sourceUrl: baseUrl, children: {} };
+
+    for (const node of pageList) {
+      if (node.key === 'index') {
+        root.pageKey = 'index';
+        root.sourceUrl = node.sourceUrl;
+        continue;
+      }
+      let cur = root;
+      for (const seg of node.pathSegs) {
+        if (!cur.children[seg]) {
+          cur.children[seg] = { seg, pageKey: null, status: 'ok', sourceUrl: '', children: {} };
+        }
+        cur = cur.children[seg];
+      }
+      cur.pageKey = node.key;
+      cur.status = node.status;
+      cur.sourceUrl = node.sourceUrl;
+    }
+
+    // Render the tree
+    let uid = 0;
+    function nextId() { return 'lpt_' + (++uid); }
+
+    function renderNode(node, labelOverride, depth) {
+      const label = labelOverride || node.seg || '?';
+      const hasChildren = Object.keys(node.children).length > 0;
+      const hasPage = node.pageKey !== null;
+      const isError = node.status === 'error';
+      const childrenId = nextId();
+      let html = '';
+
+      // Node row
+      const isRoot = depth === 0;
+      const nodeAttr = (hasPage && !isError) ? ` data-page-key="${escHtml(node.pageKey)}"` : '';
+      const errorClass = isError ? ' lp-tree-error' : '';
+      const activeClass = (hasPage && node.pageKey === currentPageKey) ? ' lp-tree-active' : '';
+      const title = node.sourceUrl ? ` title="${escHtml(node.sourceUrl)}"` : '';
+
+      let iconClass;
+      if (isRoot) {
+        iconClass = 'bi-globe2 text-primary';
+      } else if (isError) {
+        iconClass = 'bi-exclamation-triangle text-danger';
+      } else if (hasChildren) {
+        iconClass = 'bi-folder2-open text-warning';
+      } else {
+        iconClass = 'bi-file-earmark-text';
+      }
+
+      html += `<div class="lp-tree-node${errorClass}${activeClass}"${nodeAttr}${title}>`;
+
+      // Toggle arrow
+      if (hasChildren) {
+        html += `<span class="lp-tree-toggle me-1" data-tree-toggle="${childrenId}">` +
+                `<i class="bi bi-chevron-down"></i></span>`;
+      } else {
+        html += `<span class="lp-tree-toggle me-1"></span>`;
+      }
+
+      // Icon
+      html += `<i class="bi ${iconClass} lp-tree-icon"></i>`;
+
+      // Label
+      html += `<span class="lp-tree-label">${escHtml(label)}</span>`;
+      html += `</div>`;
+
+      // Children container
+      if (hasChildren) {
+        html += `<div class="lp-tree-children" id="${childrenId}">`;
+
+        // If root has its own page (index), add it as first child node
+        if (isRoot && hasPage) {
+          const indexActiveClass = currentPageKey === 'index' ? ' lp-tree-active' : '';
+          html += `<div class="lp-tree-node${indexActiveClass}" data-page-key="index"` +
+                  ` title="${escHtml(node.sourceUrl)}">` +
+                  `<span class="lp-tree-toggle me-1"></span>` +
+                  `<i class="bi bi-house-fill lp-tree-icon text-primary"></i>` +
+                  `<span class="lp-tree-label">index</span>` +
+                  `</div>`;
+        }
+
+        for (const [seg, child] of Object.entries(node.children)) {
+          html += renderNode(child, seg, depth + 1);
+        }
+        html += `</div>`;
+      }
+
+      return html;
+    }
+
+    // Auto-save message row at top of tree
+    let fullHtml = `<div id="treeAutoSaveMsg"></div>`;
+    fullHtml += renderNode(root, domain, 0);
+    treeEl.innerHTML = fullHtml;
+
+    // Bind tree interactions (event delegation)
+    treeEl.addEventListener('click', e => {
+      // Toggle collapse
+      const toggleEl = e.target.closest('[data-tree-toggle]');
+      if (toggleEl) {
+        e.stopPropagation();
+        const childrenId = toggleEl.dataset.treeToggle;
+        const childrenEl = document.getElementById(childrenId);
+        const icon = toggleEl.querySelector('i');
+        if (childrenEl) {
+          const isNowHidden = childrenEl.classList.toggle('d-none');
+          if (icon) {
+            icon.className = isNowHidden ? 'bi bi-chevron-right' : 'bi bi-chevron-down';
+          }
+        }
+        return;
+      }
+
+      // Page node click
+      const nodeEl = e.target.closest('[data-page-key]');
+      if (nodeEl && !nodeEl.classList.contains('lp-tree-error')) {
+        const key = nodeEl.dataset.pageKey;
+        if (key) void selectPageNode(key);
+      }
+    });
+  }
+
+  /** Highlight the active node in the tree */
+  function markTreeNodeActive(key) {
+    document.querySelectorAll('#pageTree [data-page-key]').forEach(el => {
+      el.classList.toggle('lp-tree-active', el.dataset.pageKey === key);
+    });
+  }
+
+  /** Show a brief auto-save status message */
+  function showTreeMsg(msg, type) {
+    const el = document.getElementById('treeAutoSaveMsg');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = type === 'ok' ? '#198754' : type === 'err' ? '#dc3545' : '#6c757d';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => { el.textContent = ''; }, 3000);
+  }
+
+  /**
+   * Save the current page's form data to store/save_page_client.php.
+   * Silently ignores failures (best-effort auto-save).
+   */
+  async function saveCurrentPageData() {
+    const form = document.getElementById('clientDataForm');
+    if (!form || !currentPageKey) return;
+
+    const data = collectFormData();
+    try {
+      await fetch('store/save_page_client.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ page_key: currentPageKey, ...data }),
+      });
+      showTreeMsg('✓ 保存', 'ok');
+    } catch {
+      showTreeMsg('保存失敗', 'err');
+    }
+  }
+
+  /**
+   * Switch the edit panel to a different page.
+   * Saves the current page first, then Ajax-loads the new page's form.
+   * @param {string} key
+   */
+  async function selectPageNode(key) {
+    if (!key || key === currentPageKey) return;
+
+    // Auto-save before switching
+    showTreeMsg('保存中…', 'muted');
+    await saveCurrentPageData();
+
+    currentPageKey = key;
+    markTreeNodeActive(key);
+
+    const wrapper = document.getElementById('editFormWrapper');
+    if (!wrapper) return;
+
+    wrapper.innerHTML =
+      `<div class="lp-edit-form-loading">` +
+      `<span class="spinner-border spinner-border-sm me-2"></span>読み込み中…` +
+      `</div>`;
+
+    try {
+      const r = await fetch(`store/get_page_edit_form.php?key=${encodeURIComponent(key)}`, {
+        credentials: 'same-origin',
+      });
+      const data = await r.json();
+      if (!data.ok) throw new Error(data.error || '読み込み失敗');
+      wrapper.innerHTML = data.html;
+      rebindFormHandlers();
+    } catch (e) {
+      wrapper.innerHTML =
+        `<div class="alert alert-danger m-3">` +
+        `<i class="bi bi-exclamation-triangle me-2"></i>` +
+        `ページフォームの読み込みに失敗しました: ${escHtml(String(e))}` +
+        `</div>`;
+    }
+  }
+
+  /**
+   * Re-bind form handlers after Ajax page load.
+   * Called whenever editFormWrapper content is replaced.
+   */
+  function rebindFormHandlers() {
+    bindImagePreviews();
+    bindImageMemoRefine();
+    initAiTextReplace();
+    initLpCmsBootstrapTooltips();
   }
 
   // -----------------------------------------------------------------------

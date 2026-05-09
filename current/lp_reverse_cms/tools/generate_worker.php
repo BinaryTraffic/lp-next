@@ -84,6 +84,26 @@ try {
         LOCK_EX
     );
 
+    /**
+     * Load per-page client data from page_client/<key>.json if present.
+     * Falls back to the top-level $clientData from the task (backward compat).
+     *
+     * @param string $dataDir
+     * @param string $pageKey
+     * @param array<string,mixed> $fallback
+     * @return array<string,mixed>
+     */
+    $loadPageClient = static function (string $dataDir, string $pageKey, array $fallback): array {
+        $path = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR . 'page_client' . DIRECTORY_SEPARATOR . $pageKey . '.json';
+        if (is_readable($path)) {
+            $dec = json_decode((string) file_get_contents($path), true);
+            if (is_array($dec)) {
+                return $dec;
+            }
+        }
+        return $fallback;
+    };
+
     $task['phase'] = 'generate_entry';
     GenerateTask::save($cmsRoot, $taskId, $task);
 
@@ -126,7 +146,8 @@ try {
     $indexPage = $siteMapRaw['pages']['index'];
     // LpGenerator::generate が長時間ブロックする間も updated_at を進める（stale 誤判定回避）
     GenerateTask::save($cmsRoot, $taskId, $task);
-    $html = $generator->generate($structure, $clientData, $dataDir, $assetOverride);
+    $indexClientData = $loadPageClient($dataDir, 'index', $clientData);
+    $html = $generator->generate($structure, $indexClientData, $dataDir, $assetOverride);
     $regions = $indexPage['data_io_regions'] ?? [];
     $html = LpIoNeutralizer::applyNeutralization($html, is_array($regions) ? $regions : []);
     $urlMap = LpGenerator::buildInternalUrlToPageKeyMap($siteMapRaw);
@@ -173,7 +194,8 @@ try {
         }
         $task['generate_internal_active_key'] = $pageKey;
         GenerateTask::save($cmsRoot, $taskId, $task);
-        $subHtml = $generator->generate($subStruct, $clientData, $dataDir, $assetOverride);
+        $subClientData = $loadPageClient($dataDir, $pageKey, $clientData);
+        $subHtml = $generator->generate($subStruct, $subClientData, $dataDir, $assetOverride);
         $subRegions = $pageRow['data_io_regions'] ?? [];
         $subHtml = LpIoNeutralizer::applyNeutralization($subHtml, is_array($subRegions) ? $subRegions : []);
         $subLocal = trim((string) ($pageRow['local_path'] ?? ''));

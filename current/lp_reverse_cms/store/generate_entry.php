@@ -74,6 +74,15 @@ try {
         }
     }
 
+    // Prefer per-page client data (saved by tree UI) over the top-level fallback
+    $pageClientPath = $dataDir . 'page_client/index.json';
+    if (is_readable($pageClientPath)) {
+        $dec = json_decode((string) file_get_contents($pageClientPath), true);
+        if (is_array($dec)) {
+            $clientData = $dec;
+        }
+    }
+
     $assetMap = [];
     $assetMapPath = $dataDir . 'asset_map.json';
     if (is_readable($assetMapPath)) {

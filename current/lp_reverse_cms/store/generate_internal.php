@@ -112,9 +112,19 @@ try {
         throw new RuntimeException('サイト構造JSONの読み込みに失敗しました。');
     }
 
+    // Load fallback (top-level) client data
     $clientData = [];
     if (file_exists($clientFile)) {
         $dec = json_decode((string) file_get_contents($clientFile), true);
+        if (is_array($dec)) {
+            $clientData = $dec;
+        }
+    }
+
+    // Prefer per-page client data (saved by tree UI) over the top-level fallback
+    $pageClientPath = $dataDir . 'page_client/' . $pageKey . '.json';
+    if (is_readable($pageClientPath)) {
+        $dec = json_decode((string) file_get_contents($pageClientPath), true);
         if (is_array($dec)) {
             $clientData = $dec;
         }
