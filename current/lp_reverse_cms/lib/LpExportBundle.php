@@ -75,8 +75,35 @@ final class LpExportBundle
             }
         };
 
-        $addFile('index.html');
-        $addTree('pages');
+        // Scan ALL HTML files under the output directory (mirrors URL structure).
+        // This covers both the legacy pages/ tree and the new mirror-path layout
+        // (e.g. items/gold.html, news/index.html, _p/<hash>/index.html).
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($outReal, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST,
+        );
+        foreach ($it as $file) {
+            if (!$file instanceof SplFileInfo || !$file->isFile()) {
+                continue;
+            }
+            $ext = strtolower($file->getExtension());
+            if ($ext !== 'html' && $ext !== 'htm') {
+                continue;
+            }
+            $abs = $file->getPathname();
+            $r   = realpath($abs);
+            if ($r === false) {
+                continue;
+            }
+            $outNorm = str_replace('\\', '/', $outReal) . '/';
+            $absNorm = str_replace('\\', '/', $r);
+            if (!str_starts_with($absNorm, $outNorm)) {
+                continue;
+            }
+            $suffix = substr($absNorm, strlen($outNorm));
+            $map[$suffix] = $r;
+        }
+
         $addTree('assets');
 
         $customRel = 'sites/' . $cloneId . '/custom_images';
@@ -118,9 +145,6 @@ final class LpExportBundle
         }
 
         $wsId = LpWorkspace::id();
-        $htmlPath = realpath(LpWorkspace::outputDir($cmsRoot) . 'index.html');
-        $htmlRaw  = $htmlPath !== false ? (string) file_get_contents($htmlPath) : '';
-        $htmlOut  = self::rewriteHtmlForBundle($htmlRaw, $wsId);
 
         $tmp = tempnam(sys_get_temp_dir(), 'lpb_');
         if ($tmp === false) {
@@ -137,13 +161,18 @@ final class LpExportBundle
             exit;
         }
 
-        $zip->addFromString('index.html', $htmlOut);
-
         foreach ($files as $rel => $abs) {
-            if ($rel === 'index.html') {
-                continue;
+            $relNorm = str_replace('\\', '/', $rel);
+            $ext     = strtolower(pathinfo($relNorm, PATHINFO_EXTENSION));
+
+            if ($ext === 'html' || $ext === 'htm') {
+                // Rewrite all HTML files: strip server-absolute /output/ws_xxx/ prefixes
+                $raw     = (string) file_get_contents($abs);
+                $rewrite = self::rewriteHtmlForBundle($raw, $wsId);
+                $zip->addFromString($relNorm, $rewrite);
+            } else {
+                $zip->addFile($abs, $relNorm);
             }
-            $zip->addFile($abs, str_replace('\\', '/', $rel));
         }
 
         $zip->close();
