@@ -19,6 +19,26 @@ try {
     $reg   = new WorkspaceRegistry($cmsRoot);
     $list  = $reg->listForActor($actor);
 
+    // Enrich each workspace with content metadata from lp_structure.json
+    $dataRoot = $cmsRoot . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR;
+    $list = array_map(static function (array $ws) use ($dataRoot): array {
+        $ws['site_url']    = '';
+        $ws['page_title']  = '';
+        $ws['page_count']  = 0;
+        $ws['analyzed_at'] = '';
+        $structPath = $dataRoot . $ws['id'] . DIRECTORY_SEPARATOR . 'lp_structure.json';
+        if (is_readable($structPath)) {
+            $struct = json_decode((string) file_get_contents($structPath), true);
+            if (is_array($struct)) {
+                $ws['site_url']    = (string) ($struct['source_url'] ?? '');
+                $ws['page_title']  = (string) ($struct['meta']['title'] ?? '');
+                $ws['page_count']  = 1 + count((array) ($struct['internal_pages'] ?? []));
+                $ws['analyzed_at'] = (string) ($struct['analyzed_at'] ?? '');
+            }
+        }
+        return $ws;
+    }, $list);
+
     echo json_encode(
         [
             'ok'          => true,

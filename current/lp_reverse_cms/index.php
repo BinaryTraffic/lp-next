@@ -648,12 +648,11 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             <thead>
               <tr>
                 <th style="width:38px"><input class="form-check-input" type="checkbox" id="workspaceManageCheckAll" aria-label="全選択"></th>
-                <th>ID</th>
-                <th>所有者</th>
-                <th>状態</th>
-                <th>サイズ</th>
-                <th>更新（UTC）</th>
-                <th style="width:90px"></th>
+                <th>サイト / タイトル</th>
+                <th style="width:56px" class="text-center">ページ</th>
+                <th style="width:80px">サイズ</th>
+                <th style="width:148px">解析日時</th>
+                <th style="width:160px"></th>
               </tr>
             </thead>
             <tbody id="workspaceManageTbody"></tbody>

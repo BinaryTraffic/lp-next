@@ -149,6 +149,7 @@ final class WorkspaceRegistry
                 'created_at'         => (string) ($meta['created_at'] ?? ''),
                 'last_active_at'     => (string) ($meta['last_active_at'] ?? ''),
                 'state'              => $st,
+                'memo'               => (string) ($meta['memo'] ?? ''),
                 'bytes'              => $bytes,
                 'mtime'              => $mtime,
                 'is_current'         => $name === $current,
@@ -235,6 +236,39 @@ final class WorkspaceRegistry
         });
 
         return true;
+    }
+
+    /**
+     * Update the user-editable memo for a workspace.
+     *
+     * @param array{'email': string, 'role': string} $actor
+     */
+    public function updateMemo(string $folderName, string $memo, array $actor): bool
+    {
+        if (!preg_match('/^ws_[a-f0-9]{32}$/', $folderName)) {
+            return false;
+        }
+        $folderName = strtolower($folderName);
+        $email = strtolower(trim($actor['email']));
+        $role  = $actor['role'];
+
+        return (bool) $this->withFileLock(LOCK_EX, function () use ($folderName, $memo, $email, $role): bool {
+            $raw = $this->readJsonFile();
+            /** @var array<string, array<string, mixed>> $map */
+            $map = $raw['workspaces'] ?? [];
+            if (!is_array($map) || !isset($map[$folderName])) {
+                return false;
+            }
+            $owner = strtolower(trim((string) ($map[$folderName]['owner_email'] ?? '')));
+            if ($owner !== $email && $role !== 'super_admin') {
+                return false;
+            }
+            $map[$folderName]['memo'] = $memo;
+            $raw['workspaces'] = $map;
+            $this->writeJsonFile($raw);
+
+            return true;
+        });
     }
 
     private function touch(string $folderName, string $email): void
