@@ -1641,7 +1641,11 @@
       // ① 元画像を 100% で下地として描画
       if (origSrc) {
         try {
-          const origImg = await loadImgCors(origSrc);
+          // Remote URLs are routed through the server-side proxy to satisfy CORS
+          const corsUrl = /^https?:\/\//i.test(origSrc)
+            ? 'store/img_proxy.php?url=' + encodeURIComponent(origSrc)
+            : origSrc;
+          const origImg = await loadImgCors(corsUrl);
           ctx.globalAlpha = 1;
           ctx.drawImage(origImg, 0, 0, phW, phH);
         } catch (_) {
