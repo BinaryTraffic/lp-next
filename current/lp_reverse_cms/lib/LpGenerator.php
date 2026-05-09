@@ -68,18 +68,30 @@ class LpGenerator
             $bodyAttr .= ' class="' . htmlspecialchars($bodyClass, ENT_QUOTES, 'UTF-8') . '"';
         }
 
+        // z-index is assigned in descending order (highest for first section) so that
+        // navigation dropdowns in the header section can overlap later sections.
+        // isolation:isolate scopes internal z-index wars without locking the section
+        // below siblings — combining with a unique positive z-index achieves both goals.
+        // Firefox enforces stacking contexts strictly; explicit descending z-index fixes
+        // dropdown-behind-content bugs that Chrome often masks.
         $stackFixCss = '<style id="lp-reverse-stack-context">'
-            . '.lp-reverse-section-root{isolation:isolate;z-index:0;position:relative;width:100%;box-sizing:border-box}'
+            . '.lp-reverse-section-root{isolation:isolate;position:relative;width:100%;box-sizing:border-box}'
             . '</style>';
 
+        $sectionCount = count($sections);
         $sectionsHtml = '';
+        $sectionIndex = 0;
         foreach ($sections as $section) {
             $chunk = $this->processSection($section, $elemData);
             if (trim($chunk) === '') {
                 continue;
             }
+            // First section (nav/header) gets the highest z-index so its dropdowns
+            // can paint above all subsequent sections.
+            $zIndex = $sectionCount - $sectionIndex + 10;
+            $sectionIndex++;
             $secId = htmlspecialchars((string) ($section['id'] ?? ''), ENT_QUOTES, 'UTF-8');
-            $sectionsHtml .= '<div class="lp-reverse-section-root" data-lp-section="' . $secId . '">'
+            $sectionsHtml .= '<div class="lp-reverse-section-root" data-lp-section="' . $secId . '" style="z-index:' . $zIndex . '">'
                 . $chunk . "</div>\n";
         }
 
