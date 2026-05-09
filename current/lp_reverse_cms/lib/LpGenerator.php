@@ -290,6 +290,36 @@ HTML;
      * @param array<string,mixed> $siteMap
      * @return array<string,string>
      */
+    /**
+     * LOCAL_MAP 用: local_path の output/ws_xxx/ 以降の相対パス → internal_N キー
+     *
+     * @param array<string,mixed> $siteMap
+     * @return array<string,string>
+     */
+    public static function buildOutputRelPathToPageKeyMap(array $siteMap, string $wsId): array
+    {
+        $map = [];
+        $prefix = 'output/ws_' . $wsId . '/';
+        foreach ($siteMap['pages'] ?? [] as $key => $page) {
+            if (!is_string($key) || !is_array($page)) {
+                continue;
+            }
+            if (!preg_match('/^internal_\d+$/', $key)) {
+                continue;
+            }
+            $local = trim((string) ($page['local_path'] ?? ''));
+            if ($local === '') {
+                continue;
+            }
+            $rel = str_starts_with($local, $prefix) ? substr($local, strlen($prefix)) : $local;
+            if ($rel !== '') {
+                $map[$rel] = $key;
+            }
+        }
+
+        return $map;
+    }
+
     public static function buildInternalUrlToPageKeyMap(array $siteMap): array
     {
         $map = [];
@@ -413,7 +443,10 @@ HTML;
      * @param array<string,string> $internalUrlMap source_url variant → internal_N
      * @param string $wsId ワークスペース ID（HTML に埋め込み、session 依存を排除）
      */
-    public function injectClickInterceptorScript(string $html, string $entryOrigin, array $internalUrlMap, int $pageDepth = 0, string $wsId = ''): string
+    /**
+     * @param array<string,mixed> $siteMap site_map.json の内容（LOCAL_MAP 生成用）
+     */
+    public function injectClickInterceptorScript(string $html, string $entryOrigin, array $internalUrlMap, int $pageDepth = 0, string $wsId = '', array $siteMap = []): string
     {
         $entryOrigin = trim($entryOrigin);
         if ($entryOrigin === '' || $internalUrlMap === []) {
@@ -424,37 +457,33 @@ HTML;
         if ($mapJson === false) {
             return $html;
         }
-        $originJson  = json_encode($entryOrigin, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $cmsPath     = '/current/lp_reverse_cms/store/generate_internal.php';
-        $cmsJson     = json_encode($cmsPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $rootPath    = $pageDepth > 0 ? str_repeat('../', $pageDepth) : '';
+        $originJson   = json_encode($entryOrigin, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $cmsPath      = '/current/lp_reverse_cms/store/generate_internal.php';
+        $cmsJson      = json_encode($cmsPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $rootPath     = $pageDepth > 0 ? str_repeat('../', $pageDepth) : '';
         $rootPathJson = json_encode($rootPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $wsIdJson    = json_encode($wsId, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $wsIdJson     = json_encode($wsId, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        // LOCAL_MAP: patchInternalRelativeHrefs でローカルパスに書き換えられたリンク用
+        $localMap = ($siteMap !== [] && $wsId !== '')
+            ? self::buildOutputRelPathToPageKeyMap($siteMap, $wsId)
+            : [];
+        $localMapJson = json_encode($localMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+        $cmsWebRoot   = dirname(dirname($cmsPath));  // '/current/lp_reverse_cms'
+        $outWebPath   = $wsId !== '' ? ($cmsWebRoot . '/output/ws_' . $wsId . '/') : '';
+        $outWebPathJson = json_encode($outWebPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $script =
             '<script data-lp-interceptor>' . "\n"
             . '(function(){' . "\n"
-            . '  var ORIGIN   = ' . $originJson . ';' . "\n"
-            . '  var CMS      = ' . $cmsJson . ';' . "\n"
-            . '  var MAP      = ' . $mapJson . ';' . "\n"
-            . '  var LP_ROOT  = ' . $rootPathJson . ';' . "\n"
-            . '  var WS_ID    = ' . $wsIdJson . ';' . "\n"
-            . '  document.addEventListener(\'click\', function(e){' . "\n"
-            . '    var a = e.target.closest(\'a[href]\');' . "\n"
-            . '    if (!a) return;' . "\n"
-            . '    try {' . "\n"
-            . '      var url = new URL(a.href);' . "\n"
-            . '      if (url.origin !== ORIGIN) return;' . "\n"
-            . '    } catch (err) { return; }' . "\n"
-            . '    var abs = a.href;' . "\n"
-            . '    var key = MAP[abs] || MAP[abs.replace(/' . '\\/' . '$/, \'\')];' . "\n"
-            . '    if (!key) {' . "\n"
-            . '      var rel = a.getAttribute(\'href\') || \'\';' . "\n"
-            . '      var isLocal = rel === \'\' || /^(#|javascript:|internal_\\d+\\/|_p\\/)/i.test(rel);' . "\n"
-            . '      if (!isLocal) e.preventDefault();' . "\n"
-            . '      return;' . "\n"
-            . '    }' . "\n"
-            . '    e.preventDefault();' . "\n"
+            . '  var ORIGIN    = ' . $originJson . ';' . "\n"
+            . '  var CMS       = ' . $cmsJson . ';' . "\n"
+            . '  var MAP       = ' . $mapJson . ';' . "\n"
+            . '  var LOCAL_MAP = ' . $localMapJson . ';' . "\n"
+            . '  var OUT_PATH  = ' . $outWebPathJson . ';' . "\n"
+            . '  var LP_ROOT   = ' . $rootPathJson . ';' . "\n"
+            . '  var WS_ID     = ' . $wsIdJson . ';' . "\n"
+            . '  function doFetch(key){' . "\n"
             . '    fetch(CMS, {' . "\n"
             . '      method: \'POST\',' . "\n"
             . '      credentials: \'same-origin\',' . "\n"
@@ -471,6 +500,32 @@ HTML;
             . '      }' . "\n"
             . '    })' . "\n"
             . '    .catch(function(){});' . "\n"
+            . '  }' . "\n"
+            . '  document.addEventListener(\'click\', function(e){' . "\n"
+            . '    var a = e.target.closest(\'a[href]\');' . "\n"
+            . '    if (!a) return;' . "\n"
+            . '    var abs = a.href;' . "\n"
+            . '    var key = null;' . "\n"
+            . '    try {' . "\n"
+            . '      var url = new URL(abs);' . "\n"
+            . '      if (url.origin === ORIGIN) {' . "\n"
+            . '        key = MAP[abs] || MAP[abs.replace(/' . '\\/' . '$/, \'\')];' . "\n"
+            . '        if (!key) {' . "\n"
+            . '          var rel = a.getAttribute(\'href\') || \'\';' . "\n"
+            . '          var isLocal = rel === \'\' || /^(#|javascript:|internal_\\d+\\/|_p\\/)/i.test(rel);' . "\n"
+            . '          if (!isLocal) e.preventDefault();' . "\n"
+            . '          return;' . "\n"
+            . '        }' . "\n"
+            . '      } else if (OUT_PATH !== \'\' && abs.indexOf(OUT_PATH) !== -1) {' . "\n"
+            . '        var relOut = abs.substring(abs.indexOf(OUT_PATH) + OUT_PATH.length);' . "\n"
+            . '        key = LOCAL_MAP[relOut] || LOCAL_MAP[relOut.replace(/\\/$/, \'\') + \'/index.html\'];' . "\n"
+            . '        if (!key) { e.preventDefault(); return; }' . "\n"
+            . '      } else {' . "\n"
+            . '        return;' . "\n"
+            . '      }' . "\n"
+            . '    } catch (err) { return; }' . "\n"
+            . '    e.preventDefault();' . "\n"
+            . '    doFetch(key);' . "\n"
             . '  });' . "\n"
             . '})();' . "\n"
             . '</script>';

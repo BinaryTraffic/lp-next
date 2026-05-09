@@ -22,7 +22,8 @@ final class LpSiteMapper
         $resources = self::buildResources($dataDir, $outputDir);
         $pages = [];
 
-        $entryIoRegions = LpIoNeutralizer::detectRegions($entryStructure, 'entry');
+        $entryDomain = (string) (parse_url($sourceUrl, PHP_URL_HOST) ?? '');
+        $entryIoRegions = LpIoNeutralizer::detectRegions($entryStructure, 'entry', $entryDomain);
         $pages['index'] = [
             'source_url' => $sourceUrl,
             'local_path' => self::relOutputPath($outputDir, 'index.html'),

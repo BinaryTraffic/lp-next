@@ -8,7 +8,7 @@ final class LpIoNeutralizer
      * @param array<string,mixed> $structure
      * @return list<array<string,mixed>>
      */
-    public static function detectRegions(array &$structure, string $pageCoordinate = 'entry'): array
+    public static function detectRegions(array &$structure, string $pageCoordinate = 'entry', string $entryDomain = ''): array
     {
         $regions = [];
         foreach ($structure['sections'] ?? [] as $si => &$section) {
@@ -20,7 +20,7 @@ final class LpIoNeutralizer
             if ($html === '') {
                 continue;
             }
-            $found = self::detectInSectionHtml($html, $coord);
+            $found = self::detectInSectionHtml($html, $coord, $entryDomain);
             if ($found !== []) {
                 $regions = array_merge($regions, $found);
             }
@@ -33,7 +33,7 @@ final class LpIoNeutralizer
     /**
      * @return list<array<string,mixed>>
      */
-    private static function detectInSectionHtml(string $html, string $coordinate): array
+    private static function detectInSectionHtml(string $html, string $coordinate, string $entryDomain = ''): array
     {
         $regions = [];
         $lower = strtolower($html);
@@ -73,11 +73,28 @@ final class LpIoNeutralizer
         }
 
         if (str_contains($lower, '<iframe') || str_contains($lower, 'youtube.com') || str_contains($lower, 'maps.google')) {
-            $regions[] = [
-                'coordinate' => $coordinate,
-                'type' => 'external_embed',
-                'status' => 'neutralized',
-            ];
+            $isExternalEmbed = true;
+            // Same-domain iframe: skip neutralization so hero/banner iframes are preserved
+            if ($entryDomain !== '' && str_contains($lower, '<iframe')
+                && !str_contains($lower, 'youtube.com') && !str_contains($lower, 'maps.google')
+            ) {
+                if (preg_match_all('#<iframe\b[^>]*\bsrc=["\']([^"\']*)["\']#i', $html, $ifm)) {
+                    $isExternalEmbed = false;
+                    foreach ((array) ($ifm[1] ?? []) as $src) {
+                        if (!str_contains(strtolower((string) $src), strtolower($entryDomain))) {
+                            $isExternalEmbed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if ($isExternalEmbed) {
+                $regions[] = [
+                    'coordinate' => $coordinate,
+                    'type' => 'external_embed',
+                    'status' => 'neutralized',
+                ];
+            }
         }
 
         return $regions;

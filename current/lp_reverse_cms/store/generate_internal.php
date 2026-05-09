@@ -177,7 +177,7 @@ try {
     $origin    = LpGenerator::entryOriginFromSiteMap($siteMapRaw);
     $pageDepth = LpGenerator::computeLocalPathDepth($localPathRel);
     $html      = LpGenerator::fixOutputAssetPaths($html, $pageDepth);
-    $html      = $generator->injectClickInterceptorScript($html, $origin, $urlMap, $pageDepth, LpWorkspace::id());
+    $html      = $generator->injectClickInterceptorScript($html, $origin, $urlMap, $pageDepth, LpWorkspace::id(), $siteMapRaw);
 
     if (!is_dir($outputDir)) {
         mkdir($outputDir, 0755, true);
