@@ -82,10 +82,24 @@
 
   const stepIndicatorEl = document.getElementById('stepIndicator');
 
+  /**
+   * If Bootstrap left body.modal-open / .modal-backdrop behind while no modal has .show,
+   * pointer events hit the invisible backdrop and form fields (e.g. paragraph textarea) look focused but won't receive input.
+   */
+  function cleanupStrayModalBackdrops() {
+    if (document.querySelector('.modal.show')) {
+      return;
+    }
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('padding-right');
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+  }
+
   // -----------------------------------------------------------------------
   // Step navigation
   // -----------------------------------------------------------------------
   function goToStep(n) {
+    cleanupStrayModalBackdrops();
     currentStep = n;
     Object.values(panels).forEach(p => p && p.classList.add('d-none'));
     panels[n] && panels[n].classList.remove('d-none');
