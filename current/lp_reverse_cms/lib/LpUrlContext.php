@@ -95,8 +95,14 @@ final class LpUrlContext
         if ($urlPath === '' || $urlPath === '/') {
             return $schemeHost;
         }
-        $dir = dirname($urlPath);
-        if ($dir === '/' || $dir === '.' || $dir === '\\') {
+        // Trailing slash means the path itself is the directory (e.g. "/foo/bar/").
+        // dirname() would incorrectly return "/foo" for "/foo/bar/", so handle separately.
+        if (str_ends_with($urlPath, '/')) {
+            $dir = rtrim($urlPath, '/');
+        } else {
+            $dir = dirname($urlPath);
+        }
+        if ($dir === '' || $dir === '/' || $dir === '.' || $dir === '\\') {
             return $schemeHost;
         }
         return $schemeHost . $dir;

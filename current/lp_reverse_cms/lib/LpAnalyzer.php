@@ -573,7 +573,10 @@ class LpAnalyzer
                 continue;
             }
             $tag = strtolower($child->tagName);
-            if (in_array($tag, self::SECTION_TAGS) || $tag === 'div') {
+            // h1-h6 used as body-level section wrappers (e.g. <h1 id="mv">) are included
+            // only when they contain child elements (not bare text headings).
+            $isBodyLevelHeading = in_array($tag, self::HEADING_TAGS) && $child->childElementCount > 0;
+            if (in_array($tag, self::SECTION_TAGS) || $tag === 'div' || $isBodyLevelHeading) {
                 $candidates[] = $child;
             }
         }
