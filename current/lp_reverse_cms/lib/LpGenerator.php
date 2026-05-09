@@ -434,6 +434,13 @@ HTML;
             $html
         );
 
+        // 4. href="internal_N/ — nav links to sibling internal pages need depth correction
+        $html = (string) preg_replace(
+            '/\bhref="(internal_\d+\/)/i',
+            'href="' . $prefix . '$1',
+            $html
+        );
+
         return $html;
     }
 
