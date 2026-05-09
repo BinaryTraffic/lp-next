@@ -750,7 +750,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             <div class="input-group input-group-lg mb-3">
               <span class="input-group-text bg-white"><i class="bi bi-link-45deg"></i></span>
               <input type="url" id="lpUrlInput" class="form-control"
-                     placeholder="https://example.com/lp"
+                     placeholder="https://example.com/"
                      value="<?= htmlspecialchars($sourceUrl, ENT_QUOTES) ?>">
               <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
                 data-bs-toggle="tooltip"
