@@ -131,7 +131,7 @@ try {
     $html = LpIoNeutralizer::applyNeutralization($html, is_array($regions) ? $regions : []);
     $urlMap = LpGenerator::buildInternalUrlToPageKeyMap($siteMapRaw);
     $origin = LpGenerator::entryOriginFromSiteMap($siteMapRaw);
-    $html = $generator->injectClickInterceptorScript($html, $origin, $urlMap);
+    $html = $generator->injectClickInterceptorScript($html, $origin, $urlMap, 0);
     $localPathRel = trim((string) ($indexPage['local_path'] ?? ''));
     if ($localPathRel === '') {
         throw new RuntimeException('index local_path empty');
@@ -176,8 +176,9 @@ try {
         $subHtml = $generator->generate($subStruct, $clientData, $dataDir, $assetOverride);
         $subRegions = $pageRow['data_io_regions'] ?? [];
         $subHtml = LpIoNeutralizer::applyNeutralization($subHtml, is_array($subRegions) ? $subRegions : []);
-        $subHtml = $generator->injectClickInterceptorScript($subHtml, $origin, $urlMap);
         $subLocal = trim((string) ($pageRow['local_path'] ?? ''));
+        $subDepth = LpGenerator::computeLocalPathDepth($subLocal);
+        $subHtml = $generator->injectClickInterceptorScript($subHtml, $origin, $urlMap, $subDepth);
         if ($subLocal !== '') {
             $subTarget = $generator->filesystemPathForSiteMapLocal($outputDir, $subLocal);
             $subDir = dirname($subTarget);

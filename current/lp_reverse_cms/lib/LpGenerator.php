@@ -260,7 +260,8 @@ HTML;
             $urlMap = self::buildInternalUrlToPageKeyMap($siteMap);
             $origin = self::entryOriginFromSiteMap($siteMap);
             if ($origin !== '' && $urlMap !== []) {
-                $html = $this->injectClickInterceptorScript($html, $origin, $urlMap);
+                $depth = self::computeLocalPathDepth($localPathRel);
+                $html = $this->injectClickInterceptorScript($html, $origin, $urlMap, $depth);
             }
 
             if (file_put_contents($targetFile, $html) === false) {
@@ -334,11 +335,29 @@ HTML;
     }
 
     /**
+     * Computes how many directory levels deep a local_path is relative to the output root.
+     * e.g. "output/ws_XXX/news/index.html" → 1, "output/ws_XXX/index.html" → 0
+     */
+    public static function computeLocalPathDepth(string $localPath): int
+    {
+        $rel = (string) preg_replace('~^output/[^/]+/~', '', str_replace('\\', '/', $localPath));
+        $rel = ltrim($rel, '/');
+        if ($rel === '') {
+            return 0;
+        }
+        $dir = dirname($rel);
+        if ($dir === '.') {
+            return 0;
+        }
+        return substr_count($dir, '/') + 1;
+    }
+
+    /**
      * &lt;/body&gt; 直前にクリックインターセプター JS を注入する（静的プレビュー内リンク → generate_internal）
      *
      * @param array<string,string> $internalUrlMap source_url variant → internal_N
      */
-    public function injectClickInterceptorScript(string $html, string $entryOrigin, array $internalUrlMap): string
+    public function injectClickInterceptorScript(string $html, string $entryOrigin, array $internalUrlMap, int $pageDepth = 0): string
     {
         $entryOrigin = trim($entryOrigin);
         if ($entryOrigin === '' || $internalUrlMap === []) {
@@ -352,13 +371,16 @@ HTML;
         $originJson = json_encode($entryOrigin, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $cmsPath = '/current/lp_reverse_cms/store/generate_internal.php';
         $cmsJson = json_encode($cmsPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $rootPath = $pageDepth > 0 ? str_repeat('../', $pageDepth) : '';
+        $rootPathJson = json_encode($rootPath, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $script =
             '<script data-lp-interceptor>' . "\n"
             . '(function(){' . "\n"
-            . '  var ORIGIN = ' . $originJson . ';' . "\n"
-            . '  var CMS    = ' . $cmsJson . ';' . "\n"
-            . '  var MAP    = ' . $mapJson . ';' . "\n"
+            . '  var ORIGIN   = ' . $originJson . ';' . "\n"
+            . '  var CMS      = ' . $cmsJson . ';' . "\n"
+            . '  var MAP      = ' . $mapJson . ';' . "\n"
+            . '  var LP_ROOT  = ' . $rootPathJson . ';' . "\n"
             . '  document.addEventListener(\'click\', function(e){' . "\n"
             . '    var a = e.target.closest(\'a[href]\');' . "\n"
             . '    if (!a) return;' . "\n"
@@ -369,11 +391,8 @@ HTML;
             . '    var abs = a.href;' . "\n"
             . '    var key = MAP[abs] || MAP[abs.replace(/' . '\\/' . '$/, \'\')];' . "\n"
             . '    if (!key) {' . "\n"
-            . '      // Same-origin URL not in MAP (uncloned page): block navigation so the user' . "\n"
-            . '      // never leaks through to the original source site.' . "\n"
-            . '      // Allow only in-page anchors (#...) and relative internal_N/ paths.' . "\n"
             . '      var rel = a.getAttribute(\'href\') || \'\';' . "\n"
-            . '      var isLocal = rel === \'\' || /^(#|javascript:|internal_\\d+\\/)/i.test(rel);' . "\n"
+            . '      var isLocal = rel === \'\' || /^(#|javascript:|internal_\\d+\\/|_p\\/)/i.test(rel);' . "\n"
             . '      if (!isLocal) e.preventDefault();' . "\n"
             . '      return;' . "\n"
             . '    }' . "\n"
@@ -386,9 +405,10 @@ HTML;
             . '    .then(function(r){ return r.json(); })' . "\n"
             . '    .then(function(d){' . "\n"
             . '      if (d.preview_relative) {' . "\n"
-            . '        window.location.href = String(d.preview_relative);' . "\n"
+            . '        window.location.href = LP_ROOT + String(d.preview_relative);' . "\n"
             . '      } else if (d.local_path && typeof d.local_path === \'string\') {' . "\n"
-            . '        window.location.href = String(d.local_path).replace(/' . '^output' . '\\/[^/]+\\/' . '/, \'\');' . "\n"
+            . '        var p = String(d.local_path).replace(/' . '^output' . '\\/[^/]+\\/' . '/, \'\');' . "\n"
+            . '        window.location.href = LP_ROOT + p;' . "\n"
             . '      }' . "\n"
             . '    })' . "\n"
             . '    .catch(function(){});' . "\n"

@@ -150,14 +150,15 @@ try {
     $regions = $pageRow['data_io_regions'] ?? [];
     $html = LpIoNeutralizer::applyNeutralization($html, is_array($regions) ? $regions : []);
 
-    $urlMap = LpGenerator::buildInternalUrlToPageKeyMap($siteMapRaw);
-    $origin = LpGenerator::entryOriginFromSiteMap($siteMapRaw);
-    $html   = $generator->injectClickInterceptorScript($html, $origin, $urlMap);
-
     $localPathRel = trim((string) ($pageRow['local_path'] ?? ''));
     if ($localPathRel === '') {
         throw new RuntimeException('local_path が空です。');
     }
+
+    $urlMap    = LpGenerator::buildInternalUrlToPageKeyMap($siteMapRaw);
+    $origin    = LpGenerator::entryOriginFromSiteMap($siteMapRaw);
+    $pageDepth = LpGenerator::computeLocalPathDepth($localPathRel);
+    $html      = $generator->injectClickInterceptorScript($html, $origin, $urlMap, $pageDepth);
 
     if (!is_dir($outputDir)) {
         mkdir($outputDir, 0755, true);

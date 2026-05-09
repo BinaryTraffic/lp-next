@@ -108,7 +108,7 @@ try {
 
     $urlMap = LpGenerator::buildInternalUrlToPageKeyMap($siteMapRaw);
     $origin = LpGenerator::entryOriginFromSiteMap($siteMapRaw);
-    $html   = $generator->injectClickInterceptorScript($html, $origin, $urlMap);
+    $html   = $generator->injectClickInterceptorScript($html, $origin, $urlMap, 0);
 
     $localPathRel = trim((string) ($indexPage['local_path'] ?? ''));
     if ($localPathRel === '') {

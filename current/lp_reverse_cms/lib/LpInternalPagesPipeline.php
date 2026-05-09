@@ -20,7 +20,7 @@ final class LpInternalPagesPipeline
     /** トップ（エントリ）からのリンクのみ。内部ページ内で見つかったリンクはクロールしない */
     public const INTERNAL_LINK_CRAWL_MAX_DEPTH = 1;
 
-    public const MAX_PAGES = 20;
+    public const MAX_PAGES = 100;
     private const INTERNAL_ASSET_MAX_NEW_DOWNLOADS = 220;
     private const INTERNAL_ASSET_MAX_ELAPSED_SECONDS = 75;
     private const PIPELINE_MAX_ELAPSED_SECONDS = 300;
@@ -191,7 +191,22 @@ final class LpInternalPagesPipeline
         $urls = self::collectInternalDocumentUrlsFromEntryStructure($structure);
         $urls = array_values(array_filter($urls, static fn(string $u): bool => $u !== $entryCanon));
         $urls = array_values(array_unique($urls));
-        sort($urls);
+        usort($urls, static function (string $a, string $b) use ($entryCanon): int {
+            $entryPath = rtrim(parse_url($entryCanon, PHP_URL_PATH) ?? '/', '/') . '/';
+            $pa = parse_url($a, PHP_URL_PATH) ?? '/';
+            $pb = parse_url($b, PHP_URL_PATH) ?? '/';
+            $aUnder = (int) str_starts_with($pa, $entryPath);
+            $bUnder = (int) str_starts_with($pb, $entryPath);
+            if ($aUnder !== $bUnder) {
+                return $bUnder - $aUnder; // under-entry pages first
+            }
+            $da = substr_count(trim($pa, '/'), '/');
+            $db = substr_count(trim($pb, '/'), '/');
+            if ($da !== $db) {
+                return $da - $db; // shallower depth first
+            }
+            return strcmp($a, $b);
+        });
         $urls = array_slice($urls, 0, self::MAX_PAGES);
 
         $manifest = [];
@@ -334,7 +349,7 @@ final class LpInternalPagesPipeline
                 $structureRel = 'internal_pages/' . $slug . '.json';
                 self::storagePut($dataDir . $structureRel, json_encode($sub, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
-                $outputRel = 'pages/' . $slug . '.html';
+                $outputRel = self::mirrorOutputPath($canonUrl, $entryCanon);
                 $manifest[] = [
                     'canonical_url'    => $identity,
                     'source_canonical' => $canonUrl,
@@ -425,6 +440,34 @@ final class LpInternalPagesPipeline
             unset($el);
         }
         unset($sec);
+    }
+
+    /**
+     * Derives an output-relative path that mirrors the source URL structure.
+     * Pages directly under the entry URL preserve their sub-path (e.g. news/ → news/index.html).
+     * Pages outside the entry URL path fall back to a hash-based subdirectory.
+     */
+    private static function mirrorOutputPath(string $pageUrl, string $entryUrl): string
+    {
+        $entryPath = rtrim(parse_url($entryUrl, PHP_URL_PATH) ?? '/', '/') . '/';
+        $pagePath  = parse_url($pageUrl, PHP_URL_PATH) ?? '/';
+
+        if (str_starts_with($pagePath, $entryPath)) {
+            $rel = substr($pagePath, strlen($entryPath));
+        } else {
+            // Sibling or parent path: use hash-based sub-directory to avoid collisions
+            return '_p/' . substr(hash('sha256', $pageUrl), 0, 12) . '/index.html';
+        }
+
+        $rel = trim($rel, '/');
+        if ($rel === '') {
+            return 'index.html';
+        }
+        // File extensions: keep as-is; directory-like paths: append /index.html
+        if (preg_match('/\.(html?|php)$/i', $rel)) {
+            return $rel;
+        }
+        return $rel . '/index.html';
     }
 
     /**
