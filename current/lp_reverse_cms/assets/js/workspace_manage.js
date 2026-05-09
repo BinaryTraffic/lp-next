@@ -50,11 +50,19 @@ function lpInitWorkspaceManage(storeBase) {
     const id = String(row.id || '');
     const leg = row.legacy === true;
     const isCur = row.is_current === true || id === cur;
-    const canDelete = !(leg && role !== 'super_admin');
+    let canDelete;
+    if (leg) {
+      canDelete = true;
+    } else if (typeof row.can_delete === 'boolean') {
+      canDelete = row.can_delete;
+    } else {
+      canDelete = !(leg && roleLc !== 'super_admin');
+    }
     const siteUrl = String(row.site_url || '');
     const pageTitle = String(row.page_title || '');
     const pageCount = Number(row.page_count) || 0;
     const analyzedAt = String(row.analyzed_at || '');
+    const industryHint = String(row.industry_hint || '');
     const memo = String(row.memo || '');
     const hasData = siteUrl !== '';
 
@@ -110,6 +118,13 @@ function lpInitWorkspaceManage(storeBase) {
         titleEl.style.maxWidth = '360px';
         titleEl.textContent = pageTitle;
         tdMain.appendChild(titleEl);
+      }
+      if (industryHint) {
+        const indEl = document.createElement('div');
+        indEl.className = 'text-muted';
+        indEl.style.cssText = 'font-size:0.75rem;max-width:360px';
+        indEl.textContent = '🏷 ' + industryHint;
+        tdMain.appendChild(indEl);
       }
       if (memo) {
         const memoEl = document.createElement('div');
@@ -183,7 +198,7 @@ function lpInitWorkspaceManage(storeBase) {
     btnDel.style.fontSize = '0.72em';
     btnDel.textContent = '削除';
     btnDel.disabled = !canDelete;
-    if (leg && role === 'super_admin') btnDel.title = 'registry 未登録（旧データ）';
+    if (leg && roleLc === 'super_admin') btnDel.title = 'registry 未登録（旧データ）';
     btnDel.addEventListener('click', (e) => { e.stopPropagation(); void deleteSingle(id, leg); });
 
     tdAct.appendChild(btnDetail);

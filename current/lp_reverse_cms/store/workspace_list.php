@@ -22,10 +22,11 @@ try {
     // Enrich each workspace with content metadata from lp_structure.json
     $dataRoot = $cmsRoot . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR;
     $list = array_map(static function (array $ws) use ($dataRoot): array {
-        $ws['site_url']    = '';
-        $ws['page_title']  = '';
-        $ws['page_count']  = 0;
-        $ws['analyzed_at'] = '';
+        $ws['site_url']       = '';
+        $ws['page_title']     = '';
+        $ws['page_count']     = 0;
+        $ws['analyzed_at']    = '';
+        $ws['industry_hint']  = '';
         $structPath = $dataRoot . $ws['id'] . DIRECTORY_SEPARATOR . 'lp_structure.json';
         if (is_readable($structPath)) {
             $struct = json_decode((string) file_get_contents($structPath), true);
@@ -34,6 +35,13 @@ try {
                 $ws['page_title']  = (string) ($struct['meta']['title'] ?? '');
                 $ws['page_count']  = 1 + count((array) ($struct['internal_pages'] ?? []));
                 $ws['analyzed_at'] = (string) ($struct['analyzed_at'] ?? '');
+            }
+        }
+        $suggestPath = $dataRoot . $ws['id'] . DIRECTORY_SEPARATOR . 'industry_suggest.json';
+        if ($ws['industry_hint'] === '' && is_readable($suggestPath)) {
+            $sug = json_decode((string) file_get_contents($suggestPath), true);
+            if (is_array($sug) && trim((string) ($sug['source_industry'] ?? '')) !== '') {
+                $ws['industry_hint'] = trim((string) $sug['source_industry']);
             }
         }
         return $ws;

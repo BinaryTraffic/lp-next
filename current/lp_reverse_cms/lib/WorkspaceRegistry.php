@@ -98,6 +98,7 @@ final class WorkspaceRegistry
 
         $diskNames = $this->collectDiskWorkspaceNames();
         $current   = 'ws_' . LpWorkspace::id();
+        $memoSide = $this->loadMemoSidecarMap();
 
         $out = [];
         foreach ($diskNames as $name) {
@@ -115,6 +116,7 @@ final class WorkspaceRegistry
                     'created_at'        => '',
                     'last_active_at'    => '',
                     'state'             => 'legacy',
+                    'memo'              => $this->memoTextFromSidecarEntry($memoSide[$name] ?? null),
                     'bytes'             => $bytes,
                     'mtime'             => $mtime,
                     'is_current'        => $name === $current,
@@ -143,13 +145,15 @@ final class WorkspaceRegistry
             if ($st === '') {
                 $st = 'active';
             }
+            $regMemo = (string) ($meta['memo'] ?? '');
+            $sideMemo = $this->memoTextFromSidecarEntry($memoSide[$name] ?? null);
             $out[] = [
                 'id'               => $name,
                 'owner_email'      => $owner,
                 'created_at'         => (string) ($meta['created_at'] ?? ''),
                 'last_active_at'     => (string) ($meta['last_active_at'] ?? ''),
                 'state'              => $st,
-                'memo'               => (string) ($meta['memo'] ?? ''),
+                'memo'               => $regMemo !== '' ? $regMemo : $sideMemo,
                 'bytes'              => $bytes,
                 'mtime'              => $mtime,
                 'is_current'         => $name === $current,
@@ -235,6 +239,10 @@ final class WorkspaceRegistry
             $this->writeJsonFile($raw);
         });
 
+        $this->withFileLock(LOCK_EX, function () use ($workspaceFolder): void {
+            $this->writeMemoSidecarUnderLock($workspaceFolder, '');
+        });
+
         return true;
     }
 
@@ -250,25 +258,105 @@ final class WorkspaceRegistry
         }
         $folderName = strtolower($folderName);
         $email = strtolower(trim($actor['email']));
-        $role  = $actor['role'];
+        $roleLc = strtolower(trim((string) ($actor['role'] ?? '')));
 
-        return (bool) $this->withFileLock(LOCK_EX, function () use ($folderName, $memo, $email, $role): bool {
+        return (bool) $this->withFileLock(LOCK_EX, function () use ($folderName, $memo, $email, $roleLc): bool {
             $raw = $this->readJsonFile();
             /** @var array<string, array<string, mixed>> $map */
             $map = $raw['workspaces'] ?? [];
-            if (!is_array($map) || !isset($map[$folderName])) {
+            if (!is_array($map)) {
+                $map = [];
+            }
+            if (isset($map[$folderName]) && is_array($map[$folderName])) {
+                $owner = strtolower(trim((string) ($map[$folderName]['owner_email'] ?? '')));
+                if ($owner !== $email && $roleLc !== 'super_admin') {
+                    return false;
+                }
+                $map[$folderName]['memo'] = $memo;
+                $raw['workspaces'] = $map;
+                $this->writeJsonFile($raw);
+
+                return true;
+            }
+
+            // レジストリなし（典型的な legacy）: super_admin のみ、ディスク上に ws が存在する場合に sidecar に保存
+            if ($roleLc !== 'super_admin') {
                 return false;
             }
-            $owner = strtolower(trim((string) ($map[$folderName]['owner_email'] ?? '')));
-            if ($owner !== $email && $role !== 'super_admin') {
+            if (!$this->hasWorkspaceFolderOnDisk($folderName)) {
                 return false;
             }
-            $map[$folderName]['memo'] = $memo;
-            $raw['workspaces'] = $map;
-            $this->writeJsonFile($raw);
+            $this->writeMemoSidecarUnderLock($folderName, $memo);
 
             return true;
         });
+    }
+
+    /** @return array<string, mixed> */
+    private function loadMemoSidecarMap(): array
+    {
+        $path = $this->cmsRoot . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'workspace_memos.json';
+        if (!is_readable($path)) {
+            return [];
+        }
+        $j = json_decode((string) file_get_contents($path), true);
+
+        return is_array($j) ? $j : [];
+    }
+
+    /**
+     * @param mixed $entry
+     */
+    private function memoTextFromSidecarEntry(mixed $entry): string
+    {
+        if ($entry === null) {
+            return '';
+        }
+        if (is_string($entry)) {
+            return substr($entry, 0, 500);
+        }
+        if (is_array($entry)) {
+            return substr(trim((string) ($entry['memo'] ?? '')), 0, 500);
+        }
+
+        return '';
+    }
+
+    private function hasWorkspaceFolderOnDisk(string $folderName): bool
+    {
+        $data = $this->cmsRoot . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . $folderName;
+        $out = $this->cmsRoot . DIRECTORY_SEPARATOR . 'output' . DIRECTORY_SEPARATOR . $folderName;
+
+        return is_dir($data) || is_dir($out);
+    }
+
+    private function writeMemoSidecarUnderLock(string $folderName, string $memo): void
+    {
+        $path = $this->cmsRoot . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'workspace_memos.json';
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        $map = [];
+        if (is_readable($path)) {
+            $j = json_decode((string) file_get_contents($path), true);
+            if (is_array($j)) {
+                $map = $j;
+            }
+        }
+        if ($memo === '') {
+            unset($map[$folderName]);
+        } else {
+            $map[$folderName] = [
+                'memo'       => $memo,
+                'updated_at' => gmdate('c'),
+            ];
+        }
+        file_put_contents(
+            $path,
+            json_encode($map, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            LOCK_EX
+        );
     }
 
     private function touch(string $folderName, string $email): void
