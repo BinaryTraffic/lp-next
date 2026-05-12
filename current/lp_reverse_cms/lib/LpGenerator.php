@@ -273,10 +273,19 @@ HTML;
             }
             $html = LpIoNeutralizer::applyNeutralization($html, $regions);
 
-            $urlMap = self::buildInternalUrlToPageKeyMap($siteMap);
-            $origin = self::entryOriginFromSiteMap($siteMap);
+            $urlMap        = self::buildInternalUrlToPageKeyMap($siteMap);
+            $origin        = self::entryOriginFromSiteMap($siteMap);
+            $depth         = self::computeLocalPathDepth($localPathRel);
+            $hrefMap       = self::buildSameOriginHrefMap($siteMap);
+
+            // ── Static href rewrite: same-origin absolute URLs → local relative paths ──
+            // Covers all <a href="…"> including navigation elements without data-lp-id.
+            if ($origin !== '' && $hrefMap !== []) {
+                $html = self::rewriteSameOriginHrefs($html, $hrefMap, $depth);
+            }
+
+            // ── JS interceptor: fallback for any unmapped same-origin links ──
             if ($origin !== '' && $urlMap !== []) {
-                $depth = self::computeLocalPathDepth($localPathRel);
                 $html = $this->injectClickInterceptorScript($html, $origin, $urlMap, $depth);
             }
 
@@ -358,6 +367,97 @@ HTML;
         }
 
         return $map;
+    }
+
+    /**
+     * Build a map of same-origin absolute URL variants → output-root-relative local path.
+     * Covers the index page and all internal pages in the site_map.
+     *
+     * @param array<string,mixed> $siteMap
+     * @return array<string,string>  e.g. ['https://example.com/path/' => 'index.html', ...]
+     */
+    public static function buildSameOriginHrefMap(array $siteMap): array
+    {
+        $map = [];
+
+        $entryUrl = trim((string) (($siteMap['meta'] ?? [])['entry_url'] ?? ''));
+        if ($entryUrl !== '') {
+            $noTrail = rtrim($entryUrl, '/');
+            $map[$noTrail]        = 'index.html';
+            $map[$noTrail . '/']  = 'index.html';
+        }
+
+        foreach ($siteMap['pages'] ?? [] as $key => $page) {
+            if ($key === 'index' || !is_string($key) || !is_array($page)) {
+                continue;
+            }
+            $srcUrl   = trim((string) ($page['source_url'] ?? ''));
+            $localPath = trim((string) ($page['local_path'] ?? ''));
+            if ($srcUrl === '' || $localPath === '') {
+                continue;
+            }
+            // Strip "output/ws_xxx/" prefix → workspace-root-relative path
+            $rel = (string) (preg_replace('~^output/[^/]+/~', '', str_replace('\\', '/', $localPath)) ?? '');
+            if ($rel === '') {
+                continue;
+            }
+            $noTrail = rtrim($srcUrl, '/');
+            $map[$noTrail]        = $rel;
+            $map[$noTrail . '/']  = $rel;
+        }
+
+        return $map;
+    }
+
+    /**
+     * Statically rewrite same-origin absolute href values to local relative paths.
+     * Handles href="…" and href='…' (including HTML-entity-encoded variants).
+     * Longest URL first to avoid partial substring collisions.
+     *
+     * @param array<string,string> $urlToRelPath  from buildSameOriginHrefMap()
+     * @param int $depth  page depth from computeLocalPathDepth()
+     */
+    public static function rewriteSameOriginHrefs(string $html, array $urlToRelPath, int $depth): string
+    {
+        if ($urlToRelPath === []) {
+            return $html;
+        }
+
+        $prefix = $depth > 0 ? str_repeat('../', $depth) : '';
+        uksort($urlToRelPath, static fn($a, $b) => strlen($b) - strlen($a));
+
+        foreach ($urlToRelPath as $url => $relPath) {
+            if ($url === '' || $relPath === '') {
+                continue;
+            }
+            $local    = $prefix . $relPath;
+            $encUrl   = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+            $searches = ['"' . $url . '"', "'" . $url . "'"];
+            $replaces = ['"' . $local . '"', "'" . $local . "'"];
+            if ($encUrl !== $url) {
+                $searches[] = '"' . $encUrl . '"';
+                $searches[] = "'" . $encUrl . "'";
+                $replaces[] = '"' . $local . '"';
+                $replaces[] = "'" . $local . "'";
+            }
+
+            // Only replace inside href attributes (avoids touching JS/JSON strings)
+            foreach (['"', "'"] as $q) {
+                $from = 'href=' . $q . $url . $q;
+                $to   = 'href=' . $q . $local . $q;
+                if (str_contains($html, $from)) {
+                    $html = str_replace($from, $to, $html);
+                }
+                if ($encUrl !== $url) {
+                    $fromEnc = 'href=' . $q . $encUrl . $q;
+                    if (str_contains($html, $fromEnc)) {
+                        $html = str_replace($fromEnc, $to, $html);
+                    }
+                }
+            }
+        }
+
+        return $html;
     }
 
     /**
