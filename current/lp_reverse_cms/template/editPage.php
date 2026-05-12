@@ -106,11 +106,13 @@ $rollbackPreviewUrl = static function (string $rollbackSrc) use ($outputWsPrefix
                   $bgElemId      = 'css_bg_' . $section['id'] . '_' . $bgIdx;
                   $bgClientEl    = $clientElems[$bgElemId] ?? [];
                   $currentBgSrc  = (string) ($bgClientEl['src'] ?? '');
-                  // プレビュー: 置き換え済み > rollback proxy（外部 URL はホットリンク拒否の可能性）> 外部URL
+                  // プレビュー: 置き換え済み > rollback proxy > 外部URL は img_proxy 経由（ホットリンク対策）
                   if ($currentBgSrc !== '') {
                       $previewBgSrc = $currentBgSrc;
                   } elseif ($rollbackBgSrc !== '') {
                       $previewBgSrc = $rollbackPreviewUrl($rollbackBgSrc);
+                  } elseif ($origBgSrc !== '' && (str_starts_with($origBgSrc, 'http://') || str_starts_with($origBgSrc, 'https://'))) {
+                      $previewBgSrc = 'store/img_proxy.php?url=' . rawurlencode($origBgSrc);
                   } else {
                       $previewBgSrc = $origBgSrc;
                   }
@@ -130,9 +132,10 @@ $rollbackPreviewUrl = static function (string $rollbackSrc) use ($outputWsPrefix
                     <?php if ($previewBgSrc): ?>
                       <div class="mb-2 text-center">
                         <img src="<?= htmlspecialchars($previewBgSrc, ENT_QUOTES, 'UTF-8') ?>"
-                             alt="CSS背景プレビュー"
-                             class="img-fluid rounded border"
-                             style="max-height:120px; object-fit:contain;"
+                             alt=""
+                             class="img-fluid rounded border d-block"
+                             style="max-height:120px;max-width:100%;object-fit:contain;"
+                             onerror="this.style.display='none'"
                              data-preview-for="<?= $bgElemIdAttr ?>">
                       </div>
                     <?php endif; ?>

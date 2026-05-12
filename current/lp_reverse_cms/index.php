@@ -600,14 +600,14 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
             <div>
               <div class="fw-semibold">HTML・CSS・画像を取得中…</div>
-              <div class="small text-muted" id="prog_fetch_detail"></div>
+              <div class="small text-muted text-truncate" id="prog_fetch_detail" style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
             </div>
           </div>
           <div class="list-group-item d-flex align-items-center gap-3 py-3 text-muted" id="prog_analyze">
             <div class="text-secondary"><i class="bi bi-circle fs-5"></i></div>
-            <div class="flex-grow-1">
+            <div class="flex-grow-1 overflow-hidden">
               <div class="fw-semibold">サイト構造を解析中…</div>
-              <div class="small text-muted" id="prog_analyze_detail"></div>
+              <div class="small text-muted text-truncate" id="prog_analyze_detail" style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
               <div id="prog_analyze_bar_wrap" class="mt-2 d-none">
                 <div class="progress position-relative" style="height:28px;" role="progressbar"
                      aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="prog_analyze_bar_outer">
