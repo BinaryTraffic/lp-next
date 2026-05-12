@@ -373,8 +373,10 @@ function lpInitWorkspaceManage(storeBase) {
   // -------------------------------------------------------------------------
   // Load list
   // -------------------------------------------------------------------------
+  let listLoading = false;
   async function loadList() {
-    if (!tbody || !table) return;
+    if (listLoading || !tbody || !table) return;
+    listLoading = true;
     if (helpEl) helpEl.textContent = '読み込み中…';
     tbody.innerHTML = '';
     try {
@@ -403,6 +405,8 @@ function lpInitWorkspaceManage(storeBase) {
       });
     } catch {
       if (helpEl) helpEl.textContent = '一覧の取得に失敗しました。';
+    } finally {
+      listLoading = false;
     }
   }
 
