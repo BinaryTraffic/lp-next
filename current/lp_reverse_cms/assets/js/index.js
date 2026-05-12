@@ -117,6 +117,12 @@
       updateEditFormHeader('index', window.LP_CMS?.indexPageTitle || '', window.LP_CMS?.sourceUrl || '');
     }
 
+    // Load diagnostics when entering Step 3
+    if (n === 3) {
+      const diagSummary = document.getElementById('step3DiagSummary');
+      if (diagSummary) void loadDiagnostics(diagSummary);
+    }
+
     stepItems.forEach((item, idx) => {
       const s = parseInt(item.dataset.step, 10);
       item.classList.remove('step-active', 'step-done', 'step-pending');
@@ -1581,6 +1587,7 @@
         const v = Math.max(0, Math.min(100, parseInt(phBlendInput.value || '70', 10)));
         phBlendInput.value = String(v);
         savePhBlendOpacity(v / 100);
+        if (lastPhW > 0 && lastPhH > 0) void selectPlaceholder(lastPhW, lastPhH);
       });
     }
 
@@ -1591,6 +1598,11 @@
     let origW = 0;
     /** @type {number} */
     let origH = 0;
+    /** 最後に選択したプレースホルダーサイズ（モック濃度変更時の再ブレンド用） */
+    let lastPhW = 0;
+    let lastPhH = 0;
+    /** 現在の右ペイン選択がプレースホルダー（data: URL）かどうか */
+    let rightIsPlaceholder = false;
     /** @type {string} モーダル表示中の元画像 displayURL */
     let origDisplayUrl = '';
 
@@ -1714,11 +1726,17 @@
     }
 
     async function selectPlaceholder(w, h) {
+      // 右ペインに実画像がある場合は確認
+      if (selectedPath && !rightIsPlaceholder) {
+        if (!confirm('現在選択中の画像をモックアップに置き換えますか？')) return;
+      }
+      lastPhW = w;
+      lastPhH = h;
       if (phBlendStatus) phBlendStatus.classList.remove('d-none');
       try {
         const alpha = getPhBlendOpacity();
         const dataUrl = await blendPlaceholder(w, h, origDisplayUrl, alpha);
-        setRightSelection(dataUrl);
+        setRightSelection(dataUrl, true);
       } catch (e) {
         showToast('合成に失敗しました: ' + String(e.message || e), 'danger');
       } finally {
@@ -1765,8 +1783,9 @@
       return workspaceImageBrowserHref(s.startsWith('/') ? s : `/${s}`);
     }
 
-    function setRightSelection(path) {
+    function setRightSelection(path, isPlaceholder = false) {
       selectedPath = (path || '').trim();
+      rightIsPlaceholder = isPlaceholder;
       const url = resolveDisplayUrl(selectedPath);
       if (url && rightImg && rightPh) {
         wireImgDimsReporting(rightImg, dimsRightEl, url);
@@ -1843,6 +1862,9 @@
       const currentOverride = (srcInp && srcInp.value && srcInp.value.trim()) ? srcInp.value.trim() : '';
 
       origDisplayUrl = '';
+      lastPhW = 0;
+      lastPhH = 0;
+      rightIsPlaceholder = false;
       renderPlaceholderSection(0, 0);
       if (leftImg) {
         if (leftSrc) {
