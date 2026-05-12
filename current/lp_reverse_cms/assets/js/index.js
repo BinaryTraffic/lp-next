@@ -1656,13 +1656,19 @@
         return;
       }
       dimsEl.textContent = 'サイズ：読み込み中…';
-      const apply = () => {
-        dimsEl.textContent = formatImgPxDimsLine(imgEl);
+      const apply = () => { dimsEl.textContent = formatImgPxDimsLine(imgEl); };
+      let retries = 0;
+      const onErr = () => {
+        if (retries < 2) {
+          retries++;
+          const sep = u.includes('?') ? '&' : '?';
+          setTimeout(() => { imgEl.src = u + sep + '_r=' + retries; }, 1500);
+        } else {
+          dimsEl.textContent = 'サイズ：読み込みに失敗しました';
+        }
       };
       imgEl.onload = apply;
-      imgEl.onerror = () => {
-        dimsEl.textContent = 'サイズ：読み込みに失敗しました';
-      };
+      imgEl.onerror = onErr;
       imgEl.src = u;
       if (typeof imgEl.decode === 'function') {
         void imgEl.decode().then(apply).catch(() => {});
@@ -1680,11 +1686,23 @@
      */
     function loadImgCors(url) {
       return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('load failed: ' + url));
-        img.src = url;
+        let retries = 0;
+        function tryLoad(src) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = () => {
+            if (retries < 2) {
+              retries++;
+              const sep = url.includes('?') ? '&' : '?';
+              setTimeout(() => tryLoad(url + sep + '_r=' + retries), 1500);
+            } else {
+              reject(new Error('load failed: ' + url));
+            }
+          };
+          img.src = src;
+        }
+        tryLoad(url);
       });
     }
 
@@ -1902,8 +1920,15 @@
             renderPlaceholderSection(leftImg.naturalWidth, leftImg.naturalHeight);
           };
           leftImg.onload = applyDims;
+          let leftRetries = 0;
           leftImg.onerror = () => {
-            if (dimsLeftEl) dimsLeftEl.textContent = 'サイズ：読み込みに失敗しました';
+            if (leftRetries < 2) {
+              leftRetries++;
+              const sep = displayUrl.includes('?') ? '&' : '?';
+              setTimeout(() => { leftImg.src = displayUrl + sep + '_r=' + leftRetries; }, 1500);
+            } else {
+              if (dimsLeftEl) dimsLeftEl.textContent = 'サイズ：読み込みに失敗しました';
+            }
           };
           leftImg.src = displayUrl;
           if (typeof leftImg.decode === 'function') {

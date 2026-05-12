@@ -95,6 +95,21 @@ class LpGenerator
                 . $chunk . "</div>\n";
         }
 
+        // Relocate position:fixed elements to direct <body> children so they are not
+        // accidentally contained by a transformed ancestor inside .lp-reverse-section-root.
+        $fixedRelocScript = '<script data-lp-fixed-reloc>'
+            . '(function(){'
+            . 'function r(){'
+            . 'var els=[];'
+            . 'document.querySelectorAll(\'.lp-reverse-section-root *\').forEach(function(el){'
+            . 'if(window.getComputedStyle(el).position===\'fixed\'){els.push(el);}'
+            . '});'
+            . 'els.forEach(function(el){document.body.appendChild(el);});'
+            . '}'
+            . 'if(document.readyState===\'loading\'){document.addEventListener(\'DOMContentLoaded\',r);}else{r();}'
+            . '})();'
+            . '</script>';
+
         $html = <<<HTML
 <!DOCTYPE html>
 <html lang="ja">
@@ -109,6 +124,7 @@ class LpGenerator
 </head>
 <body{$bodyAttr}>
 {$sectionsHtml}
+{$fixedRelocScript}
 </body>
 </html>
 HTML;
@@ -518,6 +534,11 @@ HTML;
             . '      if (url.origin === ORIGIN) {' . "\n"
             . '        key = MAP[abs] || MAP[abs.replace(/' . '\\/' . '$/, \'\')];' . "\n"
             . '        if (!key) {' . "\n"
+            . '          if (url.pathname === \'/\' || url.pathname === \'\') {' . "\n"
+            . '            e.preventDefault();' . "\n"
+            . '            window.location.href = LP_ROOT + \'index.html\';' . "\n"
+            . '            return;' . "\n"
+            . '          }' . "\n"
             . '          var rel = a.getAttribute(\'href\') || \'\';' . "\n"
             . '          var isLocal = rel === \'\' || /^(#|javascript:|internal_\\d+\\/|_p\\/)/i.test(rel);' . "\n"
             . '          if (!isLocal) e.preventDefault();' . "\n"

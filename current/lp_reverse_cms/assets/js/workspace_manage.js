@@ -379,8 +379,11 @@ function lpInitWorkspaceManage(storeBase) {
     listLoading = true;
     if (helpEl) helpEl.textContent = '読み込み中…';
     tbody.innerHTML = '';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     try {
-      const r = await fetch(storeBase + 'workspace_list.php', { credentials: 'same-origin' });
+      const r = await fetch(storeBase + 'workspace_list.php', { credentials: 'same-origin', signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await r.json().catch(() => ({}));
       if (!r.ok || !data.ok) {
         if (helpEl) helpEl.textContent = (data && data.error) ? String(data.error) : ('HTTP ' + r.status);
@@ -404,6 +407,7 @@ function lpInitWorkspaceManage(storeBase) {
         tbody.appendChild(detailTr);
       });
     } catch {
+      clearTimeout(timeoutId);
       if (helpEl) helpEl.textContent = '一覧の取得に失敗しました。';
     } finally {
       listLoading = false;
@@ -504,6 +508,7 @@ function lpInitWorkspaceManage(storeBase) {
 
   if (btnRef) btnRef.addEventListener('click', () => { void loadList(); });
   if (btnDeleteSelected) btnDeleteSelected.addEventListener('click', () => { void deleteSelected(); });
+  void loadList();
   if (checkAll && tbody) {
     checkAll.addEventListener('change', () => {
       const boxes = Array.from(tbody.querySelectorAll('input.form-check-input[type="checkbox"]:not(:disabled)'));
