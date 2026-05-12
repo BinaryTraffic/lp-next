@@ -643,6 +643,16 @@
     const q = taskId ? `?task_id=${encodeURIComponent(taskId)}` : '';
     const res = await fetch(`store/analyze_progress.php${q}`, { credentials: 'same-origin' });
     const data = await res.json().catch(() => ({}));
+    // 404 "task not found" は書き込み競合の瞬間読みによる一過性エラーの可能性があるためリトライ
+    if (res.status === 404 && data && data.error === 'task not found') {
+      await sleep(1200);
+      const res2 = await fetch(`store/analyze_progress.php${q}`, { credentials: 'same-origin' });
+      const data2 = await res2.json().catch(() => ({}));
+      if (!res2.ok || !data2.ok) {
+        throw new Error((data2 && data2.error) ? String(data2.error) : (`HTTP ${res2.status}`));
+      }
+      return data2;
+    }
     if (!res.ok || !data.ok) {
       throw new Error((data && data.error) ? String(data.error) : (`HTTP ${res.status}`));
     }
