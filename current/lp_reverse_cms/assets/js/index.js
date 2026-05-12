@@ -2170,8 +2170,10 @@
         const stopBtn = document.createElement('button');
         stopBtn.type = 'button';
         stopBtn.className = 'btn btn-sm btn-outline-danger';
+        const isLegacyTask = /^(ana_|gen_)/.test(id);
         stopBtn.textContent = (status === 'stopping') ? '停止中' : '停止';
-        stopBtn.disabled = status === 'stopping';
+        stopBtn.disabled = status === 'stopping' || isLegacyTask;
+        if (isLegacyTask) stopBtn.title = '画面から操作してください';
         stopBtn.addEventListener('click', async () => {
           if (!confirm(`ジョブ ${id} を停止しますか？`)) return;
           try {
