@@ -1030,7 +1030,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           <h5 class="modal-title fs-6" id="aiGenerateModalLabel">
             <i class="bi bi-stars me-1"></i>AI テキスト自動生成
           </h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+          <button type="button" id="ai-replace-header-close" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
         </div>
         <div class="modal-body">
           <p class="small text-muted mb-2">
@@ -1095,12 +1095,17 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             <label class="form-check-label small" for="ai-replace-no-limit">件数制限を解除（60件超を一度に処理。API 負荷・待ち時間に注意）</label>
           </div>
           <div id="ai-replace-status" class="mt-2 small text-muted" hidden></div>
+          <div id="ai-replace-progress" class="mt-2 d-none">
+            <div class="progress" style="height:6px">
+              <div id="ai-replace-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:100%"></div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer py-2 gap-2">
           <button type="button" id="ai-replace-undo" class="btn btn-outline-secondary btn-sm me-auto" hidden>
             <i class="bi bi-arrow-counterclockwise me-1"></i>元に戻す
           </button>
-          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+          <button type="button" id="ai-replace-close" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
         </div>
       </div>
     </div>

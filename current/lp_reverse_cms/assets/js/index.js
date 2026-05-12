@@ -1135,7 +1135,17 @@
     const btn = document.getElementById('ai-replace-btn');
     const undoBtn = document.getElementById('ai-replace-undo');
     const status = document.getElementById('ai-replace-status');
+    const closeBtn = document.getElementById('ai-replace-close');
+    const headerCloseBtn = document.getElementById('ai-replace-header-close');
+    const progressWrap = document.getElementById('ai-replace-progress');
     if (!btn || !status) return;
+
+    function setGenerating(on) {
+      btn.disabled = on;
+      if (closeBtn) { closeBtn.disabled = on; closeBtn.textContent = on ? '生成中…' : '閉じる'; }
+      if (headerCloseBtn) headerCloseBtn.disabled = on;
+      if (progressWrap) progressWrap.classList.toggle('d-none', !on);
+    }
 
     /** @type {Record<string, string>|null} */
     let backup = null;
@@ -1219,7 +1229,7 @@
       const toneKey = toneSel && toneSel.value ? toneSel.value : 'polite';
       const tone = AI_TONE_MAP[toneKey] || toneKey;
 
-      btn.disabled = true;
+      setGenerating(true);
       if (elementTotalBeforeSlice > AI_TEXT_REPLACE_MAX) {
         setAiStatus(
           `${elementTotalBeforeSlice}件中 先頭${AI_TEXT_REPLACE_MAX}件を処理します — ${elements.length} 件を AI で生成中…`,
@@ -1260,6 +1270,7 @@
         );
         showToast(`AI テキスト置換：${replaced} 件`, 'success');
         if (undoBtn) undoBtn.hidden = false;
+        if (closeBtn) { closeBtn.textContent = '保存して閉じる'; closeBtn.classList.replace('btn-secondary', 'btn-success'); }
       } catch (e) {
         const msg = e.message || String(e);
         setAiStatus(`❌ エラー: ${msg}`, 'danger');
@@ -1267,7 +1278,7 @@
         backup = null;
         if (undoBtn) undoBtn.hidden = true;
       } finally {
-        btn.disabled = false;
+        setGenerating(false);
       }
     });
 
@@ -1287,6 +1298,19 @@
         showToast('入力を元に戻しました', 'info');
         undoBtn.hidden = true;
         backup = null;
+      });
+    }
+
+    // モーダルが閉じられたとき閉じるボタンをリセット
+    const aiModal = document.getElementById('aiGenerateModal');
+    if (aiModal) {
+      aiModal.addEventListener('hidden.bs.modal', () => {
+        if (closeBtn) {
+          closeBtn.disabled = false;
+          closeBtn.textContent = '閉じる';
+          closeBtn.classList.replace('btn-success', 'btn-secondary');
+        }
+        if (progressWrap) progressWrap.classList.add('d-none');
       });
     }
 
