@@ -487,8 +487,12 @@ function lpInitWorkspaceManage(storeBase) {
   // -------------------------------------------------------------------------
   const collapseEl = document.getElementById('workspaceManageCollapse');
   const detailsEl = document.getElementById('workspaceManageDetails');
+  const modalEl = document.getElementById('workspaceModal');
   if (collapseEl && typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
     collapseEl.addEventListener('shown.bs.collapse', () => { void loadList(); });
+  }
+  if (modalEl) {
+    modalEl.addEventListener('show.bs.modal', () => { void loadList(); });
   }
   if (detailsEl) {
     detailsEl.addEventListener('toggle', () => { if (detailsEl.open) void loadList(); });

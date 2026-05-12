@@ -2877,11 +2877,6 @@
     document.getElementById('jobModal')?.addEventListener('show.bs.modal', () => {
       void refreshJobList();
     });
-    document.getElementById('workspaceModal')?.addEventListener('show.bs.modal', () => {
-      if (typeof lpInitWorkspaceManage === 'function') {
-        lpInitWorkspaceManage('store/');
-      }
-    });
     // 定期的にジョブバッジを更新（30秒ごと）
     void refreshJobList();
     setInterval(() => { void refreshJobList(); }, 30000);
