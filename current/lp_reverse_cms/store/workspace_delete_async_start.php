@@ -48,12 +48,18 @@ try {
     $taskId = $created['task_id'];
     if (empty($created['already_running'])) {
         $worker = $cmsRoot . '/tools/workspace_delete_async_worker.php';
+        $phpBin = PHP_BINARY;
+        if (!is_file($phpBin) || !is_executable($phpBin)) {
+            $phpBin = trim((string) shell_exec('which php8.2 2>/dev/null'))
+                   ?: trim((string) shell_exec('which php 2>/dev/null'))
+                   ?: '/usr/bin/php8.2';
+        }
         $prefix = stripos(PHP_OS, 'darwin') === 0 ? 'nohup' : 'nohup setsid';
-        $cmd = $prefix . ' ' . escapeshellarg(PHP_BINARY) . ' '
+        $cmd = $prefix . ' ' . escapeshellarg($phpBin) . ' '
             . escapeshellarg($worker) . ' '
             . escapeshellarg($cmsRoot) . ' '
             . escapeshellarg($taskId)
-            . ' > /dev/null 2>&1 &';
+            . ' > /tmp/workspace_delete_' . preg_replace('/[^a-zA-Z0-9_\-]/', '', $taskId) . '.log 2>&1 &';
         shell_exec($cmd);
     }
 
