@@ -44,3 +44,4 @@ current/lp_reverse_cms/fonts/*.otf
 # ログ・一時ファイル
 *.log
 php_errors.log
+*.tar.gz

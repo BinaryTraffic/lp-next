@@ -17,10 +17,43 @@ PHPフルスクラッチWebアプリ。
 | 役割 | 内容 |
 |------|------|
 | オーナー・開発者 | shimizu（ソロ開発・レビュアーなし） |
-| PC 開発環境 | Windows 11 + WSL Ubuntu |
-| Mac 開発環境 | MacBook Air M2 |
-| ファイル同期 | Google Drive |
+| PC 開発環境 | Windows 11 + WSL Ubuntu（事務所据え置き） |
+| Mac 開発環境 | MacBook Air M2（ノマド・外出時） |
+| ファイル同期 | Google Drive オフラインミラーリング（PC・Mac 共通） |
 | サーバー | GCP VM（lp-next.jitan.app） |
+
+### ファイル管理・デプロイの全体像
+
+**Google Drive が常に最新のソース（source of truth）。Git はバックアップ兼デプロイ手段。**
+
+```
+事務所PC（Windows/WSL）  ───┐
+                            │  Google Drive でミラーリング同期
+ノマドMac（macOS）       ───┘  （PC・Mac は同時に使わない運用）
+         ↓
+   編集完了後に git commit & push
+         ↓
+      GitHub（バックアップ）
+         ↓
+   GCP VM で git pull → 本番反映
+```
+
+- PC と Mac は**同時に電源を入れない運用**（事務所 or ノマドのどちらか一方がアクティブ）
+- そのため Git のコリジョンは発生しない
+- ローカルでの `git pull` は不要（Google Drive が同期を担う）
+- `.git/` フォルダも Google Drive で同期されているが、同時操作しないため問題なし
+
+### PC と Mac の環境差異（重要）
+
+| 項目 | PC（WSL） | Mac（macOS） |
+|------|-----------|--------------|
+| ファイルの実体 | WSL ローカルディスク（ext4） | Google Drive 仮想FS（FUSE）マウント |
+| Web サーバー | Apache2（`www-data` ユーザー） | PHP ビルトインサーバー（ログインユーザーで起動） |
+| Apache で配信 | 可能 | **不可**（`_www` が仮想FSにアクセス不可・`Operation not permitted`） |
+| Google Drive パス | `C:\Users\...\Google Drive\マイドライブ\` | `/Users/bintr/Library/CloudStorage/GoogleDrive-shimizu@binarytraffic.jp/マイドライブ/` |
+| GOOGLE_REDIRECT_URI | `http://localhost/current/lp_reverse_cms/store/auth_callback.php` | `http://localhost:8080/lp_reverse_cms/store/auth_callback.php` |
+
+> **引き継ぐ人へ**: このプロジェクトのコードは Google Drive で管理されており、GitHub はあくまでバックアップ兼本番デプロイの踏み台です。ローカルで最新コードを見たい場合は Google Drive のミラーフォルダを参照してください。GitHub の内容が最新とは限りません（最後に push したタイミングまでの状態です）。
 
 ---
 
@@ -138,17 +171,15 @@ $html = (string) preg_replace(
 ## 開発フロー（確定版）
 
 ```
-[PC/Mac ローカル]
-  コード修正
-    ↓
-  ローカル動作確認
-  http://localhost/current/lp_reverse_cms/
-    ↓
-  git commit（WSL or Cursor）
-    ↓
-  git push（Windows PowerShell 経由）
-    ↓
-[GitHub main]
+[PC ローカル]                        [Mac ローカル]
+  コード修正（WSL）                    コード修正（Cursor / エディタ）
+    ↓                                   ↓
+  http://localhost/current/            php -S localhost:8080
+  lp_reverse_cms/                      http://localhost:8080/lp_reverse_cms/
+    ↓                                   ↓（Google Drive 経由で自動同期）
+  git commit & push                   git commit & push（Cursor / ターミナル）
+    ↓（PowerShell経由）                  ↓
+[GitHub main] ←─────────────────────────┘
     ↓
 [GCP本番] git pull
     ↓
@@ -164,7 +195,7 @@ $html = (string) preg_replace(
 | 環境 | URL / パス |
 |------|-----------|
 | PC ローカル（WSL） | `http://localhost/current/lp_reverse_cms/` |
-| Mac ローカル | 未セットアップ（要PHP/Apache） |
+| Mac ローカル（PHP ビルトイン） | `http://localhost:8080/lp_reverse_cms/` |
 | GCP 本番 | `https://lp-next.jitan.app/current/lp_reverse_cms/` |
 | SSH | `ssh gcp-lp`（~/.ssh/config 設定済み） |
 
@@ -192,7 +223,8 @@ ANTHROPIC_API_KEY=
 HF_API_KEY=
 ```
 
-ローカル開発時は `GOOGLE_REDIRECT_URI=http://localhost/current/lp_reverse_cms/store/auth_callback.php`
+ローカル開発時（PC/WSL）: `GOOGLE_REDIRECT_URI=http://localhost/current/lp_reverse_cms/store/auth_callback.php`  
+ローカル開発時（Mac）: `GOOGLE_REDIRECT_URI=http://localhost:8080/lp_reverse_cms/store/auth_callback.php`
 
 ---
 
@@ -214,7 +246,7 @@ HF_API_KEY=
 
 ### インフラ（検討中）
 - [ ] Google Drive + SFTP デプロイへの移行
-- [ ] Mac ローカル開発環境セットアップ（PHP/Apache on Mac）
+- [x] Mac ローカル開発環境セットアップ（PHP ビルトインサーバー）
 - [ ] CLAUDE.md の Mac 側同期フロー確立
 
 ---
@@ -230,6 +262,15 @@ ssh gcp-lp "cd /home/lp-next && git pull origin main"
 
 # ローカルApache起動（WSL）
 sudo service apache2 start
+
+# Mac ローカル起動（PHP ビルトインサーバー）
+# ※ Google Drive 仮想FSはApacheの_wwwユーザーからアクセス不可のため、ビルトインサーバーを使用
+# ※ Homebrew の PHP が必要（brew install php）
+eval "$(/opt/homebrew/bin/brew shellenv zsh)"
+cd "/Users/bintr/Library/CloudStorage/GoogleDrive-shimizu@binarytraffic.jp/マイドライブ/projects/lp-next/current"
+php -S localhost:8080
+# → http://localhost:8080/lp_reverse_cms/ でアクセス
+# ※ 8080が使用中の場合: sudo apachectl stop してから再実行
 
 # git push（PowerShell）
 $tmp="$env:TEMP\lp-push-$(Get-Random)"
