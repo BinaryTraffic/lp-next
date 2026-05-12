@@ -43,9 +43,10 @@ try {
     session_regenerate_id(true);
 
     $_SESSION['auth'] = [
-        'email' => $email,
-        'name'  => $name,
-        'role'  => $effective,
+        'email'   => $email,
+        'name'    => $name,
+        'role'    => $effective,
+        'picture' => (string) ($user['picture'] ?? ''),
     ];
 
     if ($effective === 'preview') {

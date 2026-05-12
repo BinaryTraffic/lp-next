@@ -2129,6 +2129,16 @@
     try {
       const res = await apiGet('store/job_list.php');
       const jobs = Array.isArray(res.jobs) ? res.jobs : [];
+      // ナビバーバッジを更新
+      const badge = document.getElementById('navJobBadge');
+      if (badge) {
+        if (jobs.length > 0) {
+          badge.textContent = String(jobs.length);
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
       if (jobs.length === 0) {
         help.textContent = '実行中ジョブはありません。';
         table.classList.add('d-none');
@@ -2864,9 +2874,17 @@
     document.getElementById('btnJobListRefresh')?.addEventListener('click', () => {
       void refreshJobList();
     });
-    document.getElementById('jobManageCollapse')?.addEventListener('shown.bs.collapse', () => {
+    document.getElementById('jobModal')?.addEventListener('show.bs.modal', () => {
       void refreshJobList();
     });
+    document.getElementById('workspaceModal')?.addEventListener('show.bs.modal', () => {
+      if (typeof lpInitWorkspaceManage === 'function') {
+        lpInitWorkspaceManage('store/');
+      }
+    });
+    // 定期的にジョブバッジを更新（30秒ごと）
+    void refreshJobList();
+    setInterval(() => { void refreshJobList(); }, 30000);
   }
 
   document.addEventListener('DOMContentLoaded', init);

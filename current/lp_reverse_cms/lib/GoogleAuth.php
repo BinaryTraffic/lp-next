@@ -111,7 +111,11 @@ final class GoogleAuth
           ? $userInfo['name']
           : $email;
 
-        return ['email' => $email, 'name' => $name];
+        return [
+            'email'   => $email,
+            'name'    => $name,
+            'picture' => isset($userInfo['picture']) && is_string($userInfo['picture']) ? $userInfo['picture'] : '',
+        ];
     }
 
     /** @return array<string, mixed> */

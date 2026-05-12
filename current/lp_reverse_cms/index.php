@@ -119,8 +119,10 @@ if (!isset($_SESSION['auth']) || !is_array($_SESSION['auth'])) {
     }
 }
 
-$sessionAuthUx = $_SESSION['auth'];
-$sessEmailUx   = strtolower(trim((string) ($sessionAuthUx['email'] ?? '')));
+$sessionAuthUx  = $_SESSION['auth'];
+$sessEmailUx    = strtolower(trim((string) ($sessionAuthUx['email'] ?? '')));
+$sessAvatarUx   = (string) ($sessionAuthUx['picture'] ?? '');
+$sessNameUx     = (string) ($sessionAuthUx['name'] ?? $sessEmailUx);
 
 if ($sessEmailUx === '') {
     unset($_SESSION['auth']);
@@ -356,16 +358,40 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
       </span>
     </span>
     <div class="d-flex align-items-center gap-2">
-      <span class="text-white-50 small d-none d-xl-inline text-truncate" style="max-width:200px;"
-            title="<?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>">
-        <?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>
-      </span>
+      <!-- 実行中ジョブ バッジボタン -->
+      <button class="btn btn-sm btn-outline-light position-relative" type="button"
+              data-bs-toggle="modal" data-bs-target="#jobModal" title="実行中ジョブ" id="navJobBtn">
+        <i class="bi bi-cpu"></i>
+        <span class="badge rounded-pill bg-warning text-dark position-absolute top-0 start-100 translate-middle"
+              id="navJobBadge" style="display:none;font-size:.6rem">0</span>
+      </button>
+      <!-- Google アバター -->
+      <?php if ($sessAvatarUx !== ''): ?>
+        <img src="<?= htmlspecialchars($sessAvatarUx, ENT_QUOTES, 'UTF-8') ?>" referrerpolicy="no-referrer"
+             class="rounded-circle border border-white border-opacity-50"
+             width="30" height="30"
+             title="<?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>"
+             alt="<?= htmlspecialchars($sessNameUx, ENT_QUOTES, 'UTF-8') ?>">
+      <?php else: ?>
+        <span class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center fw-bold"
+              style="width:30px;height:30px;font-size:.75rem"
+              title="<?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>">
+          <?= htmlspecialchars(mb_strtoupper(mb_substr($sessNameUx, 0, 1)), ENT_QUOTES, 'UTF-8') ?>
+        </span>
+      <?php endif; ?>
+      <!-- ハンバーガーメニュー -->
       <div class="dropdown">
         <button class="btn btn-sm btn-outline-light" type="button" id="navMenuDropdown"
                 data-bs-toggle="dropdown" aria-expanded="false" title="メニュー">
           <i class="bi bi-list"></i>
         </button>
         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navMenuDropdown">
+          <li>
+            <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#workspaceModal">
+              <i class="bi bi-folder2-open me-2"></i>ワークスペース
+            </button>
+          </li>
+          <li><hr class="dropdown-divider"></li>
           <?php if ($authManageUsers): ?>
           <li>
             <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#userMgmtModal">
@@ -642,75 +668,81 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 <!-- ===== MAIN LAYOUT ===== -->
 <div class="container-fluid py-4" style="max-width: 1200px;">
 
-  <div class="card border-secondary shadow-sm mb-3" id="workspaceManageCard">
-    <div class="card-header py-2 d-flex justify-content-between align-items-center"
-         style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#workspaceManageCollapse"
-         aria-expanded="false" aria-controls="workspaceManageCollapse">
-      <span>
-        <i class="bi bi-folder2-open me-2"></i><strong>ワークスペース</strong>
-        <span class="text-muted small fw-normal ms-1">（自分の ws_* のみ削除可<?= $currentRoleUx === 'super_admin' ? '／未登録フォルダも表示' : '' ?>）</span>
-      </span>
-      <i class="bi bi-chevron-down"></i>
-    </div>
-    <div class="collapse" id="workspaceManageCollapse">
-      <div class="card-body py-2">
-        <p class="small text-muted mb-2" id="workspaceManageHelp"></p>
-        <div class="table-responsive">
-          <table class="table table-sm table-bordered mb-0 align-middle d-none" id="workspaceManageTable">
-            <thead>
-              <tr>
-                <th style="width:38px"><input class="form-check-input" type="checkbox" id="workspaceManageCheckAll" aria-label="全選択"></th>
-                <th>サイト / タイトル</th>
-                <th style="width:56px" class="text-center">ページ</th>
-                <th style="width:80px">サイズ</th>
-                <th style="width:148px">解析日時</th>
-                <th style="width:160px"></th>
-              </tr>
-            </thead>
-            <tbody id="workspaceManageTbody"></tbody>
-          </table>
+  <!-- ワークスペース モーダル -->
+  <div class="modal fade" id="workspaceModal" tabindex="-1" aria-labelledby="workspaceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header py-2 bg-dark text-white">
+          <h5 class="modal-title fs-6" id="workspaceModalLabel">
+            <i class="bi bi-folder2-open me-2"></i>ワークスペース
+            <span class="text-white-50 fw-normal small ms-1">（自分の ws_* のみ削除可<?= $currentRoleUx === 'super_admin' ? '／未登録フォルダも表示' : '' ?>）</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="btnWorkspaceListRefresh">
-          <i class="bi bi-arrow-clockwise"></i> 再読込
-        </button>
-        <button type="button" class="btn btn-sm btn-danger mt-2 ms-2" id="btnWorkspaceDeleteSelected" disabled>
-          <i class="bi bi-trash"></i> 選択削除
-        </button>
+        <div class="modal-body py-3">
+          <p class="small text-muted mb-2" id="workspaceManageHelp"></p>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0 align-middle d-none" id="workspaceManageTable">
+              <thead>
+                <tr>
+                  <th style="width:38px"><input class="form-check-input" type="checkbox" id="workspaceManageCheckAll" aria-label="全選択"></th>
+                  <th>サイト / タイトル</th>
+                  <th style="width:56px" class="text-center">ページ</th>
+                  <th style="width:80px">サイズ</th>
+                  <th style="width:148px">解析日時</th>
+                  <th style="width:160px"></th>
+                </tr>
+              </thead>
+              <tbody id="workspaceManageTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="btnWorkspaceListRefresh">
+            <i class="bi bi-arrow-clockwise"></i> 再読込
+          </button>
+          <button type="button" class="btn btn-sm btn-danger" id="btnWorkspaceDeleteSelected" disabled>
+            <i class="bi bi-trash"></i> 選択削除
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="card border-secondary shadow-sm mb-3" id="jobManageCard">
-    <div class="card-header py-2 d-flex justify-content-between align-items-center"
-         style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#jobManageCollapse"
-         aria-expanded="false" aria-controls="jobManageCollapse">
-      <span>
-        <i class="bi bi-cpu me-2"></i><strong>実行中ジョブ</strong>
-        <span class="text-muted small fw-normal ms-1">（誰が・目的・対象WS）</span>
-      </span>
-      <i class="bi bi-chevron-down"></i>
-    </div>
-    <div class="collapse" id="jobManageCollapse">
-      <div class="card-body py-2">
-        <p class="small text-muted mb-2" id="jobManageHelp">読み込み中…</p>
-        <div class="table-responsive">
-          <table class="table table-sm table-bordered mb-0 align-middle d-none" id="jobManageTable">
-            <thead>
-              <tr>
-                <th>種別</th>
-                <th>実行者</th>
-                <th>目的</th>
-                <th>対象WS</th>
-                <th>開始（UTC）</th>
-                <th style="width:90px"></th>
-              </tr>
-            </thead>
-            <tbody id="jobManageTbody"></tbody>
-          </table>
+  <!-- 実行中ジョブ モーダル -->
+  <div class="modal fade" id="jobModal" tabindex="-1" aria-labelledby="jobModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header py-2 bg-dark text-white">
+          <h5 class="modal-title fs-6" id="jobModalLabel">
+            <i class="bi bi-cpu me-2"></i>実行中ジョブ
+            <span class="text-white-50 fw-normal small ms-1">（誰が・目的・対象WS）</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="btnJobListRefresh">
-          <i class="bi bi-arrow-clockwise"></i> 再読込
-        </button>
+        <div class="modal-body py-3">
+          <p class="small text-muted mb-2" id="jobManageHelp">読み込み中…</p>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0 align-middle d-none" id="jobManageTable">
+              <thead>
+                <tr>
+                  <th>種別</th>
+                  <th>実行者</th>
+                  <th>目的</th>
+                  <th>対象WS</th>
+                  <th>開始（UTC）</th>
+                  <th style="width:90px"></th>
+                </tr>
+              </thead>
+              <tbody id="jobManageTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="btnJobListRefresh">
+            <i class="bi bi-arrow-clockwise"></i> 再読込
+          </button>
+        </div>
       </div>
     </div>
   </div>
