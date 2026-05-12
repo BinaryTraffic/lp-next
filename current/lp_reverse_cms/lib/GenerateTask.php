@@ -145,7 +145,15 @@ final class GenerateTask
         if (!is_readable($path)) {
             return null;
         }
-        $json = json_decode((string) file_get_contents($path), true);
+        $fp = fopen($path, 'r');
+        if ($fp === false) {
+            return null;
+        }
+        flock($fp, LOCK_SH);
+        $content = stream_get_contents($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        $json = json_decode((string) $content, true);
 
         return is_array($json) ? $json : null;
     }
