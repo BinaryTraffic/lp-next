@@ -100,14 +100,21 @@ if (is_readable($pageClientPath)) {
 $sourceIndustry = '';
 $suggestions    = [];
 
+// rollback proxy URL 構築のために必要（editPage.php の $rollbackPreviewUrl クロージャが参照）
+$outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
+
 // Capture the edit form HTML from the PHP template
 ob_start();
 include $cmsRoot . '/template/editPage.php';
 $formHtml = (string) ob_get_clean();
 
+// Resolve page title: client_data meta.title → structure meta.title → page_key
+$pageTitle = (string) ($clientData['meta']['title'] ?? $structure['meta']['title'] ?? '');
+
 echo json_encode([
     'ok'         => true,
     'html'       => $formHtml,
     'page_key'   => $pageKey,
+    'page_title' => $pageTitle,
     'source_url' => $sourceUrl,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);

@@ -3,21 +3,20 @@
 declare(strict_types=1);
 
 /**
- * 画面表示用のビルド識別子（Git の短ハッシュ、無ければ主要ソースの最新更新日）。
+ * 画面表示用のビルド識別子。
+ * 主要ソースファイルの最終更新日時を YYYYMMDD+HHmm 形式で返す。
+ * （例: 20260512+1430）
  */
 function lp_reverse_app_build_label(string $cmsRoot): string
 {
-    $hash = lp_reverse_git_short_hash($cmsRoot);
-    if ($hash !== null) {
-        return $hash;
-    }
-
     $cmsRoot = rtrim($cmsRoot, '/\\');
     $files   = [
         $cmsRoot . DIRECTORY_SEPARATOR . 'index.php',
         $cmsRoot . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR . 'index.js',
         $cmsRoot . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR . 'index.css',
-        $cmsRoot . DIRECTORY_SEPARATOR . 'preview.php',
+        $cmsRoot . DIRECTORY_SEPARATOR . 'lib'    . DIRECTORY_SEPARATOR . 'LpAnalyzer.php',
+        $cmsRoot . DIRECTORY_SEPARATOR . 'lib'    . DIRECTORY_SEPARATOR . 'LpGenerator.php',
+        $cmsRoot . DIRECTORY_SEPARATOR . 'template' . DIRECTORY_SEPARATOR . 'editPage.php',
     ];
 
     $max = 0;
@@ -27,7 +26,8 @@ function lp_reverse_app_build_label(string $cmsRoot): string
         }
     }
 
-    return $max > 0 ? gmdate('Ymd', $max) : gmdate('Ymd');
+    $ts  = ($max > 0 ? $max : time()) + 9 * 3600; // UTC → JST (+9h)
+    return gmdate('Ymd', $ts) . '+' . gmdate('Hi', $ts);
 }
 
 /**

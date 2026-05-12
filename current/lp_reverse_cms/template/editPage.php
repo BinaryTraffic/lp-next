@@ -28,125 +28,30 @@ $clientElems = ($clientData['elements'] ?? []);
 
 $sectionCount  = count($sections);
 $elementCount  = $structure['total_elements'] ?? array_sum(array_column($sections, 'element_count'));
-?>
 
-<div class="d-flex align-items-center justify-content-between mb-4">
-  <div>
-    <h5 class="mb-1 fw-bold text-primary">
-      <i class="bi bi-pencil-square me-2"></i>コンテンツ編集
-    </h5>
-    <p class="text-muted small mb-0">
-      解析元：<a href="<?= htmlspecialchars($structure['source_url'] ?? '', ENT_QUOTES) ?>" target="_blank" class="text-decoration-none">
-        <?= htmlspecialchars($structure['source_url'] ?? '', ENT_QUOTES) ?>
-      </a>
-      <span class="ms-3 badge bg-secondary"><?= $sectionCount ?>セクション</span>
-      <span class="ms-1 badge bg-secondary"><?= $elementCount ?>要素</span>
-    </p>
-  </div>
-  </div>
+/**
+ * rollback_src (例: assets/rollback/foo.jpg) を serve_workspace_output.php 経由の
+ * プレビュー URL に変換する。$outputWsPrefix は index.php から継承。
+ */
+$rollbackPreviewUrl = static function (string $rollbackSrc) use ($outputWsPrefix): string {
+    if ($rollbackSrc === '') {
+        return '';
+    }
+    $wsPrefix  = rtrim((string) ($outputWsPrefix ?? ''), '/');
+    $absPath   = $wsPrefix . '/' . ltrim($rollbackSrc, '/');
+    return 'store/serve_workspace_output.php?p=' . rawurlencode($absPath);
+};
+?>
 
   <form id="clientDataForm">
 
-  <!-- AI テキスト自動置換（text_replace_ui + industry_suggest_and_batch） -->
-  <div id="ai-text-replace-panel" class="card shadow-sm mb-3 border-primary">
-    <div class="card-header bg-primary text-white d-flex align-items-center gap-2 py-2 flex-wrap">
-      <span><i class="bi bi-stars me-1" aria-hidden="true"></i><strong>AI テキスト自動生成</strong></span>
-      <small class="ms-md-auto opacity-75">ターゲット業種はページのメタ（title / description）から自動推定。初回は AI 置換まで自動実行（保存は従来どおり）</small>
-    </div>
-    <div class="card-body py-3">
-      <p class="small text-muted mb-2">
-        対象は <code>data-lp-field="text"</code> / <code>content</code> のみ。画像URL・リンクURL・画像内テキストメモは対象外です。
-      </p>
-      <?php if ($sourceIndustry !== ''): ?>
-        <p class="small text-muted mb-2">
-          元サイト業種: <strong class="text-body"><?= htmlspecialchars($sourceIndustry, ENT_QUOTES, 'UTF-8') ?></strong>
-        </p>
-      <?php endif; ?>
-      <?php if ($suggestions !== []): ?>
-        <div class="mb-2 d-flex flex-wrap gap-1" id="ai-suggest-chips">
-          <?php foreach ($suggestions as $s): ?>
-            <?php
-              $s = (string) $s;
-              if ($s === '') {
-                  continue;
-              }
-            ?>
-            <button type="button"
-                    class="btn btn-sm btn-outline-primary ai-chip"
-                    data-value="<?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>">
-              <?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>
-            </button>
-          <?php endforeach; ?>
-        </div>
-      <?php endif; ?>
-      <div class="row g-2 align-items-end">
-        <div class="col-md-5 col-lg-4">
-          <label class="form-label small mb-1" for="ai-industry">ターゲット業種 <span class="text-danger">*</span></label>
-          <input type="text" id="ai-industry" class="form-control form-control-sm"
-                 placeholder="例：ネイルサロン、歯科クリニック、学習塾" autocomplete="off"
-                 list="ai-industry-list"
-                 value="<?= $sourceIndustry !== '' ? htmlspecialchars($sourceIndustry, ENT_QUOTES, 'UTF-8') : '' ?>">
-          <datalist id="ai-industry-list">
-            <?php foreach ($suggestions as $s): ?>
-              <?php $s = (string) $s; ?>
-              <?php if ($s === '') { continue; } ?>
-              <option value="<?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>"></option>
-            <?php endforeach; ?>
-          </datalist>
-        </div>
-        <div class="col-md-4 col-lg-3">
-          <label class="form-label small mb-1" for="ai-tone">トーン</label>
-          <select id="ai-tone" class="form-select form-select-sm">
-            <option value="polite">丁寧・上品</option>
-            <option value="casual">カジュアル</option>
-            <option value="professional">ビジネス</option>
-          </select>
-        </div>
-        <div class="col-6 col-md-2 col-lg-2">
-          <button type="button" id="ai-replace-btn" class="btn btn-sm btn-primary w-100">AI 置換</button>
-        </div>
-        <div class="col-6 col-md-2 col-lg-2">
-          <button type="button" id="ai-replace-undo" class="btn btn-sm btn-outline-secondary w-100" hidden>元に戻す</button>
-        </div>
-      </div>
-      <div class="form-check form-switch mt-3 mb-1">
-        <input class="form-check-input" type="checkbox" id="ai-replace-no-limit" role="switch" autocomplete="off">
-        <label class="form-check-label small" for="ai-replace-no-limit">件数制限を解除（60件超を一度に処理。API 負荷・待ち時間に注意）</label>
-      </div>
-      <div id="ai-replace-status" class="mt-2 small text-muted" hidden></div>
-    </div>
-  </div>
-
-  <!-- ===== META ===== -->
-  <div class="card shadow-sm mb-3">
-    <div class="card-header bg-dark text-white d-flex align-items-center gap-2 py-2">
-      <i class="bi bi-info-circle-fill"></i>
-      <strong>ページ情報（メタデータ）</strong>
-    </div>
-    <div class="card-body">
-      <div class="row g-3">
-        <div class="col-md-6">
-          <label class="form-label small fw-semibold">ページタイトル</label>
-          <input type="text" class="form-control form-control-sm"
-                 name="meta[title]"
-                 placeholder="<?= htmlspecialchars($meta['title'] ?? '', ENT_QUOTES) ?>"
-                 value="<?= htmlspecialchars($clientMeta['title'] ?? '', ENT_QUOTES) ?>">
-          <?php if (!empty($meta['title'])): ?>
-            <div class="form-text text-muted">元：<?= htmlspecialchars($meta['title'], ENT_QUOTES) ?></div>
-          <?php endif; ?>
-        </div>
-        <div class="col-md-6">
-          <label class="form-label small fw-semibold">メタディスクリプション</label>
-          <input type="text" class="form-control form-control-sm"
-                 name="meta[description]"
-                 placeholder="<?= htmlspecialchars($meta['description'] ?? '', ENT_QUOTES) ?>"
-                 value="<?= htmlspecialchars($clientMeta['description'] ?? '', ENT_QUOTES) ?>">
-          <?php if (!empty($meta['description'])): ?>
-            <div class="form-text text-muted">元：<?= htmlspecialchars(mb_substr($meta['description'], 0, 80), ENT_QUOTES) ?>…</div>
-          <?php endif; ?>
-        </div>
-      </div>
-    </div>
+  <!-- ヒント: 空欄 = 元テキスト自動使用 -->
+  <div class="alert alert-light border d-flex align-items-start gap-2 py-2 px-3 mb-3" style="font-size:.8rem;line-height:1.4">
+    <i class="bi bi-lightbulb text-warning mt-1 flex-shrink-0"></i>
+    <span>
+      <strong>入力欄が空欄の場合、保存時に元サイトのテキストをそのまま使用します。</strong><br>
+      薄い斜体で表示されているテキストはプレースホルダー（元テキストのプレビュー）です。クリックして上書きできます。
+    </span>
   </div>
 
   <!-- ===== SECTIONS ===== -->
@@ -177,34 +82,50 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
            data-bs-toggle="collapse"
            data-bs-target="#collapse_<?= $secId ?>">
         <span class="d-flex align-items-center gap-2">
+          <i class="bi bi-chevron-down lp-sec-toggle"></i>
           <i class="bi <?= $secIcon ?>"></i>
           <strong><?= $secLabel ?></strong>
           <span class="badge bg-white text-dark ms-1"><?= $secType ?></span>
         </span>
-        <span class="badge bg-white text-dark"><?= $elemCount ?>要素 <i class="bi bi-chevron-down ms-1"></i></span>
+        <span class="badge bg-white text-dark"><?= $elemCount ?>要素</span>
       </div>
       <div id="collapse_<?= $secId ?>" class="collapse show">
         <div class="card-body">
           <?php
             $bgHints = $section['css_background_hints'] ?? [];
+            // (inline style) は elements[] に background_image 要素として入るため、ここでは CSS クラス系のみ表示
+            $bgHintsFiltered = array_filter($bgHints, static fn($h) => ($h['token'] ?? '') !== '(inline style)');
           ?>
-          <?php if ($bgHints !== []): ?>
+          <?php if ($bgHintsFiltered !== []): ?>
             <div class="row g-3 mb-3">
-              <?php foreach ($bgHints as $bgIdx => $h): ?>
+              <?php foreach ($bgHintsFiltered as $bgIdx => $h): ?>
                 <?php
-                  $tok         = (string) ($h['token'] ?? '');
-                  $origBgSrc   = (string) ($h['url'] ?? '');
-                  $bgElemId    = 'css_bg_' . $section['id'] . '_' . $bgIdx;
-                  $bgClientEl  = $clientElems[$bgElemId] ?? [];
-                  $currentBgSrc = (string) ($bgClientEl['src'] ?? '');
-                  $previewBgSrc = $currentBgSrc ?: $origBgSrc;
-                  $bgElemIdAttr = htmlspecialchars($bgElemId, ENT_QUOTES, 'UTF-8');
+                  $tok           = (string) ($h['token'] ?? '');
+                  $origBgSrc     = (string) ($h['url'] ?? '');
+                  $rollbackBgSrc = (string) ($h['rollback_src'] ?? '');
+                  $bgElemId      = 'css_bg_' . $section['id'] . '_' . $bgIdx;
+                  $bgClientEl    = $clientElems[$bgElemId] ?? [];
+                  $currentBgSrc  = (string) ($bgClientEl['src'] ?? '');
+                  // プレビュー: 置き換え済み > rollback proxy（外部 URL はホットリンク拒否の可能性）> 外部URL
+                  if ($currentBgSrc !== '') {
+                      $previewBgSrc = $currentBgSrc;
+                  } elseif ($rollbackBgSrc !== '') {
+                      $previewBgSrc = $rollbackPreviewUrl($rollbackBgSrc);
+                  } else {
+                      $previewBgSrc = $origBgSrc;
+                  }
+                  // モーダル左ペイン: rollback パス（JS が proxy URL に変換）> 元URL
+                  $leftPaneBgSrc = $rollbackBgSrc ?: $origBgSrc;
+                  $bgElemIdAttr  = htmlspecialchars($bgElemId, ENT_QUOTES, 'UTF-8');
                 ?>
                 <div class="col-md-6">
                   <div class="p-3 rounded border border-1 h-100" style="background:#fafafa">
                     <div class="d-flex align-items-center gap-1 mb-2">
                       <i class="bi bi-aspect-ratio text-secondary"></i>
                       <span class="small fw-semibold">CSS背景: <code class="fs-6"><?= htmlspecialchars($tok, ENT_QUOTES, 'UTF-8') ?></code></span>
+                      <?php if ($rollbackBgSrc !== ''): ?>
+                        <span class="badge bg-light text-secondary ms-auto" title="ロールバック保存済み"><i class="bi bi-shield-check"></i></span>
+                      <?php endif; ?>
                     </div>
                     <?php if ($previewBgSrc): ?>
                       <div class="mb-2 text-center">
@@ -225,7 +146,8 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                       <button type="button"
                               class="btn btn-outline-secondary lp-open-image-replace"
                               data-lp-id="<?= $bgElemIdAttr ?>"
-                              data-lp-original-src="<?= htmlspecialchars($origBgSrc, ENT_QUOTES, 'UTF-8') ?>"
+                              data-lp-rollback-src="<?= htmlspecialchars($rollbackBgSrc, ENT_QUOTES, 'UTF-8') ?>"
+                              data-lp-original-src="<?= htmlspecialchars($leftPaneBgSrc, ENT_QUOTES, 'UTF-8') ?>"
                               title="モーダルで差し替え">
                         <i class="bi bi-images"></i>
                       </button>
@@ -242,17 +164,28 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
             <div class="row g-3">
               <?php foreach ($section['elements'] as $elem): ?>
                 <?php
-                  $elemId       = htmlspecialchars($elem['id'], ENT_QUOTES);
-                  $elemType     = $elem['type'] ?? 'text';
-                  $elemLabel    = htmlspecialchars($elem['label'] ?? $elem['id'], ENT_QUOTES);
-                  $typeLabel    = htmlspecialchars($elem['type_label'] ?? $elemType, ENT_QUOTES);
-                  $origText     = $elem['original_text'] ?? '';
-                  $origSrc      = $elem['original_src']  ?? '';
-                  $origHref     = $elem['original_href'] ?? '';
-                  $clientElem   = $clientElems[$elem['id']] ?? [];
-                  $currentText  = $clientElem['text'] ?? '';
-                  $currentSrc   = $clientElem['src']  ?? '';
-                  $currentHref  = $clientElem['href'] ?? '';
+                  $elemId        = htmlspecialchars($elem['id'], ENT_QUOTES);
+                  $elemType      = $elem['type'] ?? 'text';
+                  $elemLabel     = htmlspecialchars($elem['label'] ?? $elem['id'], ENT_QUOTES);
+                  $typeLabel     = htmlspecialchars($elem['type_label'] ?? $elemType, ENT_QUOTES);
+                  $origText      = $elem['original_text'] ?? '';
+                  $origSrc       = $elem['original_src']  ?? '';
+                  $rollbackSrc   = (string) ($elem['rollback_src'] ?? '');
+                  $origHref      = $elem['original_href'] ?? '';
+                  $clientElem    = $clientElems[$elem['id']] ?? [];
+                  $currentText   = $clientElem['text'] ?? '';
+                  $currentSrc    = $clientElem['src']  ?? '';
+                  $currentHref   = $clientElem['href'] ?? '';
+                  // モーダル左ペイン: rollback パス（JS が proxy URL に変換）> original_src
+                  $leftPaneSrc   = $rollbackSrc ?: $origSrc;
+                  // プレビュー: 置き換え済み > rollback proxy（外部URLはホットリンク拒否の可能性）> 外部URL
+                  if ($currentSrc !== '') {
+                      $previewSrc = $currentSrc;
+                  } elseif ($rollbackSrc !== '') {
+                      $previewSrc = $rollbackPreviewUrl($rollbackSrc);
+                  } else {
+                      $previewSrc = $origSrc;
+                  }
 
                   $colClass = ($elemType === 'paragraph') ? 'col-12' : 'col-md-6';
                 ?>
@@ -265,27 +198,33 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                         <i class="bi bi-paragraph text-success"></i>
                       <?php elseif ($elemType === 'image'): ?>
                         <i class="bi bi-image text-warning"></i>
+                      <?php elseif ($elemType === 'background_image'): ?>
+                        <i class="bi bi-card-image text-secondary"></i>
                       <?php elseif ($elemType === 'button'): ?>
                         <i class="bi bi-arrow-right-circle text-danger"></i>
                       <?php else: ?>
                         <i class="bi bi-link-45deg text-info"></i>
                       <?php endif; ?>
                       <span class="small fw-semibold"><?= $elemLabel ?></span>
-                      <span class="badge bg-light text-secondary ms-auto">&lt;<?= htmlspecialchars($elem['tag'] ?? '', ENT_QUOTES) ?>&gt;</span>
+                      <?php if ($rollbackSrc !== ''): ?>
+                        <span class="badge bg-light text-secondary ms-auto" title="ロールバック保存済み"><i class="bi bi-shield-check"></i></span>
+                      <?php else: ?>
+                        <span class="badge bg-light text-secondary ms-auto">&lt;<?= htmlspecialchars($elem['tag'] ?? '', ENT_QUOTES) ?>&gt;</span>
+                      <?php endif; ?>
                     </div>
 
-                    <?php if ($elemType === 'image'): ?>
-                      <!-- Image: show current image + URL field + alt field -->
-                      <?php if ($origSrc || $currentSrc): ?>
+                    <?php if ($elemType === 'image' || $elemType === 'background_image'): ?>
+                      <!-- Image / background_image: show current image + URL field -->
+                      <?php if ($previewSrc): ?>
                         <div class="mb-2 text-center">
-                          <img src="<?= htmlspecialchars($currentSrc ?: $origSrc, ENT_QUOTES) ?>"
+                          <img src="<?= htmlspecialchars($previewSrc, ENT_QUOTES) ?>"
                                alt="preview"
                                class="img-fluid rounded border"
                                style="max-height:120px; object-fit:contain;"
                                data-preview-for="<?= $elemId ?>">
                         </div>
                       <?php endif; ?>
-                      <label class="form-label small">画像URL</label>
+                      <label class="form-label small"><?= $elemType === 'background_image' ? '背景画像URL' : '画像URL' ?></label>
                       <div class="input-group input-group-sm mb-2">
                         <input type="url" class="form-control"
                                data-lp-id="<?= $elemId ?>"
@@ -295,69 +234,78 @@ $elementCount  = $structure['total_elements'] ?? array_sum(array_column($section
                         <button type="button"
                                 class="btn btn-outline-secondary lp-open-image-replace"
                                 data-lp-id="<?= $elemId ?>"
-                                data-lp-original-src="<?= htmlspecialchars($origSrc, ENT_QUOTES) ?>"
+                                data-lp-rollback-src="<?= htmlspecialchars($rollbackSrc, ENT_QUOTES) ?>"
+                                data-lp-original-src="<?= htmlspecialchars($leftPaneSrc, ENT_QUOTES) ?>"
                                 title="モーダルで差し替え">
                           <i class="bi bi-images"></i>
                         </button>
                       </div>
-                      <label class="form-label small">alt テキスト</label>
-                      <input type="text" class="form-control form-control-sm mb-2"
-                             data-lp-id="<?= $elemId ?>"
-                             data-lp-field="text"
-                             data-lp-type="<?= htmlspecialchars($elemType, ENT_QUOTES) ?>"
-                             data-lp-label="<?= htmlspecialchars($elem['label'] ?? '', ENT_QUOTES) ?>"
-                             placeholder="<?= htmlspecialchars($origText, ENT_QUOTES) ?>"
-                             value="<?= htmlspecialchars($currentText, ENT_QUOTES) ?>">
-                      <?php
-                        $wrapHref = (string) ($elem['original_href'] ?? '');
-                        $wrapTargetOrig = (string) ($elem['wrap_target'] ?? '');
-                        $currentTarget = (string) ($clientElem['target'] ?? '');
-                        $memoOrig = (string) ($elem['image_embedded_text_memo'] ?? '');
-                        $memoVal = array_key_exists('image_embedded_text_memo', $clientElem)
-                          ? (string) $clientElem['image_embedded_text_memo']
-                          : $memoOrig;
-                        if (trim($memoVal) === '') {
-                          $memoVal = trim((string) ($origText ?? ''));
-                        }
-                      ?>
-                      <label class="form-label small">画像内テキスト（メモ・解析結果）</label>
-                      <textarea class="form-control form-control-sm mb-1" rows="3"
-                                data-lp-id="<?= $elemId ?>"
-                                data-lp-field="image_embedded_text_memo"
-                                placeholder="解析時に Vision で抽出した文言が入ります。編集・追記して保存できます。"><?= htmlspecialchars($memoVal, ENT_QUOTES) ?></textarea>
-                      <button type="button"
-                              class="btn btn-sm btn-outline-primary mb-2 lp-refine-image-from-memo"
-                              data-lp-id="<?= $elemId ?>">
-                        メモの文言で画像を再生成（UI/合成・テキスト焼き込み）
-                      </button>
-                      <?php if ($memoOrig !== '' && $memoVal !== $memoOrig): ?>
-                        <div class="form-text text-muted mb-2 small" style="white-space:pre-wrap">解析時の元メモ：<?= htmlspecialchars(mb_substr($memoOrig, 0, 200), ENT_QUOTES) ?><?= mb_strlen($memoOrig) > 200 ? '…' : '' ?></div>
-                      <?php endif; ?>
-                      <?php if ($wrapHref !== '' || $wrapTargetOrig !== ''): ?>
-                        <?php $__ws = (string) ($elem['href_scope'] ?? ''); ?>
-                        <?php if ($__ws !== '' && $__ws !== 'none'): ?>
-                          <div class="mb-1 small">
-                            <span class="badge bg-light text-dark border"><?= htmlspecialchars($__ws, ENT_QUOTES, 'UTF-8') ?></span>
-                            <?php if (!empty($elem['internal_relative_href'])): ?>
-                              <span class="text-success ms-1">クローン内 <code><?= htmlspecialchars((string) $elem['internal_relative_href'], ENT_QUOTES, 'UTF-8') ?></code></span>
-                            <?php endif; ?>
-                            <?php if (!empty($elem['href_redirect_check'])): ?>
-                              <span class="text-muted ms-1">HEAD: <code><?= htmlspecialchars((string) $elem['href_redirect_check'], ENT_QUOTES, 'UTF-8') ?></code></span>
-                            <?php endif; ?>
-                          </div>
-                        <?php endif; ?>
-                        <label class="form-label small">囲みリンク先（親の &lt;a href&gt;）</label>
+                      <?php if ($elemType === 'image'): ?>
+                        <label class="form-label small">alt テキスト</label>
                         <input type="text" class="form-control form-control-sm mb-2"
                                data-lp-id="<?= $elemId ?>"
-                               data-lp-field="href"
-                               placeholder="<?= htmlspecialchars($wrapHref, ENT_QUOTES) ?>"
-                               value="<?= htmlspecialchars($currentHref, ENT_QUOTES) ?>">
-                        <label class="form-label small">target（例: _blank）</label>
-                        <input type="text" class="form-control form-control-sm"
-                               data-lp-id="<?= $elemId ?>"
-                               data-lp-field="target"
-                               placeholder="<?= htmlspecialchars($wrapTargetOrig, ENT_QUOTES) ?>"
-                               value="<?= htmlspecialchars($currentTarget, ENT_QUOTES) ?>">
+                               data-lp-field="text"
+                               data-lp-type="<?= htmlspecialchars($elemType, ENT_QUOTES) ?>"
+                               data-lp-label="<?= htmlspecialchars($elem['label'] ?? '', ENT_QUOTES) ?>"
+                               placeholder="<?= htmlspecialchars($origText, ENT_QUOTES) ?>"
+                               value="<?= htmlspecialchars($currentText, ENT_QUOTES) ?>">
+                        <?php
+                          $wrapHref = (string) ($elem['original_href'] ?? '');
+                          $wrapTargetOrig = (string) ($elem['wrap_target'] ?? '');
+                          $currentTarget = (string) ($clientElem['target'] ?? '');
+                          $memoOrig = (string) ($elem['image_embedded_text_memo'] ?? '');
+                          $memoVal = array_key_exists('image_embedded_text_memo', $clientElem)
+                            ? (string) $clientElem['image_embedded_text_memo']
+                            : $memoOrig;
+                          if (trim($memoVal) === '') {
+                            $memoVal = trim((string) ($origText ?? ''));
+                          }
+                        ?>
+                        <label class="form-label small">画像内テキスト（メモ・解析結果）</label>
+                        <textarea class="form-control form-control-sm mb-1" rows="3"
+                                  data-lp-id="<?= $elemId ?>"
+                                  data-lp-field="image_embedded_text_memo"
+                                  placeholder="解析時に Vision で抽出した文言が入ります。編集・追記して保存できます。"><?= htmlspecialchars($memoVal, ENT_QUOTES) ?></textarea>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary mb-2 lp-refine-image-from-memo"
+                                data-lp-id="<?= $elemId ?>">
+                          メモの文言で画像を再生成（UI/合成・テキスト焼き込み）
+                        </button>
+                        <?php if ($memoOrig !== '' && $memoVal !== $memoOrig): ?>
+                          <div class="form-text text-muted mb-2 small" style="white-space:pre-wrap">解析時の元メモ：<?= htmlspecialchars(mb_substr($memoOrig, 0, 200), ENT_QUOTES) ?><?= mb_strlen($memoOrig) > 200 ? '…' : '' ?></div>
+                        <?php endif; ?>
+                        <?php if ($wrapHref !== '' || $wrapTargetOrig !== ''): ?>
+                          <?php $__ws = (string) ($elem['href_scope'] ?? ''); ?>
+                          <?php if ($__ws !== '' && $__ws !== 'none'): ?>
+                            <div class="mb-1 small">
+                              <span class="badge bg-light text-dark border"><?= htmlspecialchars($__ws, ENT_QUOTES, 'UTF-8') ?></span>
+                              <?php if (!empty($elem['internal_relative_href'])): ?>
+                                <span class="text-success ms-1">クローン内 <code><?= htmlspecialchars((string) $elem['internal_relative_href'], ENT_QUOTES, 'UTF-8') ?></code></span>
+                              <?php endif; ?>
+                              <?php if (!empty($elem['href_redirect_check'])): ?>
+                                <span class="text-muted ms-1">HEAD: <code><?= htmlspecialchars((string) $elem['href_redirect_check'], ENT_QUOTES, 'UTF-8') ?></code></span>
+                              <?php endif; ?>
+                            </div>
+                          <?php endif; ?>
+                          <label class="form-label small">囲みリンク先（親の &lt;a href&gt;）</label>
+                          <input type="text" class="form-control form-control-sm mb-2"
+                                 data-lp-id="<?= $elemId ?>"
+                                 data-lp-field="href"
+                                 placeholder="<?= htmlspecialchars($wrapHref, ENT_QUOTES) ?>"
+                                 value="<?= htmlspecialchars($currentHref, ENT_QUOTES) ?>">
+                          <label class="form-label small">target（例: _blank）</label>
+                          <input type="text" class="form-control form-control-sm"
+                                 data-lp-id="<?= $elemId ?>"
+                                 data-lp-field="target"
+                                 placeholder="<?= htmlspecialchars($wrapTargetOrig, ENT_QUOTES) ?>"
+                                 value="<?= htmlspecialchars($currentTarget, ENT_QUOTES) ?>">
+                        <?php endif; ?>
+                      <?php else: ?>
+                        <!-- background_image: 注記のみ -->
+                        <p class="mb-0 text-muted" style="font-size:.72em">
+                          インライン <code>style</code> の <code>background-image</code> を上書きします。
+                          置き換えなければロールバック画像をそのまま利用。
+                        </p>
                       <?php endif; ?>
 
                     <?php elseif ($elemType === 'paragraph'): ?>

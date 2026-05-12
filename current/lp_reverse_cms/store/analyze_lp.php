@@ -371,11 +371,14 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress, $jobRegistryA
         $mark('phase:industry_suggest:start');
         require_once dirname(__DIR__) . '/lib/suggest_industries.php';
         $industrySuggest = lp_reverse_suggest_industries_from_structure($structure);
-        file_put_contents(
-            $dataDir . 'industry_suggest.json',
-            json_encode($industrySuggest, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-            LOCK_EX,
-        );
+        // 空結果（API失敗時）はファイルを書かない → 次回ページロード時に再計算される
+        if (trim((string) ($industrySuggest['source_industry'] ?? '')) !== '') {
+            file_put_contents(
+                $dataDir . 'industry_suggest.json',
+                json_encode($industrySuggest, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+                LOCK_EX,
+            );
+        }
         $mark('phase:industry_suggest:done', [
             'industry_count' => count($industrySuggest['industries'] ?? []),
         ]);

@@ -13,7 +13,7 @@ require_once __DIR__ . '/lib/app_release.php';
 require_once __DIR__ . '/lib/LpWorkspace.php';
 require_once __DIR__ . '/lib/UserRegistry.php';
 
-define('APP_VERSION', '1.5.0');
+define('APP_VERSION', '1.5.001');
 define('APP_BUILD', lp_reverse_app_build_label(__DIR__));
 
 $outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
@@ -264,6 +264,9 @@ if (file_exists($clientDataSource)) {
         $clientData = $decoded;
     }
 }
+// モーダル（メタ・AI生成）で使用するため index.php 側でも定義
+$meta       = $structure['meta']   ?? [];
+$clientMeta = $clientData['meta']  ?? [];
 
 /** AI テキスト置換: メタ由来の業種・関連候補（analyze 時に industry_suggest.json へ保存） */
 $sourceIndustry = '';
@@ -284,7 +287,8 @@ if ($hasStructure && is_readable($industrySuggestPath)) {
         }
     }
 }
-// 旧ワークスペースで industry_suggest.json が無い場合のみサーバで補完（以降はファイルを使用）
+// industry_suggest.json が無い、または source_industry が空（API失敗時の空ファイル）の場合は再計算
+// industry_suggest.json が無い場合のみここで計算（存在するが空の場合は AIモーダル初期化時に非同期再取得）
 if ($hasStructure && !is_file($industrySuggestPath)) {
     require_once __DIR__ . '/lib/suggest_industries.php';
     $computed = lp_reverse_suggest_industries_from_structure($structure);
@@ -299,14 +303,17 @@ if ($hasStructure && !is_file($industrySuggestPath)) {
             }
         }
     }
-    file_put_contents(
-        $industrySuggestPath,
-        json_encode(
-            ['source_industry' => $sourceIndustry, 'suggestions' => $suggestions],
-            JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES,
-        ),
-        LOCK_EX,
-    );
+    // 成功した場合のみ保存（空結果は保存しない→次回ロード時に再試行）
+    if ($sourceIndustry !== '') {
+        file_put_contents(
+            $industrySuggestPath,
+            json_encode(
+                ['source_industry' => $sourceIndustry, 'suggestions' => $suggestions],
+                JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES,
+            ),
+            LOCK_EX,
+        );
+    }
 }
 
 // Determine which step to show on initial load (1 = fetch, 2 = edit, 3 = done)
@@ -576,12 +583,14 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
               <div class="fw-semibold">サイト構造を解析中…</div>
               <div class="small text-muted" id="prog_analyze_detail"></div>
               <div id="prog_analyze_bar_wrap" class="mt-2 d-none">
-                <div class="progress" style="height:8px;" role="progressbar"
+                <div class="progress position-relative" style="height:28px;" role="progressbar"
                      aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="prog_analyze_bar_outer">
                   <div id="prog_analyze_bar" class="progress-bar progress-bar-striped progress-bar-animated"
                        style="width: 0;"></div>
+                  <div id="prog_analyze_pct"
+                       class="position-absolute w-100 h-100 d-flex align-items-center justify-content-center fw-semibold small"
+                       style="top:0;left:0;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.55);">0%</div>
                 </div>
-                <div class="small fw-semibold text-body-secondary mt-1" id="prog_analyze_pct">0%/100%</div>
               </div>
             </div>
           </div>
@@ -804,6 +813,18 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
         </button>
       </span>
       <div class="d-flex gap-2 align-items-center flex-wrap">
+        <!-- メタデータ編集ボタン -->
+        <button type="button" class="btn btn-sm btn-outline-dark d-inline-flex align-items-center"
+                data-bs-toggle="modal" data-bs-target="#metaEditModal"
+                <?= !$hasStructure ? 'disabled' : '' ?>>
+          <i class="bi bi-info-circle me-1"></i>ページ情報
+        </button>
+        <!-- AI テキスト生成ボタン -->
+        <button type="button" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
+                data-bs-toggle="modal" data-bs-target="#aiGenerateModal"
+                <?= !$hasStructure ? 'disabled' : '' ?>>
+          <i class="bi bi-stars me-1"></i>AI テキスト生成
+        </button>
         <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
           data-bs-toggle="tooltip"
           data-bs-placement="bottom"
@@ -867,6 +888,18 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 
       <!-- Left: Page tree panel -->
       <div id="pageTreePanel">
+        <!-- Fixed header -->
+        <div id="pageTreeHeader">
+          <i class="bi bi-layers me-1"></i>ページ
+          <?php if ($sourceUrl !== ''): ?>
+            <a href="<?= htmlspecialchars($sourceUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank"
+               class="lp-tree-header-url">
+              <?= htmlspecialchars((string) (parse_url($sourceUrl, PHP_URL_HOST) ?: $sourceUrl), ENT_QUOTES, 'UTF-8') ?>
+              <i class="bi bi-box-arrow-up-right" style="font-size:.6rem"></i>
+            </a>
+          <?php endif; ?>
+        </div>
+        <!-- Scrollable tree body -->
         <?php if ($hasStructure): ?>
           <div id="pageTree">
             <div class="lp-tree-loading">
@@ -882,9 +915,17 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 
       <!-- Right: Edit form -->
       <div id="editFormWrapper">
-        <?php if ($hasStructure): ?>
-          <?php include __DIR__ . '/template/editPage.php'; ?>
-        <?php endif; ?>
+        <!-- Fixed header -->
+        <div id="editFormHeader">
+          <span id="editFormPageLabel"><i class="bi bi-pencil-square me-1 text-muted"></i>コンテンツ編集</span>
+          <a id="editFormPageUrl" href="#" target="_blank" class="lp-edit-header-url d-none"></a>
+        </div>
+        <!-- Scrollable form body -->
+        <div id="editFormContent">
+          <?php if ($hasStructure): ?>
+            <?php include __DIR__ . '/template/editPage.php'; ?>
+          <?php endif; ?>
+        </div>
       </div>
 
     </div>
@@ -892,6 +933,145 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
     <!-- Save/generate status -->
     <div id="generateError"  class="alert alert-danger  d-none mt-3"></div>
     <div id="generateSuccess" class="alert alert-success d-none mt-3"></div>
+  </div>
+
+  <!-- ===== ページ情報モーダル ===== -->
+  <div class="modal fade" id="metaEditModal" tabindex="-1" aria-labelledby="metaEditModalLabel" aria-hidden="true"
+       data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white py-2">
+          <h5 class="modal-title fs-6" id="metaEditModalLabel">
+            <i class="bi bi-info-circle-fill me-2"></i>ページ情報（メタデータ）
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-2">
+            <i class="bi bi-lightbulb text-warning me-1"></i>
+            入力欄をクリックして直接書き換えられます。<strong>空欄のまま閉じると元のテキストをそのまま使用します。</strong>
+            変更は「保存＆サイト生成」ボタンで確定されます。
+          </p>
+          <?php if ($hasStructure): ?>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label small fw-semibold" for="meta-title-inp">ページタイトル</label>
+                <input type="text" id="meta-title-inp" class="form-control"
+                       name="meta[title]"
+                       placeholder="<?= htmlspecialchars($meta['title'] ?? '', ENT_QUOTES) ?>"
+                       value="<?= htmlspecialchars($clientMeta['title'] ?? '', ENT_QUOTES) ?>">
+                <?php if (!empty($meta['title'])): ?>
+                  <div class="form-text text-muted">
+                    <i class="bi bi-arrow-return-right me-1"></i>元：<?= htmlspecialchars($meta['title'], ENT_QUOTES) ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+              <div class="col-12">
+                <label class="form-label small fw-semibold" for="meta-desc-inp">メタディスクリプション</label>
+                <textarea id="meta-desc-inp" class="form-control" rows="4"
+                          name="meta[description]"
+                          placeholder="<?= htmlspecialchars($meta['description'] ?? '', ENT_QUOTES) ?>"><?= htmlspecialchars($clientMeta['description'] ?? '', ENT_QUOTES) ?></textarea>
+                <?php if (!empty($meta['description'])): ?>
+                  <div class="form-text text-muted">
+                    <i class="bi bi-arrow-return-right me-1"></i>元：<?= htmlspecialchars(mb_substr($meta['description'], 0, 120), ENT_QUOTES) ?><?= mb_strlen($meta['description']) > 120 ? '…' : '' ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+            </div>
+          <?php else: ?>
+            <p class="text-muted">解析後に編集できます。</p>
+          <?php endif; ?>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== AI テキスト生成モーダル ===== -->
+  <div class="modal fade" id="aiGenerateModal" tabindex="-1" aria-labelledby="aiGenerateModalLabel" aria-hidden="true"
+       data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-primary text-white py-2">
+          <h5 class="modal-title fs-6" id="aiGenerateModalLabel">
+            <i class="bi bi-stars me-1"></i>AI テキスト自動生成
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-2">
+            対象は <code>data-lp-field="text"</code> / <code>content</code> のみ。画像URL・リンクURL・画像内テキストメモは対象外です。
+          </p>
+          <?php if ($sourceIndustry !== ''): ?>
+            <p class="small mb-2">
+              元サイト業種: <strong class="text-primary"><?= htmlspecialchars($sourceIndustry, ENT_QUOTES, 'UTF-8') ?></strong>
+            </p>
+          <?php endif; ?>
+          <div class="mb-3 d-flex flex-wrap gap-1 ai-chip-row">
+            <?php if ($suggestions !== []): ?>
+              <span class="small text-muted me-1 align-self-center">候補：</span>
+              <?php foreach ($suggestions as $s): ?>
+                <?php $s = (string) $s; if ($s === '') continue; ?>
+                <button type="button"
+                        class="btn btn-sm btn-outline-primary ai-chip"
+                        data-value="<?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>">
+                  <?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>
+                </button>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+          <div class="row g-2 align-items-end mb-3">
+            <div class="col-md-6">
+              <label class="form-label small mb-1" for="ai-industry">ターゲット業種 <span class="text-danger">*</span></label>
+              <input type="text" id="ai-industry" class="form-control form-control-sm"
+                     placeholder="例：ネイルサロン、歯科クリニック、学習塾" autocomplete="off"
+                     list="ai-industry-list"
+                     value="<?= htmlspecialchars($sourceIndustry, ENT_QUOTES, 'UTF-8') ?>">
+              <datalist id="ai-industry-list">
+                <?php foreach ($suggestions as $s): ?>
+                  <?php $s = (string) $s; if ($s === '') continue; ?>
+                  <option value="<?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?>"></option>
+                <?php endforeach; ?>
+              </datalist>
+              <?php if ($sourceIndustry !== ''): ?>
+                <div class="form-text text-muted" style="font-size:.72rem">
+                  <i class="bi bi-cpu me-1"></i>解析結果：<strong><?= htmlspecialchars($sourceIndustry, ENT_QUOTES, 'UTF-8') ?></strong>
+                </div>
+              <?php else: ?>
+                <div class="form-text text-warning" style="font-size:.72rem" id="aiIndustryEmptyHint">
+                  <i class="bi bi-exclamation-triangle me-1"></i>解析時に業種を取得できませんでした。手入力してください。
+                </div>
+              <?php endif; ?>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small mb-1" for="ai-tone">トーン</label>
+              <select id="ai-tone" class="form-select form-select-sm">
+                <option value="polite">丁寧・上品</option>
+                <option value="casual">カジュアル</option>
+                <option value="professional">ビジネス</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <button type="button" id="ai-replace-btn" class="btn btn-sm btn-primary w-100"
+                      <?= !$hasStructure ? 'disabled' : '' ?>>AI 置換</button>
+            </div>
+          </div>
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="ai-replace-no-limit" role="switch" autocomplete="off">
+            <label class="form-check-label small" for="ai-replace-no-limit">件数制限を解除（60件超を一度に処理。API 負荷・待ち時間に注意）</label>
+          </div>
+          <div id="ai-replace-status" class="mt-2 small text-muted" hidden></div>
+        </div>
+        <div class="modal-footer py-2 gap-2">
+          <button type="button" id="ai-replace-undo" class="btn btn-outline-secondary btn-sm me-auto" hidden>
+            <i class="bi bi-arrow-counterclockwise me-1"></i>元に戻す
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ===========================
@@ -965,14 +1145,14 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
       <div class="modal-body">
         <div class="row g-3">
           <div class="col-md-6">
-            <div class="small text-secondary mb-1">オリジナル（置き換え対象）</div>
+            <div class="small text-secondary mb-1"><i class="bi bi-shield-check me-1"></i>オリジナル（ロールバック用・変更不可）</div>
             <div id="imageReplaceDimsLeft" class="small text-body mb-2">サイズ：—</div>
             <div class="border rounded bg-light p-2 text-center d-flex align-items-center justify-content-center" style="min-height:240px">
               <img id="imageReplaceModalLeft" src="" alt="" class="img-fluid rounded" style="max-height:280px;object-fit:contain" />
             </div>
           </div>
           <div class="col-md-6">
-            <div class="small text-secondary mb-1">新しい画像</div>
+            <div class="small text-secondary mb-1"><i class="bi bi-upload me-1"></i>新しい画像（アップロード／生成）</div>
             <div id="imageReplaceDimsRight" class="small text-body mb-2">サイズ：—</div>
             <div id="imageReplaceDropzone"
                  class="border border-2 border-dashed rounded bg-white p-2 text-center d-flex flex-column align-items-center justify-content-center"
@@ -1032,6 +1212,7 @@ window.LP_CMS = {
   workspaceName: <?= json_encode($workspaceName, JSON_THROW_ON_ERROR) ?>,
   cmsRole: <?= json_encode($currentRoleUx, JSON_THROW_ON_ERROR) ?>,
   csrfToken: <?= json_encode($csrfTokenUx, JSON_THROW_ON_ERROR) ?>,
+  indexPageTitle: <?= json_encode((string) ($clientMeta['title'] ?? $meta['title'] ?? ''), JSON_THROW_ON_ERROR) ?>,
 };
 </script>
 

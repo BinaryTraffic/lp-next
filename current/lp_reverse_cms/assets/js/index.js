@@ -113,6 +113,8 @@
     // Initialize tree when entering Step 2
     if (n === 2) {
       void initPageTree();
+      // Update fixed header for the initial index page
+      updateEditFormHeader('index', window.LP_CMS?.indexPageTitle || '', window.LP_CMS?.sourceUrl || '');
     }
 
     stepItems.forEach((item, idx) => {
@@ -297,9 +299,9 @@
   function resetAnalyzeProgressUi() {
     if (!progAnalyzeBar || !progAnalyzePct) return;
     progAnalyzeBar.style.width = '0%';
-    progAnalyzePct.textContent = '0%/100%';
+    progAnalyzePct.textContent = '0%';
     progAnalyzeBarOuter?.setAttribute('aria-valuenow', '0');
-    progAnalyzeBarOuter?.setAttribute('aria-valuetext', '0%/100%');
+    progAnalyzeBarOuter?.setAttribute('aria-valuetext', '0%');
   }
 
   /**
@@ -347,7 +349,7 @@
     const pctRaw = Number(r.pct);
     const pct = Number.isFinite(pctRaw) ? Math.max(0, Math.min(100, pctRaw)) : 0;
     const pctRounded = Math.round(pct);
-    const pctLabel = `${pctRounded}%/100%`;
+    const pctLabel = `${pctRounded}%`;
     if (progAnalyzeBar) progAnalyzeBar.style.width = `${pct}%`;
     progAnalyzeBarOuter?.setAttribute('aria-valuenow', String(pctRounded));
     progAnalyzeBarOuter?.setAttribute('aria-valuetext', pctLabel);
@@ -657,17 +659,18 @@
 
     const phase = String(data.phase || '');
     const prog = String(data.progress_text || '000/100');
+    const detailJa = typeof data.detail_ja === 'string' ? data.detail_ja.trim() : '';
     if (phase === 'fetch') {
-      setProgState(progFetch, 'loading', `HTML/CSS/画像取得中... ${prog}`);
+      setProgState(progFetch, 'loading', 'HTMLおよびCSS・画像を取得中…');
       setProgState(progAnalyze, 'idle');
       progAnalyzeBarWrap?.classList.add('d-none');
     } else if (phase === 'analyze_entry') {
       setProgState(progFetch, 'done', '取得完了');
-      setProgState(progAnalyze, 'loading', `エントリ解析中... ${prog}`);
+      setProgState(progAnalyze, 'loading', 'エントリ解析中…');
       progAnalyzeBarWrap?.classList.remove('d-none');
     } else if (phase === 'analyze_internal') {
       setProgState(progFetch, 'done', '取得完了');
-      setProgState(progAnalyze, 'loading', `内部ページ解析中... ${prog}`);
+      setProgState(progAnalyze, 'loading', '内部ページ解析中…');
       progAnalyzeBarWrap?.classList.remove('d-none');
       const m = prog.match(/^(\d+)\/(\d+)$/);
       if (m && progAnalyzeBar && progAnalyzePct) {
@@ -675,10 +678,11 @@
         const total = Math.max(1, Number(m[2]));
         const pct = Math.min(99, Math.round((100 * done) / total));
         progAnalyzeBar.style.width = `${pct}%`;
-        progAnalyzePct.textContent = `${pct}%/${total}%`;
+        progAnalyzePct.textContent = `${pct}%`;
+        progAnalyzeBarOuter?.setAttribute('aria-valuenow', String(pct));
       }
     } else if (phase === 'finalize') {
-      setProgState(progAnalyze, 'loading', `最終処理中... ${prog}`);
+      setProgState(progAnalyze, 'loading', '最終処理中…');
       progAnalyzeBarWrap?.classList.remove('d-none');
       const mf = prog.match(/^(\d+)\/(\d+)$/);
       if (mf && progAnalyzeBar && progAnalyzePct) {
@@ -686,11 +690,16 @@
         const total = Math.max(1, Number(mf[2]));
         const pct = Math.min(100, Math.round((100 * done) / total));
         progAnalyzeBar.style.width = `${pct}%`;
-        progAnalyzePct.textContent = `${pct}%/${total}%`;
+        progAnalyzePct.textContent = `${pct}%`;
+        progAnalyzeBarOuter?.setAttribute('aria-valuenow', String(pct));
       } else if (progAnalyzeBar && progAnalyzePct) {
         progAnalyzeBar.style.width = '99%';
-        progAnalyzePct.textContent = '99%/100%';
+        progAnalyzePct.textContent = '99%';
+        progAnalyzeBarOuter?.setAttribute('aria-valuenow', '99');
       }
+    }
+    if (detailJa && progAnalyzeDetail) {
+      progAnalyzeDetail.textContent = detailJa;
     }
 
     if (data.done === true) {
@@ -701,7 +710,7 @@
       if (st === 'done') {
         setProgState(progAnalyze, 'done', '解析が完了しました。');
         if (progAnalyzeBar) progAnalyzeBar.style.width = '100%';
-        if (progAnalyzePct) progAnalyzePct.textContent = '100%/100%';
+        if (progAnalyzePct) progAnalyzePct.textContent = '100%';
         await sleep(600);
         if (analyzeProgressModalEl && typeof bootstrap !== 'undefined') {
           bootstrap.Modal.getOrCreateInstance(analyzeProgressModalEl).hide();
@@ -1020,9 +1029,9 @@
       const hb = document.getElementById('saveGenHeartbeat');
       if (hb) hb.textContent = idleSec >= 0 ? `最終更新 ${idleSec}秒前` : '';
       if (m) {
-        setSaveGenProgress(Number(m[1]), Math.max(1, Number(m[2])), `内部ページ生成中... ${prog}`);
+        setSaveGenProgress(Number(m[1]), Math.max(1, Number(m[2])), '内部ページ生成中…');
       } else {
-        setSaveGenProgress(0, 1, `内部ページ生成中... ${prog}`);
+        setSaveGenProgress(0, 1, '内部ページ生成中…');
       }
     }
 
@@ -1265,7 +1274,7 @@
       });
     }
 
-    document.querySelectorAll('#ai-text-replace-panel .ai-chip').forEach(chip => {
+    document.querySelectorAll('.ai-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const inp = document.getElementById('ai-industry');
         const v = chip.dataset.value;
@@ -1286,9 +1295,9 @@
 
     const data = { meta: {}, elements: {} };
 
-    // Meta fields
-    const titleInput = form.querySelector('input[name="meta[title]"]');
-    const descInput  = form.querySelector('input[name="meta[description]"]');
+    // Meta fields — モーダル内（form 外）にあるため document.querySelector で取得
+    const titleInput = document.querySelector('[name="meta[title]"]');
+    const descInput  = document.querySelector('[name="meta[description]"]');
     if (titleInput && titleInput.value.trim()) data.meta.title       = titleInput.value.trim();
     if (descInput  && descInput.value.trim())  data.meta.description = descInput.value.trim();
 
@@ -1801,16 +1810,28 @@
       const form = document.getElementById('clientDataForm');
       if (!form || !form.contains(btn)) return;
       targetElemId = btn.dataset.lpId || '';
-      const orig = (btn.getAttribute('data-lp-original-src') || '').trim();
-      const srcInp = form.querySelector(`[data-lp-id="${targetElemId}"][data-lp-field="src"]`);
-      let leftSrc = '';
-      if (srcInp && 'value' in srcInp && srcInp.value.trim()) {
-        leftSrc = srcInp.value.trim();
-      } else if (srcInp && 'placeholder' in srcInp && (srcInp.placeholder || '').trim()) {
-        leftSrc = (srcInp.placeholder || '').trim();
-      } else if (orig) {
-        leftSrc = orig;
+      const rollbackSrc = (btn.getAttribute('data-lp-rollback-src') || '').trim();
+      const orig        = (btn.getAttribute('data-lp-original-src') || '').trim();
+      const srcInp      = form.querySelector(`[data-lp-id="${targetElemId}"][data-lp-field="src"]`);
+
+      // 左ペイン = rollback（不変のオリジナル）。
+      // rollback_src は "assets/rollback/xxx.jpg" 形式のワークスペース相対パス。
+      // outputWsPrefix（例: /lp_reverse_cms/output/ws_xxx）と結合してプロキシ URL を生成。
+      // なければ data-lp-original-src（絶対URL）をそのまま使う。
+      let leftSrc = orig;
+      if (rollbackSrc) {
+        const wsPrefix = (window.LP_CMS && window.LP_CMS.outputWsPrefix)
+          ? window.LP_CMS.outputWsPrefix.replace(/\/+$/, '')
+          : '';
+        const fullRbPath = wsPrefix
+          ? wsPrefix + '/' + rollbackSrc.replace(/^\//, '')
+          : '/' + rollbackSrc.replace(/^\//, '');
+        leftSrc = workspaceImageBrowserHref(fullRbPath);
       }
+
+      // 右ペイン = 現在の置き換え済み画像（client_data.src）。なければ空。
+      const currentOverride = (srcInp && srcInp.value && srcInp.value.trim()) ? srcInp.value.trim() : '';
+
       origDisplayUrl = '';
       renderPlaceholderSection(0, 0);
       if (leftImg) {
@@ -1836,7 +1857,12 @@
           wireImgDimsReporting(leftImg, dimsLeftEl, '');
         }
       }
-      resetRight();
+      // 右ペイン：既存の置き換え画像があれば初期表示（ユーザーが再確認できる）
+      if (currentOverride) {
+        setRightSelection(currentOverride);
+      } else {
+        resetRight();
+      }
       modal.show();
     });
 
@@ -2591,6 +2617,33 @@
   }
 
   /**
+   * Update the fixed header of the edit form panel.
+   * @param {string} key        page key ('index' | 'internal_N')
+   * @param {string} pageTitle  Japanese title (may be empty)
+   * @param {string} sourceUrl  original source URL (may be empty)
+   */
+  function updateEditFormHeader(key, pageTitle, sourceUrl) {
+    const labelEl = document.getElementById('editFormPageLabel');
+    const urlEl   = document.getElementById('editFormPageUrl');
+    if (labelEl) {
+      const treeNode = document.querySelector(`#pageTree [data-page-key="${CSS.escape(key)}"] .lp-tree-label`);
+      const treeLabel = treeNode ? treeNode.textContent.trim() : key;
+      labelEl.innerHTML =
+        `<i class="bi bi-pencil-square me-1 text-muted"></i>` +
+        escHtml(pageTitle || treeLabel);
+    }
+    if (urlEl) {
+      if (sourceUrl) {
+        urlEl.href = sourceUrl;
+        urlEl.textContent = sourceUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+        urlEl.classList.remove('d-none');
+      } else {
+        urlEl.classList.add('d-none');
+      }
+    }
+  }
+
+  /**
    * Switch the edit panel to a different page.
    * Saves the current page first, then Ajax-loads the new page's form.
    * @param {string} key
@@ -2605,10 +2658,10 @@
     currentPageKey = key;
     markTreeNodeActive(key);
 
-    const wrapper = document.getElementById('editFormWrapper');
-    if (!wrapper) return;
+    const content = document.getElementById('editFormContent');
+    if (!content) return;
 
-    wrapper.innerHTML =
+    content.innerHTML =
       `<div class="lp-edit-form-loading">` +
       `<span class="spinner-border spinner-border-sm me-2"></span>読み込み中…` +
       `</div>`;
@@ -2619,10 +2672,11 @@
       });
       const data = await r.json();
       if (!data.ok) throw new Error(data.error || '読み込み失敗');
-      wrapper.innerHTML = data.html;
+      content.innerHTML = data.html;
+      updateEditFormHeader(key, data.page_title || '', data.source_url || '');
       rebindFormHandlers();
     } catch (e) {
-      wrapper.innerHTML =
+      content.innerHTML =
         `<div class="alert alert-danger m-3">` +
         `<i class="bi bi-exclamation-triangle me-2"></i>` +
         `ページフォームの読み込みに失敗しました: ${escHtml(String(e))}` +
@@ -2702,6 +2756,70 @@
     });
 
     initAiTextReplace();
+
+    // AI モーダルを開いた時に業種が空なら自動取得
+    const aiModalEl = document.getElementById('aiGenerateModal');
+    if (aiModalEl) {
+      aiModalEl.addEventListener('show.bs.modal', async () => {
+        const industryInp = document.getElementById('ai-industry');
+        const hintEl      = document.getElementById('aiIndustryEmptyHint');
+        if (!industryInp || industryInp.value.trim() !== '') return; // already filled
+
+        // Show loading indicator
+        if (hintEl) {
+          hintEl.innerHTML =
+            '<span class="spinner-border spinner-border-sm me-1" style="width:.8rem;height:.8rem"></span>' +
+            '解析結果から業種を取得中…';
+        }
+        try {
+          const r = await fetch('store/recompute_industry.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+          });
+          const d = await r.json();
+          if (d.ok && d.source_industry) {
+            industryInp.value = d.source_industry;
+            // Add suggestions to datalist
+            const dl = document.getElementById('ai-industry-list');
+            if (dl && Array.isArray(d.suggestions)) {
+              d.suggestions.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s;
+                dl.appendChild(opt);
+              });
+            }
+            // Add ai-chips
+            const chipWrap = aiModalEl.querySelector('.ai-chip-row');
+            if (chipWrap && Array.isArray(d.suggestions)) {
+              d.suggestions.forEach(s => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm btn-outline-primary ai-chip';
+                btn.dataset.value = s;
+                btn.textContent = s;
+                chipWrap.appendChild(btn);
+              });
+            }
+            if (hintEl) {
+              hintEl.innerHTML =
+                '<i class="bi bi-cpu me-1"></i>解析結果から自動取得しました: <strong>' +
+                escHtml(d.source_industry) + '</strong>';
+              hintEl.className = hintEl.className.replace('text-warning', 'text-success');
+            }
+          } else {
+            if (hintEl) {
+              hintEl.innerHTML =
+                '<i class="bi bi-exclamation-triangle me-1"></i>業種の自動取得に失敗しました。手入力してください。';
+            }
+          }
+        } catch {
+          if (hintEl) {
+            hintEl.innerHTML =
+              '<i class="bi bi-exclamation-triangle me-1"></i>業種の自動取得に失敗しました。手入力してください。';
+          }
+        }
+      });
+    }
 
     // Step 3 events
     if (btnEditAgain) {

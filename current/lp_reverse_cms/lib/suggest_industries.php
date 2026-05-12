@@ -48,7 +48,7 @@ function lp_reverse_suggest_industries_from_structure(array $structure): array
 {"source_industry":"...","suggestions":["...","...","...","...","..."]}
 PROMPT;
 
-    $model = 'claude-haiku-4-5-20251001';
+    $model = 'claude-haiku-4-5';
     $payload = json_encode([
         'model'       => $model,
         'max_tokens'  => 256,

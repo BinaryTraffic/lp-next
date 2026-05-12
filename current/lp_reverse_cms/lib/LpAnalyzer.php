@@ -29,7 +29,11 @@ class LpAnalyzer
      *        Called during DOM ツリー走査（進捗可視化用。throttle は呼び出し側でも可）。
      * @param float $maxWalkWallSeconds 0 より大きいとき、ツリー走査中にウォール時計で打ち切り（内部ページのハング対策）
      */
-    public function analyze(string $html, string $sourceUrl, ?callable $onWalkProgress = null, float $maxWalkWallSeconds = 0.0): array
+    /**
+     * @param string $extraCssContent ダウンロード済み外部 CSS ファイルの結合テキスト。
+     *                                css_background_hints の検索対象に追加される。
+     */
+    public function analyze(string $html, string $sourceUrl, ?callable $onWalkProgress = null, float $maxWalkWallSeconds = 0.0, string $extraCssContent = ''): array
     {
         $this->sourceUrl = $sourceUrl;
         $this->urlCtx    = LpUrlContext::fromPageAndHtml($sourceUrl, $html);
@@ -101,10 +105,14 @@ class LpAnalyzer
         };
 
         $headExtra = $this->extractHeadExtra($xpath);
+        // 外部 CSS のテキストは background-image 検出用 haystack としてのみ使用。
+        // head_extra（生成 HTML に埋め込まれる）には含めない（生 CSS テキストが <style> タグなしで
+        // <head> に混入するとブラウザが body コンテンツとして表示してしまうため）。
+        $cssHaystack = $extraCssContent !== '' ? $headExtra . "\n" . $extraCssContent : $headExtra;
         $bodySnip  = $this->extractBodyDirectChildHeadSnippets($xpath);
         $meta      = array_merge($this->extractMeta($xpath), $this->extractBodyRootAttributes($xpath));
 
-        $sections = $this->extractSections($dom, $xpath, $onVisit, $diag, $headExtra, $bodySnip);
+        $sections = $this->extractSections($dom, $xpath, $onVisit, $diag, $cssHaystack, $bodySnip);
 
         $walkPct = $diag['walk_total_steps'] > 0
             ? round(100.0 * $diag['walk_completed_steps'] / $diag['walk_total_steps'], 2)
@@ -318,7 +326,8 @@ class LpAnalyzer
             $pos    = 0;
             $tokLen = strlen($tok);
             while (($p = strpos($haystack, $tok, $pos)) !== false) {
-                $window = substr($haystack, $p, 8000);
+                // 次の CSS ルール境界（2000 文字）だけを走査。大きすぎると無関係なルールの URL を拾う。
+                $window = substr($haystack, $p, 2000);
                 if (preg_match_all('/url\(\s*["\']?([^)"\'\\\\]+)["\']?\s*\)/i', $window, $m)) {
                     foreach ($m[1] as $u) {
                         $u = trim($u);
@@ -327,6 +336,10 @@ class LpAnalyzer
                         }
                         if (!preg_match('#^https?://#i', $u)) {
                             $u = $this->absolutizeUrl($u);
+                        }
+                        // アイコン・スプライト・不正 URL はスキップ（ノイズ削減）
+                        if (!$this->isCssBackgroundCandidate($u)) {
+                            continue;
                         }
                         $found[] = ['token' => $tok, 'url' => $u];
                     }
@@ -343,6 +356,50 @@ class LpAnalyzer
         unset($row);
 
         return $this->dedupeCssHintsByUrl(array_merge($found, $inline));
+    }
+
+    /**
+     * CSS background-image URL として妥当かどうかを判定。
+     * アイコン・スプライト・不正エンコードの URL はノイズになるため除外する。
+     */
+    private function isCssBackgroundCandidate(string $url): bool
+    {
+        // http/https のみ。エンコードされたクォートが混入している URL は除外。
+        if (!preg_match('#^https?://#i', $url)
+            || str_contains($url, '%22')
+            || str_contains($url, '%27')
+        ) {
+            return false;
+        }
+        $path = (string) parse_url($url, PHP_URL_PATH);
+        $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        // 対応拡張子以外は除外
+        if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'], true)) {
+            return false;
+        }
+        // アイコン・スプライト・UI 装飾素材はノイズなので除外
+        $base = strtolower(pathinfo($path, PATHINFO_FILENAME));
+        // ファイル名先頭・末尾・含有チェック（全拡張子共通）
+        $skipAny = ['ui-icon', 'ui_icon', 'sprite', 'favicon', 'pagetop'];
+        foreach ($skipAny as $kw) {
+            if (str_contains($base, $kw)) {
+                return false;
+            }
+        }
+        // icon_ / ico_ 先頭はほぼ必ずアイコン
+        if (str_starts_with($base, 'icon_') || str_starts_with($base, 'ico_')) {
+            return false;
+        }
+        // SVG は背景として使われることもあるが、icon 系単語を含む場合は除外
+        if ($ext === 'svg') {
+            $svgIconWords = ['icon', 'checkbox', 'arrow', 'close', 'delta', 'bullet', 'check', 'modal'];
+            foreach ($svgIconWords as $w) {
+                if (str_contains($base, $w)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**
@@ -395,6 +452,13 @@ class LpAnalyzer
 
         $take($root);
 
+        // セクションルート自身のタグ名もトークンに追加（例: header, footer, nav, section）。
+        // "header { background: url(...) }" のようなタグセレクタ CSS を拾うため。
+        $rootTag = strtolower($root->tagName);
+        if (in_array($rootTag, self::SECTION_TAGS, true)) {
+            $tokens[$rootTag] = true;
+        }
+
         $xp = new DOMXPath($doc);
         $nodes = $xp->query('.//*', $root);
         $nWalk = 0;
@@ -405,6 +469,11 @@ class LpAnalyzer
                 }
                 if ($n instanceof DOMElement) {
                     $take($n);
+                    // 子要素もタグ名をトークンに追加（main, nav など）
+                    $childTag = strtolower($n->tagName);
+                    if (in_array($childTag, self::SECTION_TAGS, true)) {
+                        $tokens[$childTag] = true;
+                    }
                 }
             }
         }
@@ -749,6 +818,14 @@ class LpAnalyzer
             } elseif ($tag === 'img') {
                 $src = $this->absolutizeUrl($child->getAttribute('src') ?: '');
                 $alt = $child->getAttribute('alt');
+                // <picture> 内の <img> は fallback 専用。<source srcset> が実際に表示される画像。
+                // libxml は <source> を非 void として <img> を内側に入れることがあるため、
+                // parentNode 遡りで <picture> を探し、最後の <source srcset> URL を優先する。
+                $pictureSrc = $this->bestPictureSourceSrcset($child);
+                if ($pictureSrc !== null) {
+                    $src = $pictureSrc;
+                    $child->setAttribute('src', $src);
+                }
                 if ($src) {
                     $id = 'elem_' . $sectionId . '_' . $index++;
                     $child->setAttribute('data-lp-id', $id);
@@ -843,9 +920,45 @@ class LpAnalyzer
                     ];
                 }
             } elseif (in_array($tag, self::CONTAINER_TAGS, true) || in_array($tag, self::SECTION_TAGS, true)) {
+                // インライン style="background-image:url(...)" を持つコンテナは background_image 要素として登録し、
+                // さらに子要素を再帰走査する（テキスト・img の子も取りこぼさない）。
+                $inlineBgSrc = $this->extractInlineBackgroundSrc($child);
+                if ($inlineBgSrc !== null) {
+                    $id = 'elem_' . $sectionId . '_' . $index++;
+                    $child->setAttribute('data-lp-id', $id);
+                    $baseName = basename(parse_url($inlineBgSrc, PHP_URL_PATH) ?: $inlineBgSrc);
+                    $elements[] = [
+                        'id'             => $id,
+                        'type'           => 'background_image',
+                        'tag'            => $tag,
+                        'label'          => 'インライン背景：' . $baseName,
+                        'original_text'  => null,
+                        'original_src'   => $inlineBgSrc,
+                        'original_href'  => null,
+                    ];
+                }
                 $this->findEditableElements($child, $sectionId, $index, $elements, $onVisit);
             }
         }
+    }
+
+    /**
+     * インライン style 属性から background-image URL を抽出して絶対化。
+     * 見つからない場合は null を返す。
+     */
+    private function extractInlineBackgroundSrc(DOMElement $el): ?string
+    {
+        $style = $el->getAttribute('style');
+        if ($style === '' || !str_contains(strtolower($style), 'background')) {
+            return null;
+        }
+        if (preg_match('/background(?:-image)?\s*:\s*url\(\s*["\']?([^)"\']+)["\']?\s*\)/i', $style, $m)) {
+            $u = trim($m[1]);
+            if ($u !== '' && !str_starts_with(strtolower($u), 'data:')) {
+                return $this->absolutizeUrl($u);
+            }
+        }
+        return null;
     }
 
     /**
@@ -972,6 +1085,58 @@ class LpAnalyzer
     {
         $classes = strtolower($el->getAttribute('class'));
         return str_contains($classes, 'btn') || str_contains($classes, 'button') || str_contains($classes, 'cta');
+    }
+
+    /**
+     * <img> の祖先に <picture> がある場合、その <picture> を返す。
+     */
+    private function findPictureAncestor(DOMElement $el): ?DOMElement
+    {
+        $p = $el->parentNode;
+        while ($p instanceof DOMElement) {
+            if (strtolower($p->tagName) === 'picture') {
+                return $p;
+            }
+            $p = $p->parentNode;
+        }
+        return null;
+    }
+
+    /**
+     * <img> が <picture> 内にある場合、デスクトップ向け <source srcset> の先頭 URL（絶対化済み）を返す。
+     * max-width のみの media query（スマホ専用）を持つ <source> はスキップし、
+     * media 属性なし or min-width を含む <source> を優先する。
+     * デスクトップ向け <source> が存在しない場合は null を返し、<img src> の値をそのまま使わせる。
+     * <picture> 外の場合も null を返す。
+     */
+    private function bestPictureSourceSrcset(DOMElement $img): ?string
+    {
+        $picture = $this->findPictureAncestor($img);
+        if ($picture === null) {
+            return null;
+        }
+        $best = null;
+        foreach ($picture->getElementsByTagName('source') as $source) {
+            /** @var DOMElement $source */
+            $media = trim($source->getAttribute('media'));
+            // max-width のみのスマホ専用 source はデスクトップ表示用画像の選択に使わない
+            if ($media !== '' && preg_match('/max-width/i', $media) && !preg_match('/min-width/i', $media)) {
+                continue;
+            }
+            $srcset = trim($source->getAttribute('srcset'));
+            if ($srcset === '') {
+                continue;
+            }
+            $firstPart = trim(explode(',', $srcset)[0]);
+            $url       = trim(explode(' ', $firstPart)[0]);
+            if ($url !== '' && !str_starts_with($url, 'data:')) {
+                $abs = $this->absolutizeUrl($url);
+                if ($abs !== '') {
+                    $best = $abs;
+                }
+            }
+        }
+        return $best;
     }
 
     /**

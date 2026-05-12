@@ -48,7 +48,9 @@ try {
     $taskId = $created['task_id'];
     if (empty($created['already_running'])) {
         $worker = $cmsRoot . '/tools/workspace_delete_async_worker.php';
-        $cmd = 'nohup setsid php ' . escapeshellarg($worker) . ' '
+        $prefix = stripos(PHP_OS, 'darwin') === 0 ? 'nohup' : 'nohup setsid';
+        $cmd = $prefix . ' ' . escapeshellarg(PHP_BINARY) . ' '
+            . escapeshellarg($worker) . ' '
             . escapeshellarg($cmsRoot) . ' '
             . escapeshellarg($taskId)
             . ' > /dev/null 2>&1 &';

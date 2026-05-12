@@ -865,7 +865,25 @@ HTML;
             /** @var DOMElement $node */
             $node = $nodes->item(0);
 
-            if ($type === 'image') {
+            if ($type === 'background_image') {
+                // インライン style="background-image:url(...)" を持つ要素を差し替える
+                // （CSS クラス系は css_background_hints ループが <style> 注入で処理済み）
+                // client_data.src が指定されている場合のみスタイルを書き換える。
+                // 未指定時は section['html'] 内の元スタイルに applyAssetMap() が作用するので何もしない。
+                if (is_array($override) && isset($override['src']) && $override['src'] !== '') {
+                    $newSrc   = trim((string) $override['src']);
+                    $style    = $node->getAttribute('style');
+                    $encoded  = json_encode($newSrc, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                    $newStyle = preg_replace(
+                        '/background(?:-image)?\s*:\s*url\([^)]*\)/i',
+                        'background-image:url(' . $encoded . ')',
+                        $style
+                    );
+                    if ($newStyle !== null) {
+                        $node->setAttribute('style', $newStyle);
+                    }
+                }
+            } elseif ($type === 'image') {
                 $newSrc = $override['src'] ?? $element['original_src'] ?? null;
                 $newAlt = $override['text'] ?? $element['original_text'] ?? '';
                 if ($newSrc) {
@@ -946,12 +964,17 @@ HTML;
         foreach ($section['css_background_hints'] ?? [] as $bgIdx => $hint) {
             $syntheticId = 'css_bg_' . $secId . '_' . $bgIdx;
             $bgOverride  = $elemData[$syntheticId] ?? null;
+            $token       = trim((string) ($hint['token'] ?? ''));
+            if ($token === '' || $token === '(inline style)') {
+                continue; // インライン系は elements ループで処理済み
+            }
+            // client_data.src が指定されている場合のみ <style> を注入して上書きする。
+            // 未指定時は元のスタイルシートの CSS がそのまま有効なので注入不要。
             if (!is_array($bgOverride) || empty($bgOverride['src'])) {
                 continue;
             }
-            $token  = trim((string) ($hint['token'] ?? ''));
             $newSrc = trim((string) $bgOverride['src']);
-            if ($token === '' || $newSrc === '') {
+            if ($newSrc === '') {
                 continue;
             }
             $styleOverrides .= $token . '{background-image:url(' . json_encode($newSrc, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ')!important}' . "\n";

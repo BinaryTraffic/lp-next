@@ -39,14 +39,26 @@ try {
         throw new InvalidArgumentException('invalid url');
     }
 
+    $crawlDepth = max(1, (int) ($body['crawl_depth'] ?? 1));
+
     $workspaceId = 'ws_' . LpWorkspace::id();
-    $created = AnalyzeTask::createIfNotRunning($cmsRoot, $actor, $workspaceId, $url);
+    $created = AnalyzeTask::createIfNotRunning($cmsRoot, $actor, $workspaceId, $url, $crawlDepth);
     if (empty($created['already_running'])) {
         $worker = $cmsRoot . '/tools/analyze_worker.php';
-        $cmd = 'nohup setsid php ' . escapeshellarg($worker) . ' '
+        // mod_php では PHP_BINARY が .so になるため CLI バイナリを明示的に解決する
+        $phpBin = PHP_BINARY;
+        if (!is_file($phpBin) || !is_executable($phpBin)) {
+            $phpBin = trim((string) shell_exec('which php8.2 2>/dev/null'))
+                   ?: trim((string) shell_exec('which php 2>/dev/null'))
+                   ?: '/usr/bin/php8.2';
+        }
+        // setsid は Linux 専用。macOS (Darwin) では省略する
+        $prefix = stripos(PHP_OS, 'darwin') === 0 ? 'nohup' : 'nohup setsid';
+        $cmd = $prefix . ' ' . escapeshellarg($phpBin) . ' '
+            . escapeshellarg($worker) . ' '
             . escapeshellarg($cmsRoot) . ' '
             . escapeshellarg((string) $created['task_id'])
-            . ' > /dev/null 2>&1 &';
+            . ' > /tmp/analyze_worker_' . preg_replace('/[^a-zA-Z0-9_\-]/', '', (string) $created['task_id']) . '.log 2>&1 &';
         shell_exec($cmd);
     }
 

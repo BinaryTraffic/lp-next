@@ -93,9 +93,10 @@ final class AnalyzeTask
         string $cmsRoot,
         array $actor,
         string $workspaceId,
-        string $sourceUrl
+        string $sourceUrl,
+        int $crawlDepth = 1
     ): array {
-        return self::withLock($cmsRoot, function () use ($cmsRoot, $actor, $workspaceId, $sourceUrl): array {
+        return self::withLock($cmsRoot, function () use ($cmsRoot, $actor, $workspaceId, $sourceUrl, $crawlDepth): array {
             $latest = self::latestTaskIdForActor($cmsRoot, (string) $actor['email']);
             if ($latest !== '') {
                 $prev = self::load($cmsRoot, $latest);
@@ -124,6 +125,7 @@ final class AnalyzeTask
                 'ended_at' => 0,
                 'source_url' => $sourceUrl,
                 'workspace_id' => $workspaceId,
+                'crawl_depth' => max(1, $crawlDepth),
                 'error' => null,
                 'updated_at' => $now,
             ];

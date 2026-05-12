@@ -155,7 +155,7 @@ function lp_reverse_company_profile_lookup(
 {"industry_hint":"","business_characteristics":"","official_url_hint":"","history_summary":"","capital_hint":""}
 PROMPT;
 
-        $model   = 'claude-haiku-4-5-20251001';
+        $model   = 'claude-haiku-4-5';
         $payload = json_encode([
             'model'       => $model,
             'max_tokens'  => 512,

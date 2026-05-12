@@ -52,10 +52,19 @@ try {
     $created = GenerateTask::createIfNotRunning($cmsRoot, $actor, $workspaceId, $clientData);
     if (empty($created['already_running'])) {
         $worker = $cmsRoot . '/tools/generate_worker.php';
-        $cmd = 'nohup setsid php ' . escapeshellarg($worker) . ' '
+        // mod_php では PHP_BINARY が .so になるため CLI バイナリを明示的に解決する
+        $phpBin = PHP_BINARY;
+        if (!is_file($phpBin) || !is_executable($phpBin)) {
+            $phpBin = trim((string) shell_exec('which php8.2 2>/dev/null'))
+                   ?: trim((string) shell_exec('which php 2>/dev/null'))
+                   ?: '/usr/bin/php8.2';
+        }
+        $prefix = stripos(PHP_OS, 'darwin') === 0 ? 'nohup' : 'nohup setsid';
+        $cmd = $prefix . ' ' . escapeshellarg($phpBin) . ' '
+            . escapeshellarg($worker) . ' '
             . escapeshellarg($cmsRoot) . ' '
             . escapeshellarg((string) $created['task_id'])
-            . ' > /dev/null 2>&1 &';
+            . ' > /tmp/generate_worker_' . preg_replace('/[^a-zA-Z0-9_\-]/', '', (string) $created['task_id']) . '.log 2>&1 &';
         shell_exec($cmd);
     }
 

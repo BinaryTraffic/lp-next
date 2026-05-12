@@ -86,7 +86,7 @@ class LpAssetDownloader
         $this->urlCtx    = LpUrlContext::fromPageAndHtml($sourceUrl, $html);
         $this->seedFromMergedAssetMap($existingUrlMap);
 
-        foreach (['css', 'img', 'js', 'fonts'] as $sub) {
+        foreach (['css', 'img', 'js', 'fonts', 'rollback'] as $sub) {
             $d = $this->outputDir . '/assets/' . $sub;
             if (!is_dir($d)) {
                 mkdir($d, 0755, true);
@@ -349,6 +349,14 @@ class LpAssetDownloader
         }
 
         file_put_contents($savePath, $content);
+
+        // ロールバック用バックアップ：画像は assets/rollback/ にも保存（初回のみ）
+        if ($type === 'img') {
+            $rbPath = $this->outputDir . '/assets/rollback/' . $filename;
+            if (!file_exists($rbPath)) {
+                copy($savePath, $rbPath);
+            }
+        }
 
         $localPath = 'assets/' . $type . '/' . $filename;
 

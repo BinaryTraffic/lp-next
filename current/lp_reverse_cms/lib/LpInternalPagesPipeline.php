@@ -11,13 +11,12 @@ require_once __DIR__ . '/LpUrlContext.php';
 /**
  * エントリーページから辿れる同一ホストの HTML リンクを取得・解析し、成果物に複製ページとして載せる。
  *
- * クロール深さは {@see INTERNAL_LINK_CRAWL_MAX_DEPTH} のとおり **1 のみ**。
- * 対象 URL は **エントリページ解析結果のセクションに現れた内部リンクだけ**であり、
- * 内部ページの HTML を解析してもそこから見つかったリンクは **追記・追従しない**。
+ * クロール深さは run() の $crawlDepth パラメータで指定する（デフォルト=1）。
+ * 実際のサイトの最大深さは scanLinkDepth() で事前に計測できる。
  */
 final class LpInternalPagesPipeline
 {
-    /** トップ（エントリ）からのリンクのみ。内部ページ内で見つかったリンクはクロールしない */
+    /** デフォルトのクロール深さ */
     public const INTERNAL_LINK_CRAWL_MAX_DEPTH = 1;
 
     public const MAX_PAGES = 100;
@@ -26,7 +25,8 @@ final class LpInternalPagesPipeline
     private const PIPELINE_MAX_ELAPSED_SECONDS = 300;
 
     /**
-     * エントリ構造から内部ページ候補 URL を返す（重複除去・MAX_PAGES 制限済み）
+     * エントリ構造から深さ1の内部ページ候補 URL を返す（重複除去・MAX_PAGES 制限済み）。
+     * 複数深さのURL収集は run() の $crawlDepth パラメータで制御する。
      *
      * @param array<string,mixed> $structure
      * @return list<string>
@@ -152,13 +152,118 @@ final class LpInternalPagesPipeline
     private const INTERNAL_PAGE_ANALYZE_MAX_WALL_SECONDS = 90.0;
 
     /**
+     * エントリURLから同一ホスト内部リンクを BFS で辿り、実際の最大深さを計測する（軽量スキャン）。
+     * フェッチのみ実施。アセット取得・構造解析は行わない。
+     *
+     * @param callable(array{depth:int,found:int}):void|null $emit 深さごとの進捗コールバック
+     * @return array{discovered_depth: int, url_count_by_depth: array<int,int>}
+     */
+    public static function scanLinkDepth(
+        string $entryUrl,
+        int $maxDepth = 10,
+        int $maxPagesTotal = 300,
+        ?callable $emit = null
+    ): array {
+        $entryCanon  = LpUrlContext::canonicalHttpDocumentIdentity($entryUrl);
+        $parsedEntry = parse_url($entryCanon);
+        $schemeHost  = ($parsedEntry['scheme'] ?? 'https') . '://' . ($parsedEntry['host'] ?? '');
+
+        $fetcher         = new LpFetcher();
+        $visited         = [$entryCanon => true];
+        $currentLevel    = [$entryCanon];
+        $discoveredDepth = 0;
+        $urlCountByDepth = [];
+        $totalVisited    = 1;
+
+        for ($depth = 1; $depth <= $maxDepth; $depth++) {
+            $nextLevel = [];
+            foreach ($currentLevel as $url) {
+                try {
+                    $res   = $fetcher->fetch($url);
+                    $links = self::extractRawInternalLinks($res['html'], $res['final_url'], $schemeHost);
+                    foreach ($links as $link) {
+                        if (!isset($visited[$link]) && $totalVisited < $maxPagesTotal) {
+                            $visited[$link] = true;
+                            $nextLevel[]    = $link;
+                            $totalVisited++;
+                        }
+                    }
+                } catch (Throwable) {
+                    // フェッチ失敗はスキップ
+                }
+            }
+            $nextLevel = array_values(array_unique($nextLevel));
+            if (empty($nextLevel)) {
+                break;
+            }
+            $discoveredDepth          = $depth;
+            $urlCountByDepth[$depth]  = count($nextLevel);
+            $currentLevel             = $nextLevel;
+            if ($emit !== null) {
+                $emit(['depth' => $depth, 'found' => count($nextLevel)]);
+            }
+        }
+
+        return [
+            'discovered_depth'   => $discoveredDepth,
+            'url_count_by_depth' => $urlCountByDepth,
+        ];
+    }
+
+    /**
+     * HTML から同一ホストの内部ドキュメント URL を抽出する（scanLinkDepth 専用の軽量版）。
+     *
+     * @return list<string>
+     */
+    private static function extractRawInternalLinks(string $html, string $baseUrl, string $schemeHost): array
+    {
+        $dom = new DOMDocument();
+        @$dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+
+        $baseParsed = parse_url(rtrim($baseUrl, '/'));
+        $baseDir    = $schemeHost . rtrim(dirname($baseParsed['path'] ?? '/'), '/');
+        $scheme     = $baseParsed['scheme'] ?? 'https';
+
+        $out = [];
+        /** @var DOMElement $a */
+        foreach ($dom->getElementsByTagName('a') as $a) {
+            $href = trim($a->getAttribute('href'));
+            if ($href === '' || str_starts_with($href, '#') || str_starts_with($href, 'javascript:') || str_starts_with($href, 'mailto:')) {
+                continue;
+            }
+            if (preg_match('#^https?://#i', $href)) {
+                $abs = $href;
+            } elseif (str_starts_with($href, '//')) {
+                $abs = $scheme . ':' . $href;
+            } elseif (str_starts_with($href, '/')) {
+                $abs = $schemeHost . $href;
+            } else {
+                $abs = $baseDir . '/' . $href;
+            }
+            $abs = (string) preg_replace('/#.*$/', '', $abs);
+            if (!str_starts_with($abs, $schemeHost)) {
+                continue;
+            }
+            $canon = LpUrlContext::canonicalHttpDocumentIdentity($abs);
+            if (!LpUrlContext::isLikelyHtmlDocumentUrl($canon)) {
+                continue;
+            }
+            $out[] = $canon;
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    /**
      * @param callable(array<string, mixed>): void|null $emit NDJSON progress のときのみ
+     * @param int $crawlDepth クロール深さ（1=エントリ直下のみ、2以上=再帰）。scanLinkDepth() の discovered_depth を上限の目安にする。
      */
     public static function run(
         array &$structure,
         string $dataDir,
         string $outputDir,
-        ?callable $emit = null
+        ?callable $emit = null,
+        int $crawlDepth = self::INTERNAL_LINK_CRAWL_MAX_DEPTH
     ): void {
         $dataDir   = rtrim($dataDir, '/\\') . DIRECTORY_SEPARATOR;
         $outputDir = rtrim($outputDir, '/\\') . DIRECTORY_SEPARATOR;
@@ -187,27 +292,34 @@ final class LpInternalPagesPipeline
             return;
         }
 
-        /* 深さ1: エントリの $structure だけから URL を列挙（サブページの構造は見ない） */
-        $urls = self::collectInternalDocumentUrlsFromEntryStructure($structure);
-        $urls = array_values(array_filter($urls, static fn(string $u): bool => $u !== $entryCanon));
-        $urls = array_values(array_unique($urls));
-        usort($urls, static function (string $a, string $b) use ($entryCanon): int {
+        /* BFS キュー構築: エントリ構造から深さ1のURLを初期投入 */
+        $initialUrls = self::collectInternalDocumentUrlsFromEntryStructure($structure);
+        $initialUrls = array_values(array_filter($initialUrls, static fn(string $u): bool => $u !== $entryCanon));
+        $initialUrls = array_values(array_unique($initialUrls));
+        usort($initialUrls, static function (string $a, string $b) use ($entryCanon): int {
             $entryPath = rtrim(parse_url($entryCanon, PHP_URL_PATH) ?? '/', '/') . '/';
             $pa = parse_url($a, PHP_URL_PATH) ?? '/';
             $pb = parse_url($b, PHP_URL_PATH) ?? '/';
             $aUnder = (int) str_starts_with($pa, $entryPath);
             $bUnder = (int) str_starts_with($pb, $entryPath);
             if ($aUnder !== $bUnder) {
-                return $bUnder - $aUnder; // under-entry pages first
+                return $bUnder - $aUnder;
             }
             $da = substr_count(trim($pa, '/'), '/');
             $db = substr_count(trim($pb, '/'), '/');
             if ($da !== $db) {
-                return $da - $db; // shallower depth first
+                return $da - $db;
             }
             return strcmp($a, $b);
         });
-        $urls = array_slice($urls, 0, self::MAX_PAGES);
+
+        // queue: ['url' => string, 'depth' => int]
+        $queue   = [];
+        $visited = [$entryCanon => true];
+        foreach (array_slice($initialUrls, 0, self::MAX_PAGES) as $u) {
+            $queue[]         = ['url' => $u, 'depth' => 1];
+            $visited[$u]     = true;
+        }
 
         $manifest = [];
 
@@ -217,15 +329,15 @@ final class LpInternalPagesPipeline
         $mapper     = new LpMapper();
 
         $assetPath       = $dataDir . 'asset_map.json';
-        $den             = max(1, count($urls));
         $mapCanonToOutput = [];
         /** @var array<string, array{structure_file: string, output_file: string, section_count: int, resolved_identity: string}> */
         $visitedIdentityArtifacts = [];
         /** @var array<string, array{structure_file: string, output_file: string, section_count: int, resolved_identity: string}> */
         $visitedNormSourceArtifacts = [];
         $pipelineStartedAt = microtime(true);
+        $processedCount    = 0;
 
-        foreach ($urls as $i => $canonUrl) {
+        while (!empty($queue)) {
             if ((microtime(true) - $pipelineStartedAt) >= self::PIPELINE_MAX_ELAPSED_SECONDS) {
                 if ($emit !== null) {
                     $emit([
@@ -241,10 +353,15 @@ final class LpInternalPagesPipeline
                 break;
             }
 
+            $item      = array_shift($queue);
+            $canonUrl  = $item['url'];
+            $itemDepth = $item['depth'];
+            $processedCount++;
+
             // link_redirect_check が 52〜58 を使用するため、ここは 60〜99 の帯域にする
-            $pct = 60 + (int) round(39 * (($i + 1) / $den));
-            $pct = min(99, $pct);
-            $emitInternal = static function (string $detailJa) use ($emit, $pct, $i, $den): void {
+            $totalKnown = $processedCount + count($queue);
+            $pct = 60 + (int) min(39, round(39 * ($processedCount / max(1, $totalKnown))));
+            $emitInternal = static function (string $detailJa) use ($emit, $pct, $processedCount, $itemDepth): void {
                 if ($emit === null) {
                     return;
                 }
@@ -253,9 +370,9 @@ final class LpInternalPagesPipeline
                     'phase'     => 'internal_pages',
                     'pct'       => $pct,
                     'detail_ja' => sprintf(
-                        '内部ページ取得・解析 (%s / %s) %s',
-                        (string) ($i + 1),
-                        (string) $den,
+                        '内部ページ取得・解析 #%s (深さ%s) %s',
+                        (string) $processedCount,
+                        (string) $itemDepth,
                         $detailJa
                     ),
                 ]);
@@ -272,8 +389,8 @@ final class LpInternalPagesPipeline
 
             $normSource = LpUrlContext::canonicalHttpDocumentIdentity($canonUrl);
             if (isset($visitedNormSourceArtifacts[$normSource])) {
-                $emitInternal('visited: エントリ由来の同一ドキュメントのため再利用します…');
-                $prev = $visitedNormSourceArtifacts[$normSource];
+                $emitInternal('visited: 同一ドキュメントのため再利用します…');
+                $prev     = $visitedNormSourceArtifacts[$normSource];
                 $resolved = $prev['resolved_identity'];
                 $manifest[] = [
                     'canonical_url'       => $resolved,
@@ -285,6 +402,7 @@ final class LpInternalPagesPipeline
                     'section_count'       => $prev['section_count'],
                     'asset_sync_limited'  => false,
                     'asset_new_downloads' => 0,
+                    'depth'               => $itemDepth,
                     'dedup_reused'        => true,
                     'visited_skip'        => 'norm_source',
                 ];
@@ -315,6 +433,7 @@ final class LpInternalPagesPipeline
                         'section_count'       => $prev['section_count'],
                         'asset_sync_limited'  => false,
                         'asset_new_downloads' => 0,
+                        'depth'               => $itemDepth,
                         'dedup_reused'        => true,
                         'visited_skip'        => 'final_identity',
                     ];
@@ -326,7 +445,7 @@ final class LpInternalPagesPipeline
 
                 $emitInternal('アセットを同期しています（取得済みはスキップ）…');
                 $newMap = $downloader->downloadAll($html, $finalUrl, $existing, [
-                    'max_new_downloads' => self::INTERNAL_ASSET_MAX_NEW_DOWNLOADS,
+                    'max_new_downloads'   => self::INTERNAL_ASSET_MAX_NEW_DOWNLOADS,
                     'max_elapsed_seconds' => self::INTERNAL_ASSET_MAX_ELAPSED_SECONDS,
                 ]);
                 $merged = array_merge($existing, $newMap);
@@ -349,35 +468,48 @@ final class LpInternalPagesPipeline
                 $structureRel = 'internal_pages/' . $slug . '.json';
                 self::storagePut($dataDir . $structureRel, json_encode($sub, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
-                $outputRel = self::mirrorOutputPath($canonUrl, $entryCanon);
+                $outputRel  = self::mirrorOutputPath($canonUrl, $entryCanon);
                 $manifest[] = [
-                    'canonical_url'    => $identity,
-                    'source_canonical' => $canonUrl,
-                    'structure_file'  => $structureRel,
-                    'output_file'     => $outputRel,
-                    'fetch_ok'        => true,
-                    'final_fetch_url' => $finalUrl,
-                    'section_count'   => count($sub['sections'] ?? []),
-                    'asset_sync_limited' => $assetSyncLimited,
+                    'canonical_url'       => $identity,
+                    'source_canonical'    => $canonUrl,
+                    'structure_file'      => $structureRel,
+                    'output_file'         => $outputRel,
+                    'fetch_ok'            => true,
+                    'final_fetch_url'     => $finalUrl,
+                    'section_count'       => count($sub['sections'] ?? []),
+                    'asset_sync_limited'  => $assetSyncLimited,
                     'asset_new_downloads' => $downloader->getNewDownloadCount(),
+                    'depth'               => $itemDepth,
                 ];
 
                 $artifact = [
-                    'structure_file'     => $structureRel,
-                    'output_file'        => $outputRel,
-                    'section_count'      => count($sub['sections'] ?? []),
-                    'resolved_identity'  => $identity,
+                    'structure_file'    => $structureRel,
+                    'output_file'       => $outputRel,
+                    'section_count'     => count($sub['sections'] ?? []),
+                    'resolved_identity' => $identity,
                 ];
-                $visitedIdentityArtifacts[$identity]    = $artifact;
+                $visitedIdentityArtifacts[$identity]     = $artifact;
                 $visitedNormSourceArtifacts[$normSource] = $artifact;
                 $mapCanonToOutput[$identity] = $outputRel;
                 $mapCanonToOutput[$canonUrl] = $outputRel;
+
+                // 指定深さに達していなければ、このページのリンクを次の深さとしてキューに追加
+                if ($itemDepth < $crawlDepth && count($visited) < self::MAX_PAGES) {
+                    $nextUrls = self::collectInternalDocumentUrlsFromEntryStructure($sub);
+                    foreach ($nextUrls as $nextUrl) {
+                        if (!isset($visited[$nextUrl]) && count($visited) < self::MAX_PAGES) {
+                            $visited[$nextUrl] = true;
+                            $queue[]           = ['url' => $nextUrl, 'depth' => $itemDepth + 1];
+                        }
+                    }
+                }
             } catch (Throwable $e) {
                 $manifest[] = [
                     'canonical_url'  => $canonUrl,
                     'structure_file' => null,
                     'output_file'    => null,
                     'fetch_ok'       => false,
+                    'depth'          => $itemDepth,
                     'error'          => $e->getMessage(),
                 ];
             }

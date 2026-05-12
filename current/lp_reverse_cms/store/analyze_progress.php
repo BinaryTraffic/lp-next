@@ -100,6 +100,7 @@ try {
         'phase' => (string) ($task['phase'] ?? ''),
         'progress_text' => $progressText,
         'progress_scale' => 100,
+        'detail_ja' => (string) ($task['detail_ja'] ?? ''),
         'analyze_steps_total' => isset($task['analyze_steps_total']) ? (int) $task['analyze_steps_total'] : null,
         'internal_page_count' => isset($task['internal_page_count']) ? (int) $task['internal_page_count'] : null,
         'error' => (string) ($task['error'] ?? ''),
