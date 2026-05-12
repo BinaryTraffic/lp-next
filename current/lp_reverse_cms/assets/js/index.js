@@ -1742,10 +1742,20 @@
       // ① 元画像を 100% で下地として描画
       if (origSrc) {
         try {
-          // Remote URLs are routed through the server-side proxy to satisfy CORS
-          const corsUrl = /^https?:\/\//i.test(origSrc)
-            ? 'store/img_proxy.php?url=' + encodeURIComponent(origSrc)
-            : origSrc;
+          // Same-origin URLs (serve_workspace_output.php etc.) are loaded directly —
+          // proxying through img_proxy.php would strip the session cookie and return 403.
+          // External URLs are routed through the server-side proxy to satisfy CORS.
+          let corsUrl = origSrc;
+          if (/^https?:\/\//i.test(origSrc)) {
+            try {
+              const isSameOrigin = new URL(origSrc).origin === window.location.origin;
+              if (!isSameOrigin) {
+                corsUrl = 'store/img_proxy.php?url=' + encodeURIComponent(origSrc);
+              }
+            } catch (_) {
+              corsUrl = 'store/img_proxy.php?url=' + encodeURIComponent(origSrc);
+            }
+          }
           const origImg = await loadImgCors(corsUrl);
           ctx.globalAlpha = 1;
           ctx.drawImage(origImg, 0, 0, phW, phH);
