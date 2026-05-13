@@ -358,19 +358,25 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
       </span>
     </span>
     <div class="d-flex align-items-center gap-2">
-      <!-- Google アバター -->
+      <!-- Google アバター: 画像失敗時はイニシャルへフォールバック -->
+      <?php $navInitial = htmlspecialchars(mb_strtoupper(mb_substr($sessNameUx, 0, 1)) ?: '?', ENT_QUOTES, 'UTF-8'); ?>
+      <?php $navTitle   = htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8'); ?>
       <?php if ($sessAvatarUx !== ''): ?>
         <img src="<?= htmlspecialchars($sessAvatarUx, ENT_QUOTES, 'UTF-8') ?>" referrerpolicy="no-referrer"
              class="rounded-circle border border-white border-opacity-50"
              width="30" height="30"
-             title="<?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>"
-             alt="<?= htmlspecialchars($sessNameUx, ENT_QUOTES, 'UTF-8') ?>">
+             title="<?= $navTitle ?>"
+             alt="<?= $navInitial ?>"
+             id="navAvatarImg"
+             onerror="this.style.display='none';document.getElementById('navAvatarFallback').style.display='inline-flex'">
+        <span id="navAvatarFallback"
+              class="rounded-circle bg-white text-primary align-items-center justify-content-center fw-bold"
+              style="display:none;width:30px;height:30px;font-size:.75rem"
+              title="<?= $navTitle ?>"><?= $navInitial ?></span>
       <?php else: ?>
         <span class="rounded-circle bg-white text-primary d-inline-flex align-items-center justify-content-center fw-bold"
               style="width:30px;height:30px;font-size:.75rem"
-              title="<?= htmlspecialchars($sessEmailUx, ENT_QUOTES, 'UTF-8') ?>">
-          <?= htmlspecialchars(mb_strtoupper(mb_substr($sessNameUx, 0, 1)), ENT_QUOTES, 'UTF-8') ?>
-        </span>
+              title="<?= $navTitle ?>"><?= $navInitial ?></span>
       <?php endif; ?>
       <!-- 実行中ジョブ バッジボタン -->
       <button class="btn btn-sm btn-outline-light position-relative" type="button"
