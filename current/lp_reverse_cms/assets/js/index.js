@@ -2069,25 +2069,42 @@
     async function batchBlendAllImages() {
       const form = document.getElementById('clientDataForm');
       if (!form) return;
-      const buttons = Array.from(form.querySelectorAll('.lp-open-image-replace[data-lp-rollback-src]'));
+      const buttons = Array.from(form.querySelectorAll('.lp-open-image-replace'));
       const total = buttons.length;
       if (total === 0) { showToast('編集画面に画像が見つかりません', 'warning'); return; }
       const batchBtn = document.getElementById('btnBatchBlend');
       if (batchBtn) batchBtn.disabled = true;
       const alpha = getPhBlendOpacity();
+      const wsPrefix = (window.LP_CMS && window.LP_CMS.outputWsPrefix)
+        ? window.LP_CMS.outputWsPrefix.replace(/\/+$/, '')
+        : '';
       let done = 0, failed = 0;
       showToast(`全画像ブレンド開始（${total}件）...`, 'info');
       for (const editBtn of buttons) {
         const elemId = editBtn.getAttribute('data-lp-id') || '';
         const rollbackSrc = (editBtn.getAttribute('data-lp-rollback-src') || '').trim();
-        if (!rollbackSrc || !elemId) { failed++; continue; }
+        const origSrcAttr = (editBtn.getAttribute('data-lp-original-src') || '').trim();
+        if (!elemId) { failed++; continue; }
         const srcInp = form.querySelector(`[data-lp-id="${CSS.escape(elemId)}"][data-lp-field="src"]`);
         if (!(srcInp instanceof HTMLInputElement)) { failed++; continue; }
+        // モーダルと同じURL構築: rollback_src → wsPrefix結合、なければ original-src
+        let displayUrl = '';
+        let filename = '';
+        if (rollbackSrc) {
+          const fullRbPath = wsPrefix
+            ? wsPrefix + '/' + rollbackSrc.replace(/^\//, '')
+            : '/' + rollbackSrc.replace(/^\//, '');
+          displayUrl = workspaceImageBrowserHref(fullRbPath);
+          filename = origSrcAttr.split('/').pop().split('?')[0] || rollbackSrc.split('/').pop().split('?')[0] || '';
+        } else if (origSrcAttr) {
+          displayUrl = resolveDisplayUrl(origSrcAttr);
+          filename = origSrcAttr.split('/').pop().split('?')[0] || '';
+        }
+        if (!displayUrl) { failed++; continue; }
         try {
-          const displayUrl = resolveDisplayUrl(rollbackSrc);
-          const filename = rollbackSrc.split('/').pop().split('?')[0] || '';
           const img = await new Promise((resolve, reject) => {
             const i = new Image();
+            i.crossOrigin = 'anonymous';
             i.onload = () => resolve(i);
             i.onerror = reject;
             i.src = displayUrl;
