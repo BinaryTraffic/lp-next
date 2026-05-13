@@ -191,6 +191,17 @@ function lpInitWorkspaceManage(storeBase) {
     btnOpen.title = 'このWSを読み込んで編集を再開';
     btnOpen.addEventListener('click', (e) => { e.stopPropagation(); void openWorkspace(id); });
 
+    // 指示書 button
+    const btnChecklist = document.createElement('a');
+    btnChecklist.href = 'image_checklist.php?ws=' + encodeURIComponent(id);
+    btnChecklist.target = '_blank';
+    btnChecklist.rel = 'noopener';
+    btnChecklist.className = 'btn btn-xs btn-outline-success me-1';
+    btnChecklist.style.fontSize = '0.72em';
+    btnChecklist.title = '画像作業指示書を別タブで開く';
+    btnChecklist.textContent = '📋 指示書';
+    btnChecklist.addEventListener('click', (e) => { e.stopPropagation(); });
+
     // 削除 button
     const btnDel = document.createElement('button');
     btnDel.type = 'button';
@@ -203,6 +214,7 @@ function lpInitWorkspaceManage(storeBase) {
 
     tdAct.appendChild(btnDetail);
     tdAct.appendChild(btnOpen);
+    tdAct.appendChild(btnChecklist);
     tdAct.appendChild(btnDel);
 
     tr.appendChild(tdSel);

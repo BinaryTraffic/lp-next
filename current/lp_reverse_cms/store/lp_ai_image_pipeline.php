@@ -53,6 +53,7 @@ if (!is_array($in)) {
 }
 
 $rel = isset($in['image_local_rel']) ? trim(str_replace('\\', '/', (string) $in['image_local_rel']), '/') : '';
+$origFilename = $rel !== '' ? basename($rel) : '';
 $industry = isset($in['industry']) ? trim((string) $in['industry']) : '';
 $memoText = isset($in['memo_text']) ? (string) $in['memo_text'] : '';
 $forcePh = !empty($in['force_placeholder']);
@@ -195,12 +196,14 @@ function lp_pipe_fail_placeholder(
     int $h,
     string $why,
     array $vision,
+    string $filename = '',
 ): void {
+    $title = $filename !== '' ? $filename : '[ PLACEHOLDER ]';
     $url = lp_reverse_save_placeholder_png(
         $cmsRoot,
         max(64, $w) ?: 512,
         max(64, $h) ?: 384,
-        '[ PLACEHOLDER ]',
+        $title,
         ['HF or step failed', preg_replace('/[^\x20-\x7E]/u', '?', $why)],
     );
     echo json_encode([
@@ -218,20 +221,22 @@ $emitPlaceholder = static function (
     int $h,
     string $sub,
     array $extra = [],
+    string $filename = '',
 ): string {
     $asciiReason = $sub !== '' ? preg_replace('/[^\x20-\x7E]/u', '?', $sub) : 'manual / pipeline';
+    $title = $filename !== '' ? $filename : '[ PLACEHOLDER ]';
 
     return lp_reverse_save_placeholder_png(
         $cmsRoot,
         $w,
         $h,
-        '[ PLACEHOLDER ]',
+        $title,
         array_merge([$asciiReason], $extra),
     );
 };
 
 if ($forcePh || $replacementMode === 'placeholder') {
-    $url = $emitPlaceholder($cmsRoot, $imgW ?: 512, $imgH ?: 384, $reasonJa !== '' ? $reasonJa : 'replacement=placeholder', [$type]);
+    $url = $emitPlaceholder($cmsRoot, $imgW ?: 512, $imgH ?: 384, $reasonJa !== '' ? $reasonJa : 'replacement=placeholder', [$type], $origFilename);
     echo json_encode([
         'outcome'   => 'placeholder',
         'url'       => $url,
@@ -255,14 +260,14 @@ $hfKeySource = ($hfServerToken !== '' && ($hfKeyBody === '' || $hfToken === $hfS
 
 if ($type === 'photo' || $type === 'illustration') {
     if ($hfToken === '') {
-        lp_pipe_fail_placeholder($cmsRoot, $imgW, $imgH, 'HF トークン未設定のためプレースホルダにフォールバック', $vision);
+        lp_pipe_fail_placeholder($cmsRoot, $imgW, $imgH, 'HF トークン未設定のためプレースホルダにフォールバック', $vision, $origFilename);
     }
     $ill = (string) ($vision['illustration_style'] ?? 'none');
     $bg = (string) ($vision['background_description'] ?? '');
     $mode = $type === 'photo' ? 'photo' : 'illustration';
     $hf = lp_reverse_hf_save_generated_image($cmsRoot, $mode, '', $bg, $ill, $imgW, $imgH, $hfToken, $hfKeySource);
     if (!$hf['ok']) {
-        lp_pipe_fail_placeholder($cmsRoot, $imgW, $imgH, $hf['error'] ?? 'HF', $vision);
+        lp_pipe_fail_placeholder($cmsRoot, $imgW, $imgH, $hf['error'] ?? 'HF', $vision, $origFilename);
     }
     echo json_encode([
         'outcome' => $type === 'photo' ? 'replaced_photo' : 'replaced_illustration',
@@ -275,13 +280,13 @@ if ($type === 'photo' || $type === 'illustration') {
 
 if ($type === 'ui' || $type === 'composite') {
     if ($hfToken === '') {
-        lp_pipe_fail_placeholder($cmsRoot, $imgW, $imgH, 'UI/合成は HF 背景が必要（トークン未設定）', $vision);
+        lp_pipe_fail_placeholder($cmsRoot, $imgW, $imgH, 'UI/合成は HF 背景が必要（トークン未設定）', $vision, $origFilename);
     }
     $ill = (string) ($vision['illustration_style'] ?? 'none');
     $bg = (string) ($vision['background_description'] ?? '');
     $hf = lp_reverse_hf_save_generated_image($cmsRoot, 'composite', '', $bg, $ill, $imgW, $imgH, $hfToken, $hfKeySource);
     if (!$hf['ok']) {
-        lp_pipe_fail_placeholder($cmsRoot, $imgW, $imgH, $hf['error'] ?? 'HF composite bg', $vision);
+        lp_pipe_fail_placeholder($cmsRoot, $imgW, $imgH, $hf['error'] ?? 'HF composite bg', $vision, $origFilename);
     }
 
     $body = [
@@ -304,7 +309,7 @@ if ($type === 'ui' || $type === 'composite') {
     exit;
 }
 
-$url = $emitPlaceholder($cmsRoot, $imgW ?: 512, $imgH ?: 384, 'type=' . $type . ' (pipeline v1 は placeholder)', [$reasonJa]);
+$url = $emitPlaceholder($cmsRoot, $imgW ?: 512, $imgH ?: 384, 'type=' . $type . ' (pipeline v1 は placeholder)', [$reasonJa], $origFilename);
 echo json_encode([
     'outcome' => 'placeholder',
     'url'     => $url,

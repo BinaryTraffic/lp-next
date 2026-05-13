@@ -819,8 +819,9 @@
       return wrap;
     }
 
-    const modalBody = document.querySelector('#saveGenerateModal .modal-body');
-    if (!modalBody) {
+    // saveGenPhase2 内に挿入（Phase 1/2 分割後は Phase2 が直接の親）
+    const phase2 = document.getElementById('saveGenPhase2');
+    if (!phase2) {
       return null;
     }
 
@@ -833,11 +834,11 @@
       + '<p id="saveGenProgressLabel" class="small text-muted mb-0 mt-2"></p>'
       + '<p id="saveGenHeartbeat" class="small text-muted mb-0" style="font-size:0.75em"></p>'
       + '<button id="saveGenAbortBtn" type="button" class="btn btn-sm btn-outline-danger mt-2">■ 生成を停止</button>';
-    const errEl = modalBody.querySelector('#saveGenModalErr');
+    const errEl = phase2.querySelector('#saveGenModalErr');
     if (errEl) {
-      modalBody.insertBefore(wrap, errEl);
+      phase2.insertBefore(wrap, errEl);
     } else {
-      modalBody.appendChild(wrap);
+      phase2.appendChild(wrap);
     }
 
     document.getElementById('saveGenAbortBtn')?.addEventListener('click', async () => {
@@ -894,6 +895,25 @@
     if (abortBtn) abortBtn.disabled = false;
   }
 
+  /** Phase 1（目的入力） → Phase 2（進捗）へ切り替え */
+  function switchToProgressPhase() {
+    document.getElementById('saveGenPhase1')?.classList.add('d-none');
+    document.getElementById('saveGenPhase2')?.classList.remove('d-none');
+    document.getElementById('saveGenFooterPhase1')?.classList.add('d-none');
+    document.getElementById('saveGenFooterBusy')?.classList.remove('d-none');
+  }
+
+  /** モーダルを Phase 1（目的入力）状態でリセット */
+  function resetToPhase1() {
+    document.getElementById('saveGenPhase1')?.classList.remove('d-none');
+    document.getElementById('saveGenPhase2')?.classList.add('d-none');
+    document.getElementById('saveGenFooterPhase1')?.classList.remove('d-none');
+    document.getElementById('saveGenFooterBusy')?.classList.add('d-none');
+    document.getElementById('saveGenFooterDone')?.classList.add('d-none');
+    const inp = document.getElementById('saveGenPurposeInput');
+    if (inp) { inp.value = ''; inp.disabled = false; }
+  }
+
   /** @param {'pending'|'active'|'done'|'error'} state */
   function setSaveGenRowStatus(rowId, state) {
     const row = document.getElementById(rowId);
@@ -914,7 +934,13 @@
     if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
     ensureSaveGenProgressUi();
     resetSaveGenerateModal();
+    resetToPhase1();
     bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false }).show();
+    // フォーカスを目的入力欄に当てる
+    modalEl.addEventListener('shown.bs.modal', function onShown() {
+      modalEl.removeEventListener('shown.bs.modal', onShown);
+      document.getElementById('saveGenPurposeInput')?.focus();
+    });
   }
 
   function hideSaveGenerateModal() {
@@ -934,20 +960,13 @@
     }, 180);
   }
 
-  async function runSaveAndGenerate() {
-    const purpose = (prompt('この生成の目的を入力してください（必須）', '編集反映のため再生成') || '').trim();
-    if (!purpose) {
-      showError(generateError, '目的は必須です。');
-      return;
-    }
+  async function runSaveAndGenerate(purpose) {
     generateAbortController = new AbortController();
     generateStopRequested = false;
     const generateSignal = generateAbortController.signal;
     btnSaveGenerate.disabled = true;
     generateError.classList.add('d-none');
     generateSuccess.classList.add('d-none');
-
-    openSaveGenerateModal();
 
     try {
       // Save current page's form data before generating
@@ -1629,6 +1648,8 @@
     let rightIsPlaceholder = false;
     /** @type {string} モーダル表示中の元画像 displayURL */
     let origDisplayUrl = '';
+    /** @type {string} モーダル表示中の元画像ファイル名（プレースホルダー表示用） */
+    let origFilename = '';
 
     /** @param {HTMLImageElement|null} img */
     function formatImgPxDimsLine(img) {
@@ -1708,21 +1729,51 @@
 
     /**
      * Canvas でプレースホルダーをローカル生成（placehold.jp の CORS 問題を回避）。
-     * @param {number} w @param {number} h
+     * @param {number} w @param {number} h @param {string} [filename]
      * @returns {HTMLCanvasElement}
      */
-    function drawLocalPlaceholder(w, h) {
+    function drawLocalPlaceholder(w, h, filename = '') {
       const c = document.createElement('canvas');
       c.width = w; c.height = h;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#cccccc';
+      ctx.fillStyle = '#2d3134';
       ctx.fillRect(0, 0, w, h);
-      const fontSize = Math.max(11, Math.min(Math.floor(Math.min(w, h) / 7), 52));
-      ctx.fillStyle = '#888888';
-      ctx.font = `bold ${fontSize}px sans-serif`;
+      const baseFontSize = Math.max(11, Math.min(Math.floor(Math.min(w, h) / 7), 48));
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${w} × ${h}`, w / 2, h / 2);
+
+      // ファイル名が画面幅に収まるか確認。収まらなければ省略または非表示
+      const maxTextW = w * 0.88;
+      let displayFilename = '';
+      if (filename) {
+        ctx.font = `bold ${baseFontSize}px sans-serif`;
+        if (ctx.measureText(filename).width <= maxTextW) {
+          displayFilename = filename;
+        } else {
+          // 末尾を「…」で切り詰めて収まる長さを二分探索
+          let lo = 0, hi = filename.length;
+          while (lo < hi - 1) {
+            const mid = (lo + hi) >> 1;
+            if (ctx.measureText(filename.slice(0, mid) + '…').width <= maxTextW) lo = mid;
+            else hi = mid;
+          }
+          // 切り詰め後も極端に短い（3文字未満）なら表示しない
+          displayFilename = lo >= 3 ? filename.slice(0, lo) + '…' : '';
+        }
+      }
+
+      const lines = displayFilename
+        ? [{ text: displayFilename, size: baseFontSize, color: '#e6e8eb' },
+           { text: `${w}×${h}`,    size: Math.round(baseFontSize * 0.72), color: '#969ca2' }]
+        : [{ text: `${w}×${h}`,    size: baseFontSize, color: '#969ca2' }];
+      const lineH = baseFontSize * 1.5;
+      const totalH = lines.length * lineH;
+      const y0 = (h - totalH) / 2 + lineH / 2;
+      lines.forEach((l, i) => {
+        ctx.font = `bold ${l.size}px sans-serif`;
+        ctx.fillStyle = l.color;
+        ctx.fillText(l.text, w / 2, y0 + i * lineH);
+      });
       return c;
     }
 
@@ -1731,9 +1782,10 @@
      * @param {number} phW @param {number} phH
      * @param {string} origSrc   元画像 URL（CORS 失敗時はグレー背景で代替）
      * @param {number} mockAlpha モック画像の不透明度 0〜1
+     * @param {string} [filename] プレースホルダーに表示するファイル名
      * @returns {Promise<string>} DataURL
      */
-    async function blendPlaceholder(phW, phH, origSrc, mockAlpha) {
+    async function blendPlaceholder(phW, phH, origSrc, mockAlpha, filename = '') {
       const canvas = document.createElement('canvas');
       canvas.width  = phW;
       canvas.height = phH;
@@ -1771,7 +1823,7 @@
 
       // ② モック画像を mockAlpha で上から重ねる
       ctx.globalAlpha = mockAlpha;
-      ctx.drawImage(drawLocalPlaceholder(phW, phH), 0, 0, phW, phH);
+      ctx.drawImage(drawLocalPlaceholder(phW, phH, filename), 0, 0, phW, phH);
       ctx.globalAlpha = 1;
 
       return canvas.toDataURL('image/png');
@@ -1787,7 +1839,7 @@
       if (phBlendStatus) phBlendStatus.classList.remove('d-none');
       try {
         const alpha = getPhBlendOpacity();
-        const dataUrl = await blendPlaceholder(w, h, origDisplayUrl, alpha);
+        const dataUrl = await blendPlaceholder(w, h, origDisplayUrl, alpha, origFilename);
         setRightSelection(dataUrl, true);
       } catch (e) {
         showToast('合成に失敗しました: ' + String(e.message || e), 'danger');
@@ -1914,6 +1966,7 @@
       const currentOverride = (srcInp && srcInp.value && srcInp.value.trim()) ? srcInp.value.trim() : '';
 
       origDisplayUrl = '';
+      origFilename = orig ? (orig.split('/').pop().split('?')[0] || '') : '';
       lastPhW = 0;
       lastPhH = 0;
       rightIsPlaceholder = false;
@@ -2004,6 +2057,7 @@
     modalEl.addEventListener('hidden.bs.modal', () => {
       targetElemId = '';
       origDisplayUrl = '';
+      origFilename = '';
       resetRight();
       wireImgDimsReporting(leftImg, dimsLeftEl, '');
       renderPlaceholderSection(0, 0);
@@ -2843,8 +2897,27 @@
       btnResetClient.addEventListener('click', resetClientData);
     }
     if (btnSaveGenerate) {
-      btnSaveGenerate.addEventListener('click', runSaveAndGenerate);
+      // ボタン押下でモーダルを Phase 1（目的入力）として即座に開く
+      btnSaveGenerate.addEventListener('click', () => {
+        openSaveGenerateModal();
+      });
     }
+
+    // Phase 1「生成を開始」ボタン
+    document.getElementById('btnSaveGenStartRun')?.addEventListener('click', () => {
+      const inp = document.getElementById('saveGenPurposeInput');
+      const purpose = (inp?.value || '').trim() || '編集反映のため再生成';
+      if (inp) inp.disabled = true;
+      switchToProgressPhase();
+      void runSaveAndGenerate(purpose);
+    });
+
+    // Enter キーでも開始できるようにする
+    document.getElementById('saveGenPurposeInput')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('btnSaveGenStartRun')?.click();
+      }
+    });
 
     document.getElementById('btnSaveGenModalDismiss')?.addEventListener('click', () => {
       if (btnSaveGenerate) btnSaveGenerate.disabled = false;

@@ -13,7 +13,7 @@ require_once __DIR__ . '/lib/app_release.php';
 require_once __DIR__ . '/lib/LpWorkspace.php';
 require_once __DIR__ . '/lib/UserRegistry.php';
 
-define('APP_VERSION', '1.5.001');
+define('APP_VERSION', '1.5.002');
 define('APP_BUILD', lp_reverse_app_build_label(__DIR__));
 
 $outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
@@ -358,13 +358,6 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
       </span>
     </span>
     <div class="d-flex align-items-center gap-2">
-      <!-- 実行中ジョブ バッジボタン -->
-      <button class="btn btn-sm btn-outline-light position-relative" type="button"
-              data-bs-toggle="modal" data-bs-target="#jobModal" title="実行中ジョブ" id="navJobBtn">
-        <i class="bi bi-cpu"></i>
-        <span class="badge rounded-pill bg-warning text-dark position-absolute top-0 start-100 translate-middle"
-              id="navJobBadge" style="display:none;font-size:.6rem">0</span>
-      </button>
       <!-- Google アバター -->
       <?php if ($sessAvatarUx !== ''): ?>
         <img src="<?= htmlspecialchars($sessAvatarUx, ENT_QUOTES, 'UTF-8') ?>" referrerpolicy="no-referrer"
@@ -379,6 +372,13 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           <?= htmlspecialchars(mb_strtoupper(mb_substr($sessNameUx, 0, 1)), ENT_QUOTES, 'UTF-8') ?>
         </span>
       <?php endif; ?>
+      <!-- 実行中ジョブ バッジボタン -->
+      <button class="btn btn-sm btn-outline-light position-relative" type="button"
+              data-bs-toggle="modal" data-bs-target="#jobModal" title="実行中ジョブ" id="navJobBtn">
+        <i class="bi bi-cpu"></i>
+        <span class="badge rounded-pill bg-warning text-dark position-absolute top-0 start-100 translate-middle"
+              id="navJobBadge" style="display:none;font-size:.6rem">0</span>
+      </button>
       <!-- ハンバーガーメニュー -->
       <div class="dropdown">
         <button class="btn btn-sm btn-outline-light" type="button" id="navMenuDropdown"
@@ -390,6 +390,12 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#workspaceModal">
               <i class="bi bi-folder2-open me-2"></i>ワークスペース
             </button>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item" href="image_checklist.php" target="_blank" rel="noopener">
+              <i class="bi bi-list-check me-2"></i>画像作業指示書
+            </a>
           </li>
           <li><hr class="dropdown-divider"></li>
           <?php if ($authManageUsers): ?>
@@ -643,21 +649,40 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
         <button type="button" class="btn-close" id="btnSaveGenBg" aria-label="バックグラウンドで続行" title="閉じても生成はバックグラウンドで続行します"></button>
       </div>
       <div class="modal-body pt-0 pb-2">
-        <ul class="list-unstyled mb-0 small" id="saveGenSteps">
-          <li id="saveGenRowSave" class="d-flex align-items-center gap-2 mb-3">
-            <span class="save-gen-status flex-shrink-0" style="width:1.25rem;text-align:center"><i class="bi bi-circle text-muted"></i></span>
-            <span>編集内容をサーバーに保存しています…</span>
-          </li>
-          <li id="saveGenRowGen" class="d-flex align-items-center gap-2 mb-0">
-            <span class="save-gen-status flex-shrink-0" style="width:1.25rem;text-align:center"><i class="bi bi-circle text-muted"></i></span>
-            <span>output/index.html を生成しています…</span>
-          </li>
-        </ul>
-        <div id="saveGenModalErr" class="alert alert-danger d-none mt-3 mb-0 py-2 small" role="alert"></div>
+        <!-- Phase 1: 目的入力 -->
+        <div id="saveGenPhase1">
+          <label class="form-label small fw-semibold mb-1" for="saveGenPurposeInput">生成の目的</label>
+          <input type="text" class="form-control form-control-sm" id="saveGenPurposeInput"
+                 placeholder="例: 編集反映のため再生成" maxlength="120" autocomplete="off">
+          <div class="text-muted mt-1" style="font-size:.72rem">入力後「生成を開始」で保存＆HTML生成が始まります</div>
+        </div>
+        <!-- Phase 2: 進捗 -->
+        <div id="saveGenPhase2" class="d-none">
+          <ul class="list-unstyled mb-0 small" id="saveGenSteps">
+            <li id="saveGenRowSave" class="d-flex align-items-center gap-2 mb-3">
+              <span class="save-gen-status flex-shrink-0" style="width:1.25rem;text-align:center"><i class="bi bi-circle text-muted"></i></span>
+              <span>編集内容をサーバーに保存しています…</span>
+            </li>
+            <li id="saveGenRowGen" class="d-flex align-items-center gap-2 mb-0">
+              <span class="save-gen-status flex-shrink-0" style="width:1.25rem;text-align:center"><i class="bi bi-circle text-muted"></i></span>
+              <span>output/index.html を生成しています…</span>
+            </li>
+          </ul>
+          <div id="saveGenModalErr" class="alert alert-danger d-none mt-3 mb-0 py-2 small" role="alert"></div>
+        </div>
       </div>
-      <div class="modal-footer py-2 border-top-0 justify-content-between" id="saveGenFooterBusy">
+      <!-- Phase 1 フッター -->
+      <div class="modal-footer py-2 border-top-0 justify-content-end gap-2" id="saveGenFooterPhase1">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-sm btn-primary" id="btnSaveGenStartRun">
+          <i class="bi bi-lightning-charge-fill me-1"></i>生成を開始
+        </button>
+      </div>
+      <!-- Phase 2 フッター（進行中） -->
+      <div class="modal-footer py-2 border-top-0 justify-content-between d-none" id="saveGenFooterBusy">
         <span class="small text-muted mb-0">× で閉じてもバックグラウンドで続行します。</span>
       </div>
+      <!-- Phase 2 フッター（完了） -->
       <div class="modal-footer py-2 border-top-0 d-none" id="saveGenFooterDone">
         <button type="button" class="btn btn-primary btn-sm" id="btnSaveGenModalDismiss" data-bs-dismiss="modal">閉じる</button>
       </div>

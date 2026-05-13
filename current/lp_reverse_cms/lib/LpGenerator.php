@@ -80,18 +80,19 @@ class LpGenerator
 
         $sectionCount = count($sections);
         $sectionsHtml = '';
-        $sectionIndex = 0;
         foreach ($sections as $section) {
             $chunk = $this->processSection($section, $elemData);
             if (trim($chunk) === '') {
                 continue;
             }
-            // First section (nav/header) gets the highest z-index so its dropdowns
-            // can paint above all subsequent sections.
-            $zIndex = $sectionCount - $sectionIndex + 10;
-            $sectionIndex++;
             $secId = htmlspecialchars((string) ($section['id'] ?? ''), ENT_QUOTES, 'UTF-8');
-            $sectionsHtml .= '<div class="lp-reverse-section-root" data-lp-section="' . $secId . '" style="z-index:' . $zIndex . '">'
+            // Sections containing a <nav> element get explicit high z-index so dropdown
+            // menus can paint above subsequent content sections.
+            // All other sections use z-index:auto (DOM paint order — later = on top).
+            $styleAttr = str_contains($chunk, '<nav')
+                ? ' style="z-index:' . ($sectionCount + 10) . '"'
+                : '';
+            $sectionsHtml .= '<div class="lp-reverse-section-root" data-lp-section="' . $secId . '"' . $styleAttr . '>'
                 . $chunk . "</div>\n";
         }
 
@@ -131,6 +132,10 @@ HTML;
 
         // ── Apply asset URL map: absolute URLs → local paths ──────────────
         $html = $this->applyAssetMap($html, $assetMapOverride);
+
+        // ── Same-origin href → {%代替URL%} placeholder ─────────────────────
+        $sourceUrl = trim((string) ($structure['source_url'] ?? ''));
+        $html = self::rewriteOriginToPlaceholder($html, $sourceUrl);
 
         return $html;
     }
@@ -283,6 +288,10 @@ HTML;
             if ($origin !== '' && $hrefMap !== []) {
                 $html = self::rewriteSameOriginHrefs($html, $hrefMap, $depth);
             }
+
+            // ── Remaining same-origin hrefs (not in hrefMap) → {%代替URL%} ──
+            $entryUrl = trim((string) (($siteMap['meta'] ?? [])['entry_url'] ?? ''));
+            $html = self::rewriteOriginToPlaceholder($html, $entryUrl);
 
             // ── JS interceptor: fallback for any unmapped same-origin links ──
             if ($origin !== '' && $urlMap !== []) {
@@ -457,6 +466,44 @@ HTML;
             }
         }
 
+        return $html;
+    }
+
+    /**
+     * 同一オリジンの href 値のドメイン部分を {%代替URL%} プレースホルダーに置換する。
+     * rewriteSameOriginHrefs でローカルパスに変換済みの href は影響を受けない。
+     *
+     * @param string $sourceUrl  元サイトの URL（オリジン抽出用）
+     */
+    public static function rewriteOriginToPlaceholder(string $html, string $sourceUrl): string
+    {
+        if ($sourceUrl === '' || $html === '') {
+            return $html;
+        }
+        $p      = parse_url($sourceUrl);
+        $host   = (string) ($p['host'] ?? '');
+        $scheme = (string) ($p['scheme'] ?? 'https');
+        if ($host === '') {
+            return $html;
+        }
+        $origin = $scheme . '://' . $host;
+        if (!empty($p['port'])) {
+            $origin .= ':' . $p['port'];
+        }
+        $placeholder = $scheme . '://{%代替URL%}';
+        $encOrigin   = htmlspecialchars($origin, ENT_QUOTES, 'UTF-8');
+        foreach (['"', "'"] as $q) {
+            $from = 'href=' . $q . $origin;
+            if (str_contains($html, $from)) {
+                $html = str_replace($from, 'href=' . $q . $placeholder, $html);
+            }
+            if ($encOrigin !== $origin) {
+                $fromEnc = 'href=' . $q . $encOrigin;
+                if (str_contains($html, $fromEnc)) {
+                    $html = str_replace($fromEnc, 'href=' . $q . $placeholder, $html);
+                }
+            }
+        }
         return $html;
     }
 

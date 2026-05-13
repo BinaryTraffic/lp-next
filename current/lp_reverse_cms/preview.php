@@ -80,6 +80,37 @@ WorkspaceRegistry::touchCurrent($cmsRootPreview, $sessMailPv);
 $outputDir  = LpWorkspace::outputDir($cmsRootPreview);
 $outputFile = $outputDir . 'index.html';
 
+// ── プレビュー内リンク解決マップ: {%代替URL%} のパス → ローカル出力ファイル ──
+$previewLinkMap = [];
+$wsPvDataDir = $cmsRootPreview . DIRECTORY_SEPARATOR . 'data'
+             . DIRECTORY_SEPARATOR . 'ws_' . LpWorkspace::id() . DIRECTORY_SEPARATOR;
+$siteMapPvPath = $wsPvDataDir . 'site_map.json';
+if (is_readable($siteMapPvPath)) {
+    $smPv = json_decode((string) file_get_contents($siteMapPvPath), true);
+    if (is_array($smPv)) {
+        $entryUrlPv = trim((string) (($smPv['meta'] ?? [])['entry_url'] ?? ''));
+        if ($entryUrlPv !== '') {
+            $ep = (string) (parse_url($entryUrlPv, PHP_URL_PATH) ?? '/');
+            $previewLinkMap[rtrim($ep, '/') . '/'] = 'index.html';
+            $previewLinkMap[rtrim($ep, '/')]        = 'index.html';
+        }
+        foreach ($smPv['pages'] ?? [] as $key => $page) {
+            if ($key === 'index' || !is_string($key) || !is_array($page)) { continue; }
+            $srcUrlPv  = trim((string) ($page['source_url'] ?? ''));
+            $localPv   = trim(str_replace('\\', '/', (string) ($page['local_path'] ?? '')));
+            if ($srcUrlPv === '' || $localPv === '') { continue; }
+            $relPv = (string) (preg_replace('~^output/[^/]+/~', '', $localPv) ?? $localPv);
+            $pp    = (string) (parse_url($srcUrlPv, PHP_URL_PATH) ?? '');
+            if ($pp !== '' && $relPv !== '') {
+                $previewLinkMap[rtrim($pp, '/') . '/'] = $relPv;
+                $previewLinkMap[rtrim($pp, '/')]        = $relPv;
+            }
+        }
+    }
+}
+$previewLinkMapJson = (string) json_encode($previewLinkMap,
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
 // 出力が無くても編集ユーザーは一覧へ。プレビュー専門ロールのみここで止める。
 if (!is_file($outputFile)) {
     $strictPv = ($rolePv === 'preview');
@@ -369,7 +400,11 @@ exit;
 </details>
 
 <div class="iframe-container" id="iframeContainer">
-  <iframe id="previewFrame" src="<?= htmlspecialchars(LpWorkspace::outputRelIndex() . '?v=' . filemtime($outputFile), ENT_QUOTES, 'UTF-8') ?>" title="生成サイトのプレビュー"></iframe>
+  <?php $previewSrc = LpWorkspace::outputRelIndex() . '?v=' . filemtime($outputFile); ?>
+<iframe id="previewFrame"
+        src="<?= htmlspecialchars($previewSrc, ENT_QUOTES, 'UTF-8') ?>"
+        data-orig-src="<?= htmlspecialchars($previewSrc, ENT_QUOTES, 'UTF-8') ?>"
+        title="生成サイトのプレビュー"></iframe>
   <div id="iframeLoadCurtain" class="iframe-load-curtain" aria-live="polite" aria-busy="false" hidden>
     <div class="iframe-load-curtain-inner">
       <div class="spinner-border text-light mb-3" role="status" style="width:2rem;height:2rem"></div>
@@ -729,6 +764,123 @@ exit;
       }
     });
   });
+
+  // ── iframe ナビゲーションガード ────────────────────────────────────
+  // 二重防衛：① クリック時点でインターセプト（白ページなし）
+  //           ② load イベントでフォールバックリセット（インジェクト失敗時の保険）
+  (function () {
+    const outputDirPath = (function () {
+      const abs = frame.src; // DOM プロパティ → 絶対 URL
+      const m = abs.match(/^https?:\/\/[^/]+(\/.*\/output\/[^/?#]+\/)/);
+      return m ? m[1] : null;
+    })();
+
+    const origSrc = frame.getAttribute('data-orig-src') || frame.src;
+
+    // ── ① クリックガード inject ─────────────────────────────────────
+    // {%代替URL%} リンク → site_map から対応するローカル出力ファイルへ遷移
+    // その他の外部リンク → ブロックしてバナー表示
+    const linkMap = <?= $previewLinkMapJson ?>;
+
+    function injectClickGuard() {
+      try {
+        const doc = frame.contentDocument;
+        if (!doc || !doc.head || doc.documentElement.dataset.lpNavGuard) return;
+        doc.documentElement.dataset.lpNavGuard = '1';
+        const s = doc.createElement('script');
+        const op = JSON.stringify(outputDirPath || '');
+        const lm = JSON.stringify(linkMap);
+        s.textContent = '(function(){'
+          + 'var op=' + op + ',lm=' + lm + ';'
+          + 'document.addEventListener("click",function(e){'
+          +   'var a=e.target.closest("a[href]");if(!a)return;'
+          +   'var h=a.href;'
+          +   'if(!h||h.startsWith("javascript:")||h.startsWith("mailto:"))return;'
+          +   'var u;try{u=new URL(h);}catch(err){'
+          // URL が無効（{%代替URL%} 等）→ 出力ルートの index.html へ
+          +     'e.preventDefault();e.stopPropagation();'
+          +     'location.href=op?""+op+"index.html":"index.html";return;'
+          +   '}'
+          // 同一オリジン＋output 内 → 許可
+          +   'if(u.origin===location.origin&&op&&u.pathname.startsWith(op))return;'
+          // 同一ページ（ハッシュのみ）→ 許可
+          +   'if(u.origin===location.origin&&u.pathname===location.pathname)return;'
+          // {%代替URL%} 判定: ホストを小文字化して %7b または { を含む（ブラウザの大文字小文字混在に対応）
+          +   'var hh=u.host.toLowerCase();'
+          +   'var isph=hh.indexOf("%7b")!==-1||hh.indexOf("{")!==-1||hh.indexOf("%25")!==-1;'
+          +   'if(isph){'
+          +     'e.preventDefault();e.stopPropagation();'
+          +     'var p=u.pathname;'
+          +     'var lf=lm[p]||lm[p.replace(/\\/$/,"")]||lm[p.replace(/\\/?$/,"/")]||"index.html";'
+          +     'location.href=op?op+lf:lf;return;'
+          +   '}'
+          // その他の外部リンク → ブロック
+          +   'e.preventDefault();e.stopPropagation();'
+          +   'try{window.parent.postMessage({type:"lp-nav-blocked"},"*");}catch(me){}'
+          + '},true);'
+          + '})();';
+        doc.head.appendChild(s);
+      } catch (e) { /* cross-origin or null doc — skip */ }
+    }
+
+    // ── ② load イベントフォールバック ──────────────────────────────
+    let firstLoadDone = false;
+    frame.addEventListener('load', function () {
+      if (!firstLoadDone) {
+        firstLoadDone = true;
+        injectClickGuard();
+        return;
+      }
+
+      // クリックガードをすり抜けた遷移を検知
+      try {
+        const loc = frame.contentWindow.location;
+        const href = loc.href;
+        if (!href || href === 'about:blank' || href.startsWith('about:')) return;
+        // output 内なら OK → inject だけしなおす
+        if (outputDirPath && loc.pathname.startsWith(outputDirPath)) {
+          injectClickGuard();
+          return;
+        }
+        // output 外 → リセット
+        doReset();
+      } catch (e) {
+        // クロスオリジン（{%代替URL%} 等が通り抜けた） → リセット
+        doReset();
+      }
+    });
+
+    function doReset() {
+      showSplashForReload();
+      frame.src = 'about:blank';
+      window.setTimeout(() => { frame.src = origSrc; }, 80);
+      showBlockedBanner();
+    }
+
+    // postMessage 受信（クリックガード成功時）
+    window.addEventListener('message', function (e) {
+      if (e.data && e.data.type === 'lp-nav-blocked') {
+        showBlockedBanner();
+      }
+    });
+
+    function showBlockedBanner() {
+      if (document.getElementById('navOutsideBanner')) return;
+      const banner = document.createElement('div');
+      banner.id = 'navOutsideBanner';
+      banner.style.cssText = 'position:fixed;bottom:64px;left:50%;transform:translateX(-50%);'
+        + 'background:#212529;color:#fff;padding:10px 18px;border-radius:8px;'
+        + 'z-index:10100;font-size:.82rem;display:flex;align-items:center;gap:12px;'
+        + 'box-shadow:0 4px 20px rgba(0,0,0,.5);max-width:90vw;';
+      banner.innerHTML = '<i class="bi bi-link-45deg text-warning flex-shrink-0"></i>'
+        + '<span>プレビュー外リンクです（クローン後に有効）</span>'
+        + '<a href="index.php" class="btn btn-sm btn-outline-light ms-1 flex-shrink-0">編集画面</a>'
+        + '<button type="button" class="btn-close btn-close-white btn-sm flex-shrink-0"'
+        + ' onclick="document.getElementById(\'navOutsideBanner\').remove()"></button>';
+      document.body.appendChild(banner);
+      window.setTimeout(() => { document.getElementById('navOutsideBanner')?.remove(); }, 5000);
+    }
+  })();
 
   const container = document.getElementById('iframeContainer');
 

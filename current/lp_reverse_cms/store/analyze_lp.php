@@ -148,6 +148,70 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress, $jobRegistryA
         'detail_ja' => 'DOM を読み込み、ツリー総ステップを計算します',
     ]);
 
+    // 外部 CSS ファイルを取得して css_background_hints の検索対象を拡充する
+    $extraCssContent = '';
+    if ($sourceUrl !== '') {
+        $urlCtxForCss = LpUrlContext::fromPageAndHtml($sourceUrl, (string) $html);
+        $cssUrlMatches = [];
+        // <link rel="stylesheet" href="..."> を正規表現で抽出（libxml は不要）
+        if (preg_match_all('/<link\b[^>]*\brel=["\']stylesheet["\'][^>]*>/i', (string) $html, $cssUrlMatches)) {
+            $cssLinks = $cssUrlMatches[0];
+        } else {
+            $cssLinks = [];
+        }
+        // href="..." または href='...' を取り出す
+        $cssAbsUrls = [];
+        foreach ($cssLinks as $tag) {
+            if (preg_match('/\bhref=["\'](.*?)["\']/i', $tag, $hm)) {
+                $raw = trim($hm[1]);
+                if ($raw === '' || str_starts_with(strtolower($raw), 'data:')) {
+                    continue;
+                }
+                $abs = $urlCtxForCss->resolve($raw);
+                if (preg_match('#^https?://#i', $abs)) {
+                    $cssAbsUrls[] = $abs;
+                }
+            }
+        }
+        $cssAbsUrls = array_unique(array_slice($cssAbsUrls, 0, 8)); // 最大8ファイル
+        $cssParts   = [];
+        foreach ($cssAbsUrls as $cssUrl) {
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL            => $cssUrl,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 4,
+                CURLOPT_TIMEOUT        => 8,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_ENCODING       => '',
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_HTTPHEADER     => [
+                    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept: text/css,*/*;q=0.1',
+                ],
+            ]);
+            $cssBody  = curl_exec($ch);
+            $cssCode  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $cssFinal = (string) curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+            curl_close($ch);
+            if ($cssBody !== false && $cssCode < 400 && is_string($cssBody)) {
+                // relative url() in CSS → absolutize using the CSS file's own URL as base
+                $cssCtx = LpUrlContext::fromPageAndHtml($cssFinal ?: $cssUrl, '');
+                $cssBody = preg_replace_callback(
+                    '/url\(\s*(["\']?)(?!data:|https?:|\/\/)([^)"\'\\\\]+)\1\s*\)/i',
+                    static function (array $m) use ($cssCtx): string {
+                        $resolved = $cssCtx->resolve(trim($m[2]));
+                        return 'url("' . $resolved . '")';
+                    },
+                    $cssBody
+                ) ?? $cssBody;
+                $cssParts[] = $cssBody;
+            }
+        }
+        $extraCssContent = implode("\n", $cssParts);
+    }
+
     $analyzer = new LpAnalyzer();
     $walkProgressCb = function (
         int $done,
@@ -172,7 +236,7 @@ $runAnalyze = function () use ($dataDir, $emitNd, $streamProgress, $jobRegistryA
     };
 
     $mark('phase:analyzer:start');
-    $structure = $analyzer->analyze($html, $sourceUrl, $walkProgressCb);
+    $structure = $analyzer->analyze($html, $sourceUrl, $walkProgressCb, 0.0, $extraCssContent);
     if ($jobIdAnalyze !== '') {
         $jobRegistryAnalyze->heartbeat($jobIdAnalyze, 'analyze_lp analyzed');
         lp_job_check_abort($jobRegistryAnalyze, $jobIdAnalyze, '解析ジョブが停止されました。');

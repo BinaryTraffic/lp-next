@@ -40,18 +40,34 @@ function lp_reverse_save_placeholder_png(
         array_slice($extraLines, 0, 4)
     ), static fn (string $s): bool => $s !== '');
 
-    $font = 5;
+    $font  = 5;
+    $fontW = imagefontwidth($font);
     $lineH = imagefontheight($font) + 4;
-    $totalH = count($lines) * $lineH;
-    $y0 = (int) max(8, ($h - $totalH) / 2);
+    $maxCols = max(1, (int) floor($w * 0.88 / $fontW)); // 幅の88%に収まる最大文字数
 
+    // タイトル行（$lines[0] = $title）が収まらない場合は切り詰め or 非表示
+    $renderLines = [];
     foreach ($lines as $i => $line) {
         $text = mb_substr($line, 0, 80);
-        $tw = imagefontwidth($font) * strlen($text);
-        $x = (int) max(8, ($w - $tw) / 2);
-        $y = $y0 + $i * $lineH;
-        $col = $i === 0 ? $fg : ($i === 1 ? $muted : $muted);
-        imagestring($im, $font, $x, $y, $text, $col);
+        if ($i === 0 && strlen($text) > $maxCols) {
+            // 切り詰め後が3文字以上なら「...」付きで表示、それ未満は非表示
+            if ($maxCols >= 4) {
+                $text = substr($text, 0, $maxCols - 3) . '...';
+            } else {
+                continue; // 表示しない
+            }
+        }
+        $renderLines[] = ['text' => $text, 'col' => $i === 0 ? $fg : $muted];
+    }
+
+    $totalH = count($renderLines) * $lineH;
+    $y0 = (int) max(8, ($h - $totalH) / 2);
+
+    foreach ($renderLines as $i => $row) {
+        $tw = $fontW * strlen($row['text']);
+        $x  = (int) max(8, ($w - $tw) / 2);
+        $y  = $y0 + $i * $lineH;
+        imagestring($im, $font, $x, $y, $row['text'], $row['col']);
     }
 
     $aiDir = LpWorkspace::outputDir($cmsRoot) . 'ai_images';
