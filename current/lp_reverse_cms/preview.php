@@ -295,9 +295,36 @@ exit;
     .splash-dismiss-wrap {
       margin-top: 18px;
     }
+    /* ページ遷移中オーバーレイ */
+    #navLoadingOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15,17,20,.55);
+      z-index: 9000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 14px;
+      color: #fff;
+      pointer-events: all;
+      cursor: wait;
+    }
+    #navLoadingOverlay.is-visible { display: flex; }
+    #navLoadingOverlay .nav-loading-label {
+      font-size: .9rem;
+      font-weight: 500;
+      letter-spacing: .02em;
+      opacity: .9;
+    }
   </style>
 </head>
 <body>
+
+<div id="navLoadingOverlay" role="status" aria-live="polite">
+  <div class="spinner-border text-light" style="width:2.8rem;height:2.8rem;border-width:.22rem" role="status"></div>
+  <div class="nav-loading-label">ページを読み込んでいます...</div>
+</div>
 
 <div id="previewSplash" aria-live="polite" aria-busy="true">
   <div class="preview-splash-panel">
@@ -812,6 +839,7 @@ exit;
           +     'e.preventDefault();e.stopPropagation();'
           +     'var p=u.pathname;'
           +     'var lf=lm[p]||lm[p.replace(/\\/$/,"")]||lm[p.replace(/\\/?$/,"/")]||"index.html";'
+          +     'try{window.parent.postMessage({type:"lp-nav-start"},"*");}catch(_){}'
           +     'location.href=op?op+lf:lf;return;'
           +   '}'
           // その他の外部リンク → ブロック
@@ -826,6 +854,7 @@ exit;
     // ── ② load イベントフォールバック ──────────────────────────────
     let firstLoadDone = false;
     frame.addEventListener('load', function () {
+      hideNavLoading();
       if (!firstLoadDone) {
         firstLoadDone = true;
         injectClickGuard();
@@ -857,10 +886,27 @@ exit;
       showBlockedBanner();
     }
 
+    // ── ページ遷移インジケーター ────────────────────────────────────
+    let navLoadingTimer = null;
+    function showNavLoading() {
+      const el = document.getElementById('navLoadingOverlay');
+      if (el) el.classList.add('is-visible');
+      if (navLoadingTimer) clearTimeout(navLoadingTimer);
+      navLoadingTimer = setTimeout(hideNavLoading, 15000); // 安全タイムアウト
+    }
+    function hideNavLoading() {
+      const el = document.getElementById('navLoadingOverlay');
+      if (el) el.classList.remove('is-visible');
+      if (navLoadingTimer) { clearTimeout(navLoadingTimer); navLoadingTimer = null; }
+    }
+
     // postMessage 受信（クリックガード成功時）
     window.addEventListener('message', function (e) {
       if (e.data && e.data.type === 'lp-nav-blocked') {
         showBlockedBanner();
+      }
+      if (e.data && e.data.type === 'lp-nav-start') {
+        showNavLoading();
       }
     });
 
