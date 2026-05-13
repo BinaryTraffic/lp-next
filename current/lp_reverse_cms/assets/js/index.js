@@ -2062,6 +2062,56 @@
       wireImgDimsReporting(leftImg, dimsLeftEl, '');
       renderPlaceholderSection(0, 0);
     });
+
+    // -----------------------------------------------------------------------
+    // 一括ブレンド
+    // -----------------------------------------------------------------------
+    async function batchBlendAllImages() {
+      const form = document.getElementById('clientDataForm');
+      if (!form) return;
+      const buttons = Array.from(form.querySelectorAll('.lp-open-image-replace[data-lp-rollback-src]'));
+      const total = buttons.length;
+      if (total === 0) { showToast('編集画面に画像が見つかりません', 'warning'); return; }
+      const batchBtn = document.getElementById('btnBatchBlend');
+      if (batchBtn) batchBtn.disabled = true;
+      const alpha = getPhBlendOpacity();
+      let done = 0, failed = 0;
+      showToast(`全画像ブレンド開始（${total}件）...`, 'info');
+      for (const editBtn of buttons) {
+        const elemId = editBtn.getAttribute('data-lp-id') || '';
+        const rollbackSrc = (editBtn.getAttribute('data-lp-rollback-src') || '').trim();
+        if (!rollbackSrc || !elemId) { failed++; continue; }
+        const srcInp = form.querySelector(`[data-lp-id="${CSS.escape(elemId)}"][data-lp-field="src"]`);
+        if (!(srcInp instanceof HTMLInputElement)) { failed++; continue; }
+        try {
+          const displayUrl = resolveDisplayUrl(rollbackSrc);
+          const filename = rollbackSrc.split('/').pop().split('?')[0] || '';
+          const img = await new Promise((resolve, reject) => {
+            const i = new Image();
+            i.onload = () => resolve(i);
+            i.onerror = reject;
+            i.src = displayUrl;
+          });
+          const w = img.naturalWidth;
+          const h = img.naturalHeight;
+          if (w < 1 || h < 1) { failed++; continue; }
+          const dataUrl = await blendPlaceholder(w, h, displayUrl, alpha, filename);
+          srcInp.value = dataUrl;
+          srcInp.dispatchEvent(new Event('input', { bubbles: true }));
+          srcInp.dispatchEvent(new Event('change', { bubbles: true }));
+          done++;
+        } catch (_) { failed++; }
+      }
+      if (batchBtn) batchBtn.disabled = false;
+      showToast(
+        failed > 0
+          ? `ブレンド完了: ${done}件 成功、${failed}件 失敗`
+          : `全${done}件のブレンドが完了しました`,
+        failed > 0 ? 'warning' : 'success'
+      );
+    }
+
+    document.getElementById('btnBatchBlend')?.addEventListener('click', () => void batchBlendAllImages());
   }
 
   // -----------------------------------------------------------------------

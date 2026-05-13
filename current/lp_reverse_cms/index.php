@@ -13,7 +13,7 @@ require_once __DIR__ . '/lib/app_release.php';
 require_once __DIR__ . '/lib/LpWorkspace.php';
 require_once __DIR__ . '/lib/UserRegistry.php';
 
-define('APP_VERSION', '1.5.002');
+define('APP_VERSION', '1.5.003');
 define('APP_BUILD', lp_reverse_app_build_label(__DIR__));
 
 $outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
@@ -923,6 +923,11 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
           </button>
         </span>
         <input type="file" id="cloneImagesZipUploadInp" accept=".zip,application/zip" class="d-none">
+        <button type="button" class="btn btn-sm btn-outline-info d-inline-flex align-items-center" id="btnBatchBlend"
+          title="編集フォーム内の全画像に「オリジナル＋画素数ブレンド」を一括適用します"
+          <?= !$hasStructure ? 'disabled' : '' ?>>
+          <i class="bi bi-layers"></i><span class="ms-1">全画像ブレンド</span>
+        </button>
         <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
           data-bs-toggle="tooltip"
           data-bs-placement="bottom"
