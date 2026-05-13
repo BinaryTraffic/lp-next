@@ -13,7 +13,7 @@ require_once __DIR__ . '/lib/app_release.php';
 require_once __DIR__ . '/lib/LpWorkspace.php';
 require_once __DIR__ . '/lib/UserRegistry.php';
 
-define('APP_VERSION', '1.5.004');
+define('APP_VERSION', '1.5.005');
 define('APP_BUILD', lp_reverse_app_build_label(__DIR__));
 
 $outputWsPrefix = LpWorkspace::outputWebAbsPrefix();

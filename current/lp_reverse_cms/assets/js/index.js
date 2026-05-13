@@ -2087,6 +2087,7 @@
         if (!elemId) { failed++; continue; }
         const srcInp = form.querySelector(`[data-lp-id="${CSS.escape(elemId)}"][data-lp-field="src"]`);
         if (!(srcInp instanceof HTMLInputElement)) { failed++; continue; }
+
         // モーダルと同じURL構築: rollback_src → wsPrefix結合、なければ original-src
         let displayUrl = '';
         let filename = '';
@@ -2101,23 +2102,46 @@
           filename = origSrcAttr.split('/').pop().split('?')[0] || '';
         }
         if (!displayUrl) { failed++; continue; }
+
         try {
-          const img = await new Promise((resolve, reject) => {
-            const i = new Image();
-            i.crossOrigin = 'anonymous';
-            i.onload = () => resolve(i);
-            i.onerror = reject;
-            i.src = displayUrl;
-          });
-          const w = img.naturalWidth;
-          const h = img.naturalHeight;
+          // blendPlaceholder と同じ CORS ルーティング（外部URL → img_proxy）
+          let corsUrl = displayUrl;
+          if (/^https?:\/\//i.test(displayUrl)) {
+            try {
+              if (new URL(displayUrl).origin !== window.location.origin) {
+                corsUrl = 'store/img_proxy.php?url=' + encodeURIComponent(displayUrl);
+              }
+            } catch (_) {
+              corsUrl = 'store/img_proxy.php?url=' + encodeURIComponent(displayUrl);
+            }
+          }
+
+          // loadImgCors で1回だけロード（二重ロードによるキャッシュ競合を排除）
+          const origImg = await loadImgCors(corsUrl);
+          const w = origImg.naturalWidth;
+          const h = origImg.naturalHeight;
           if (w < 1 || h < 1) { failed++; continue; }
-          const dataUrl = await blendPlaceholder(w, h, displayUrl, alpha, filename);
+
+          // blendPlaceholder と同じ canvas 合成（ロード済み image を再利用）
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.globalAlpha = 1;
+          ctx.drawImage(origImg, 0, 0, w, h);
+          ctx.globalAlpha = alpha;
+          ctx.drawImage(drawLocalPlaceholder(w, h, filename), 0, 0, w, h);
+          ctx.globalAlpha = 1;
+          const dataUrl = canvas.toDataURL('image/png');
+
           srcInp.value = dataUrl;
           srcInp.dispatchEvent(new Event('input', { bubbles: true }));
           srcInp.dispatchEvent(new Event('change', { bubbles: true }));
           done++;
-        } catch (_) { failed++; }
+        } catch (err) {
+          console.warn('[batchBlend] failed:', elemId, displayUrl, err);
+          failed++;
+        }
       }
       if (batchBtn) batchBtn.disabled = false;
       showToast(
