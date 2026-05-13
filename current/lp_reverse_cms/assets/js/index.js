@@ -2477,7 +2477,7 @@
   async function loadDiagnostics(targetEl) {
     try {
       const ctrl = new AbortController();
-      const tm = setTimeout(() => ctrl.abort(), 10000);
+      const tm = setTimeout(() => ctrl.abort(), 30000);
       const res = await fetch('store/debug.php', {
         method: 'GET',
         credentials: 'same-origin',
@@ -2556,7 +2556,7 @@
     } catch (e) {
       if (targetEl) {
         const msg = e?.name === 'AbortError'
-          ? '診断取得がタイムアウトしました（10秒）。再読込後に再確認してください。'
+          ? '診断取得がタイムアウトしました（30秒）。再読込後に再確認してください。'
           : '診断取得に失敗しました（`store/debug.php` 応答エラー）。';
         targetEl.innerHTML = `<p class="text-danger small mb-0">${msg}</p>`;
       }

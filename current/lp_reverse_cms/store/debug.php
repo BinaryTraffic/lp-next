@@ -185,10 +185,18 @@ $sourceUrl = file_exists($dataDir . 'source_url.txt')
     : '';
 
 $fetchFailures = readJsonFile($dataDir . 'fetch_failures.json') ?? [];
-if ($fetchFailures !== [] && array_is_list($fetchFailures)) {
-    // ok — list of strings
-} elseif (is_array($fetchFailures)) {
-    $fetchFailures = array_values($fetchFailures);
+if (!is_array($fetchFailures)) {
+    $fetchFailures = [];
+}
+// fetch_failures.json は旧フォーマット（list<string>）と新フォーマット（list<{url,http_code,reason}>）両対応
+// LpAssetAudit 等に渡す URL のみのリストを別途作成
+$fetchFailureUrls = [];
+foreach ($fetchFailures as $f) {
+    if (is_string($f) && $f !== '') {
+        $fetchFailureUrls[] = $f;
+    } elseif (is_array($f) && isset($f['url']) && is_string($f['url']) && $f['url'] !== '') {
+        $fetchFailureUrls[] = $f['url'];
+    }
 }
 
 $htmlPath = file_exists($dataDir . 'fetched.html')
@@ -202,7 +210,7 @@ if ($sourceUrl && file_exists($htmlPath)) {
         $sourceUrl,
         $assetMap,
         $outputDir,
-        $fetchFailures
+        $fetchFailureUrls
     );
 }
 
@@ -248,7 +256,7 @@ $appBuild = lp_reverse_app_build_label($cmsRoot);
 $cssDiagnostics = LpOutputAudit::scanOutputCssForDiagnostics($outputDir);
 $heroBgProbe = buildHeroBackgroundProbe(
     $assetMap,
-    is_array($fetchFailures) ? $fetchFailures : [],
+    $fetchFailureUrls,
     $sourceHtmlText,
     $outputHtmlText,
     $outputDir
@@ -277,7 +285,7 @@ echo json_encode([
         'disk_fonts'  => $diskFonts['count'],
         'referenced_total' => count($audit['referenced']),
         'unfetched_total'  => count($audit['unfetched']),
-        'fetch_failure_count' => is_array($fetchFailures) ? count($fetchFailures) : 0,
+        'fetch_failure_count' => count($fetchFailureUrls),
     ],
 
     /** 参照元HTML＋ローカルCSS内 url() から収集した絶対URLのうち、asset_map に無いもの */
