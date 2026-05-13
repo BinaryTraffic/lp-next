@@ -7,6 +7,7 @@ body {
   font-family: 'Segoe UI', 'Helvetica Neue', Arial, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
   min-height: 100vh;
   color: #212529;
+  padding-top: var(--lp-nav-h, 56px);
 }
 
 /* Stepper — 処理済みステップ間のクリック遷移 */
@@ -233,18 +234,121 @@ body {
 }
 
 /* ================================================================
-   Step 2 — Explorer-style two-column layout
+   Step 2 — Action sidebar + Explorer layout
    ================================================================ */
 
+#step2Layout {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+/* ── Action sidebar: fixed overlay, not in layout flow ── */
+#step2ActionBar {
+  position: fixed;
+  left: 0;
+  top: var(--lp-nav-h, 56px);
+  height: calc(100vh - var(--lp-nav-h, 56px));
+  width: 52px;
+  z-index: 9990;
+  background: #1e2328;
+  border-right: 1px solid #3a3f45;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.2s ease;
+}
+#step2ActionBar.is-open {
+  width: 200px;
+}
+
+.step2-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #9aa3ad;
+  white-space: nowrap;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  min-width: 0;
+  min-height: 44px;
+}
+.step2-action-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,.07);
+  color: #f1f3f5;
+}
+.step2-action-btn:focus-visible {
+  outline: 2px solid #4dabf7;
+  outline-offset: -2px;
+}
+.step2-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.step2-action-icon {
+  flex-shrink: 0;
+  width: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.step2-action-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease, max-width 0.2s ease;
+  padding-right: 12px;
+}
+#step2ActionBar.is-open .step2-action-label {
+  opacity: 1;
+  max-width: 160px;
+}
+
+.step2-action-primary {
+  color: #6ea8fe;
+}
+.step2-action-primary:hover:not(:disabled) {
+  background: rgba(13,110,253,.22) !important;
+  color: #a5c8fe !important;
+}
+
+.step2-action-info {
+  color: #6edff6;
+}
+.step2-action-info:hover:not(:disabled) {
+  background: rgba(13,202,240,.15) !important;
+  color: #9eeaf9 !important;
+}
+
+.step2-action-sep {
+  height: 1px;
+  background: rgba(255,255,255,.1);
+  margin: 3px 10px;
+  flex-shrink: 0;
+}
+
+/* ── Explorer (page tree + edit form) ── */
 #step2Explorer {
+  flex: 1;
+  min-width: 0;
   display: flex;
   gap: 0;
   border: 1px solid #dee2e6;
   border-radius: 10px;
   overflow: hidden;
   background: #fff;
-  /* ツリーと詳細ペインがそれぞれ独立してスクロールできるよう固定高さを設定 */
-  height: calc(100vh - 220px);
+  height: calc(100vh - 155px);
   min-height: 400px;
 }
 
@@ -263,21 +367,23 @@ body {
 /* Fixed header in tree panel */
 #pageTreeHeader {
   flex-shrink: 0;
-  padding: 6px 10px;
-  font-size: 0.76rem;
+  padding: 7px 10px;
+  font-size: 0.83rem;
   font-weight: 600;
   color: #495057;
   background: #edf0f4;
   border-bottom: 1px solid #dee2e6;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
 }
 
 .lp-tree-header-url {
-  font-size: 0.68rem;
-  font-weight: normal;
-  color: #6c757d;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #495057;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;

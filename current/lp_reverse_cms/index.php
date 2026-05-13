@@ -348,7 +348,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
 <body class="bg-light">
 
 <!-- ===== NAVBAR ===== -->
-<nav class="navbar navbar-dark bg-primary shadow-sm">
+<nav class="navbar navbar-dark bg-primary shadow-sm fixed-top">
   <div class="container-fluid">
       <span class="navbar-brand fw-bold">
       <i class="bi bi-arrow-repeat me-2"></i>Site Reverse CMS
@@ -857,108 +857,81 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
        =========================== -->
   <div id="step2Panel" class="<?= $initialStep !== 2 ? 'd-none' : '' ?>">
 
-    <!-- Toolbar -->
-    <div class="d-flex align-items-center justify-content-between mb-3">
-      <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
-        data-bs-toggle="tooltip"
-        data-bs-placement="bottom"
-        data-bs-custom-class="lp-cms-tooltip"
-        title="<?= htmlspecialchars('Step1 に戻り、別の URL で HTML を取り直します（現在ワークスペースの取得データは置き換わります）。', ENT_QUOTES, 'UTF-8') ?>">
-        <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" id="btnBackToStep1">
-          <i class="bi bi-arrow-left"></i><span class="ms-1">別のURLを解析</span>
-          <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
+    <!-- Step 2: action sidebar (left) + explorer (right) -->
+    <div id="step2Layout">
+
+      <!-- Action sidebar: collapsed=icons only, hover/focus=expand with labels -->
+      <div id="step2ActionBar" aria-label="アクションメニュー">
+        <!-- ① 別のURLを解析 -->
+        <button type="button" class="step2-action-btn" id="btnBackToStep1" title="別のURLを解析">
+          <span class="step2-action-icon"><i class="bi bi-arrow-left"></i></span>
+          <span class="step2-action-label">別のURLを解析</span>
         </button>
-      </span>
-      <div class="d-flex gap-2 align-items-center flex-wrap">
-        <!-- メタデータ編集ボタン -->
-        <button type="button" class="btn btn-sm btn-outline-dark d-inline-flex align-items-center"
+        <div class="step2-action-sep"></div>
+        <!-- ② 保存＆サイト生成 -->
+        <button type="button" class="step2-action-btn step2-action-primary" id="btnSaveGenerate" title="保存＆サイト生成">
+          <span class="step2-action-icon"><i class="bi bi-lightning-charge-fill"></i></span>
+          <span class="step2-action-label">保存＆サイト生成</span>
+        </button>
+        <div class="step2-action-sep"></div>
+        <!-- ③ ページ情報 -->
+        <button type="button" class="step2-action-btn" title="ページ情報"
                 data-bs-toggle="modal" data-bs-target="#metaEditModal"
                 <?= !$hasStructure ? 'disabled' : '' ?>>
-          <i class="bi bi-info-circle me-1"></i>ページ情報
+          <span class="step2-action-icon"><i class="bi bi-info-circle"></i></span>
+          <span class="step2-action-label">ページ情報</span>
         </button>
-        <!-- AI テキスト生成ボタン -->
-        <button type="button" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
+        <!-- ④ AIテキスト生成 -->
+        <button type="button" class="step2-action-btn" title="AIテキスト生成"
                 data-bs-toggle="modal" data-bs-target="#aiGenerateModal"
                 <?= !$hasStructure ? 'disabled' : '' ?>>
-          <i class="bi bi-stars me-1"></i>AI テキスト生成
+          <span class="step2-action-icon"><i class="bi bi-stars"></i></span>
+          <span class="step2-action-label">AIテキスト生成</span>
         </button>
-        <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
-          data-bs-toggle="tooltip"
-          data-bs-placement="bottom"
-          data-bs-custom-class="lp-cms-tooltip"
-          title="<?= htmlspecialchars('画面上の入力欄を空にします。サーバー側の解析結果や保存済み client_data は自動では元に戻りません。', ENT_QUOTES, 'UTF-8') ?>">
-          <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" id="btnResetClient">
-            <i class="bi bi-arrow-counterclockwise"></i><span class="ms-1">リセット</span>
-            <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
-          </button>
-        </span>
-        <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
-          data-bs-toggle="tooltip"
-          data-bs-placement="bottom"
-          data-bs-custom-class="lp-cms-tooltip"
-          title="<?= htmlspecialchars(
-              '外部編集用。assets/img/… と、このクローンの sites/<clone>/custom_images/… を、ワークスペースと同じ相対パスで Deflate ZIP にまとめます。clone_images_manifest.json にファイル一覧が入ります。',
-              ENT_QUOTES,
-              'UTF-8',
-          ) ?>">
-          <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" id="btnCloneImagesZipDl"
-            <?= !$hasStructure ? 'disabled' : '' ?>>
-            <i class="bi bi-file-earmark-zip"></i><span class="ms-1">画像ZIP</span>
-            <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
-          </button>
-        </span>
-        <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
-          data-bs-toggle="tooltip"
-          data-bs-placement="bottom"
-          data-bs-custom-class="lp-cms-tooltip"
-          title="<?= htmlspecialchars(
-              '編集後の ZIP で上書き。エクスポートと同じフォルダ構成にするか、同名画像が1つだけのときは ZIP 直下のファイル名のみでも可。終わったら（必要なら）右の「保存＆サイト生成」で HTML に反映してください。',
-              ENT_QUOTES,
-              'UTF-8',
-          ) ?>">
-          <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" id="btnCloneImagesZipUpload"
-            <?= !$hasStructure ? 'disabled' : '' ?>>
-            <i class="bi bi-upload"></i><span class="ms-1">ZIP反映</span>
-            <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1" aria-hidden="true"></i>
-          </button>
-        </span>
-        <input type="file" id="cloneImagesZipUploadInp" accept=".zip,application/zip" class="d-none">
-        <button type="button" class="btn btn-sm btn-outline-info d-inline-flex align-items-center" id="btnBatchBlend"
-          title="編集フォーム内の全画像に「オリジナル＋画素数ブレンド」を一括適用します"
+        <!-- ⑤ リセット -->
+        <button type="button" class="step2-action-btn" id="btnResetClient" title="リセット">
+          <span class="step2-action-icon"><i class="bi bi-arrow-counterclockwise"></i></span>
+          <span class="step2-action-label">リセット</span>
+        </button>
+        <div class="step2-action-sep"></div>
+        <!-- ⑥ 画像ZIP -->
+        <button type="button" class="step2-action-btn" id="btnCloneImagesZipDl" title="画像ZIPダウンロード"
           <?= !$hasStructure ? 'disabled' : '' ?>>
-          <i class="bi bi-layers"></i><span class="ms-1">全画像ブレンド</span>
+          <span class="step2-action-icon"><i class="bi bi-file-earmark-zip"></i></span>
+          <span class="step2-action-label">画像ZIP</span>
         </button>
-        <span class="lp-reverse-tooltip-outline d-inline-block" tabindex="0" role="presentation"
-          data-bs-toggle="tooltip"
-          data-bs-placement="bottom"
-          data-bs-custom-class="lp-cms-tooltip"
-          title="<?= htmlspecialchars(
-              '入力を保存し output/index.html を生成。画像 ZIP を差し替えたあと、変更を HTML に反映する場合も実行してください。',
-              ENT_QUOTES,
-              'UTF-8',
-          ) ?>">
-          <button type="button" class="btn btn-primary px-4 d-inline-flex align-items-center" id="btnSaveGenerate">
-            <i class="bi bi-lightning-charge-fill"></i><span class="ms-1">保存＆サイト生成</span>
-            <i class="bi bi-info-circle-fill lp-cms-btn-icon ms-1 ps-1" aria-hidden="true"></i>
-          </button>
-        </span>
+        <!-- ⑦ ZIP反映 -->
+        <button type="button" class="step2-action-btn" id="btnCloneImagesZipUpload" title="ZIP反映"
+          <?= !$hasStructure ? 'disabled' : '' ?>>
+          <span class="step2-action-icon"><i class="bi bi-upload"></i></span>
+          <span class="step2-action-label">ZIP反映</span>
+        </button>
+        <input type="file" id="cloneImagesZipUploadInp" accept=".zip,application/zip" class="d-none">
+        <div class="step2-action-sep"></div>
+        <!-- ⑧ 全画像ブレンド -->
+        <button type="button" class="step2-action-btn step2-action-info" id="btnBatchBlend" title="全画像ブレンド"
+          <?= !$hasStructure ? 'disabled' : '' ?>>
+          <span class="step2-action-icon"><i class="bi bi-layers"></i></span>
+          <span class="step2-action-label">全画像ブレンド</span>
+        </button>
       </div>
-    </div>
 
-    <!-- Explorer-style two-column layout: tree (left) + editor (right) -->
-    <div id="step2Explorer">
+      <!-- Explorer: page tree + edit form -->
+      <div id="step2Explorer">
 
       <!-- Left: Page tree panel -->
       <div id="pageTreePanel">
         <!-- Fixed header -->
         <div id="pageTreeHeader">
-          <i class="bi bi-layers me-1"></i>ページ
           <?php if ($sourceUrl !== ''): ?>
             <a href="<?= htmlspecialchars($sourceUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank"
-               class="lp-tree-header-url">
-              <?= htmlspecialchars((string) (parse_url($sourceUrl, PHP_URL_HOST) ?: $sourceUrl), ENT_QUOTES, 'UTF-8') ?>
-              <i class="bi bi-box-arrow-up-right" style="font-size:.6rem"></i>
+               class="lp-tree-header-url d-inline-flex align-items-center gap-1">
+              <i class="bi bi-box-arrow-up-right"></i>オリジナルページを開く
             </a>
+          <?php else: ?>
+            <span class="text-muted d-inline-flex align-items-center gap-1">
+              <i class="bi bi-box-arrow-up-right"></i>オリジナルページを開く
+            </span>
           <?php endif; ?>
         </div>
         <!-- Scrollable tree body -->
@@ -990,7 +963,9 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
         </div>
       </div>
 
-    </div>
+      </div><!-- /#step2Explorer -->
+
+    </div><!-- /#step2Layout -->
 
     <!-- Save/generate status -->
     <div id="generateError"  class="alert alert-danger  d-none mt-3"></div>
@@ -1388,5 +1363,31 @@ window.LP_CMS = {
 
 <script src="assets/js/workspace_manage.js?v=<?= rawurlencode(lp_reverse_asset_cache_buster(__DIR__, 'assets/js/workspace_manage.js')) ?>"></script>
 <script src="assets/js/index.js?v=<?= rawurlencode(lp_reverse_asset_cache_buster(__DIR__, 'assets/js/index.js')) ?>"></script>
+<script>
+(function () {
+  // ナビバー高さを CSS カスタムプロパティに反映（リサイズ時も追従）
+  function setNavH() {
+    var nav = document.querySelector('nav.navbar');
+    var h = nav ? nav.offsetHeight : 56;
+    document.documentElement.style.setProperty('--lp-nav-h', h + 'px');
+  }
+  setNavH();
+  window.addEventListener('resize', setNavH, { passive: true });
+
+  var bar = document.getElementById('step2ActionBar');
+  if (!bar) return;
+  // 初期状態: Step 2 以外から始まる場合は非表示
+  var initStep = (window.LP_CMS && window.LP_CMS.initialStep) ? window.LP_CMS.initialStep : 1;
+  if (initStep !== 2) bar.style.display = 'none';
+  bar.addEventListener('mouseenter', function () { bar.classList.add('is-open'); });
+  bar.addEventListener('mouseleave', function () {
+    if (!bar.contains(document.activeElement)) bar.classList.remove('is-open');
+  });
+  bar.addEventListener('focusin', function () { bar.classList.add('is-open'); });
+  bar.addEventListener('focusout', function (e) {
+    if (!bar.contains(e.relatedTarget)) bar.classList.remove('is-open');
+  });
+})();
+</script>
 </body>
 </html>

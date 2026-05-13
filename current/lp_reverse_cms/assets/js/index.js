@@ -110,6 +110,17 @@
     Object.values(panels).forEach(p => p && p.classList.add('d-none'));
     panels[n] && panels[n].classList.remove('d-none');
 
+    // Show/hide fixed action sidebar with step 2
+    const actionBar = document.getElementById('step2ActionBar');
+    if (actionBar) {
+      if (n === 2) {
+        actionBar.style.display = 'flex';
+      } else {
+        actionBar.style.display = 'none';
+        actionBar.classList.remove('is-open');
+      }
+    }
+
     // Initialize tree when entering Step 2
     if (n === 2) {
       void initPageTree();

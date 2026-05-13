@@ -300,15 +300,14 @@ exit;
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(15,17,20,.55);
+      background: rgba(15,17,20,.45);
       z-index: 9000;
       align-items: center;
       justify-content: center;
       flex-direction: column;
       gap: 14px;
       color: #fff;
-      pointer-events: all;
-      cursor: wait;
+      pointer-events: none;
     }
     #navLoadingOverlay.is-visible { display: flex; }
     #navLoadingOverlay .nav-loading-label {
@@ -892,7 +891,7 @@ exit;
       const el = document.getElementById('navLoadingOverlay');
       if (el) el.classList.add('is-visible');
       if (navLoadingTimer) clearTimeout(navLoadingTimer);
-      navLoadingTimer = setTimeout(hideNavLoading, 15000); // 安全タイムアウト
+      navLoadingTimer = setTimeout(hideNavLoading, 5000); // 安全タイムアウト
     }
     function hideNavLoading() {
       const el = document.getElementById('navLoadingOverlay');
