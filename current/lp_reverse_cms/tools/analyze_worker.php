@@ -36,35 +36,40 @@ function ana_task_save(string $cmsRoot, string $taskId, array &$task): void
 
 /**
  * asset_map (URL→ローカルパス) を使い、全 elements / css_background_hints に
- * rollback_src (assets/rollback/filename) を付与する。
+ * rollback_src / rollback_w / rollback_h / rollback_mime / rollback_fetch_status を付与する。
  * 既に rollback_src が設定済みの要素はスキップ（再解析でも安全）。
  *
- * @param array<string,mixed> $structure
- * @param array<string,string> $assetMap
+ * @param array<string,mixed>                              $structure
+ * @param array<string,string>                             $assetMap
+ * @param array<string, array{w:int,h:int,mime:string}>    $imageMeta   URL → 画像メタ
+ * @param array<string, array{url:string,http_code:int,reason:string}> $failedMap URL → 失敗詳細
  * @return array<string,mixed>
  */
-function lp_reverse_resolve_rollback_src(array $structure, array $assetMap): array
-{
+function lp_reverse_resolve_rollback_src(
+    array $structure,
+    array $assetMap,
+    array $imageMeta = [],
+    array $failedMap = []
+): array {
     /**
-     * URL から rollback_src を求める（見つからなければ null）。
-     *
-     * @param string $src
-     * @return string|null
+     * URL から rollback_src とメタ情報を求める。
+     * @return array{rb:string|null, meta:array{w:int,h:int,mime:string}|null, failed:array{http_code:int,reason:string}|null}
      */
-    $resolve = static function (string $src) use ($assetMap): ?string {
+    $resolve = static function (string $src) use ($assetMap, $imageMeta, $failedMap): array {
         if ($src === '') {
-            return null;
+            return ['rb' => null, 'meta' => null, 'failed' => null];
         }
-        // 1. 完全一致
+
+        // asset_map 解決: 完全一致 → http/https 変換 → basename 一致
         $local = $assetMap[$src] ?? null;
-        // 2. http/https の相互変換
         if ($local === null) {
-            $alt = str_starts_with($src, 'https://') ? 'http://' . substr($src, 8) : (str_starts_with($src, 'http://') ? 'https://' . substr($src, 7) : '');
+            $alt = str_starts_with($src, 'https://')
+                ? 'http://' . substr($src, 8)
+                : (str_starts_with($src, 'http://') ? 'https://' . substr($src, 7) : '');
             if ($alt !== '') {
                 $local = $assetMap[$alt] ?? null;
             }
         }
-        // 3. ファイル名部分一致（basename）
         if ($local === null) {
             $bn = basename((string) parse_url($src, PHP_URL_PATH));
             if ($bn !== '') {
@@ -76,44 +81,100 @@ function lp_reverse_resolve_rollback_src(array $structure, array $assetMap): arr
                 }
             }
         }
+
         if ($local === null) {
-            return null;
+            // ダウンロード失敗情報を探す（完全一致 or http/https 変換）
+            $fd = $failedMap[$src] ?? null;
+            if ($fd === null) {
+                $alt2 = str_starts_with($src, 'https://')
+                    ? 'http://' . substr($src, 8)
+                    : (str_starts_with($src, 'http://') ? 'https://' . substr($src, 7) : '');
+                if ($alt2 !== '') {
+                    $fd = $failedMap[$alt2] ?? null;
+                }
+            }
+            $failed = $fd !== null
+                ? ['http_code' => (int) $fd['http_code'], 'reason' => (string) $fd['reason']]
+                : null;
+            return ['rb' => null, 'meta' => null, 'failed' => $failed];
         }
+
         // assets/img/filename.jpg → assets/rollback/filename.jpg
-        $filename = basename($local);
-        return 'assets/rollback/' . $filename;
+        $rb = 'assets/rollback/' . basename($local);
+
+        // imageMeta: URL → {w,h,mime}（キー正規化: http/https 両試行）
+        $meta = $imageMeta[$src] ?? null;
+        if ($meta === null) {
+            $alt3 = str_starts_with($src, 'https://')
+                ? 'http://' . substr($src, 8)
+                : (str_starts_with($src, 'http://') ? 'https://' . substr($src, 7) : '');
+            if ($alt3 !== '') {
+                $meta = $imageMeta[$alt3] ?? null;
+            }
+        }
+
+        return ['rb' => $rb, 'meta' => $meta, 'failed' => null];
     };
 
-    $processElements = static function (array &$elements) use ($resolve): void {
+    $applyToElement = static function (array &$el) use ($resolve): void {
+        if (isset($el['rollback_src'])) {
+            return; // 既存ワークスペース対応：上書きしない
+        }
+        $src = (string) ($el['original_src'] ?? '');
+        if ($src === '') {
+            return;
+        }
+        ['rb' => $rb, 'meta' => $meta, 'failed' => $fd] = $resolve($src);
+        if ($rb !== null) {
+            $el['rollback_src']          = $rb;
+            $el['rollback_fetch_status'] = 200;
+            if ($meta !== null) {
+                $el['rollback_w']    = $meta['w'];
+                $el['rollback_h']    = $meta['h'];
+                $el['rollback_mime'] = $meta['mime'];
+            }
+        } elseif ($fd !== null) {
+            $el['rollback_src']          = null;
+            $el['rollback_fetch_status'] = $fd['http_code'];
+            $el['rollback_fetch_reason'] = $fd['reason'];
+        }
+    };
+
+    $applyToHint = static function (array &$hint) use ($resolve): void {
+        if (isset($hint['rollback_src'])) {
+            return;
+        }
+        $src = (string) ($hint['url'] ?? '');
+        if ($src === '') {
+            return;
+        }
+        ['rb' => $rb, 'meta' => $meta, 'failed' => $fd] = $resolve($src);
+        if ($rb !== null) {
+            $hint['rollback_src']          = $rb;
+            $hint['rollback_fetch_status'] = 200;
+            if ($meta !== null) {
+                $hint['rollback_w']    = $meta['w'];
+                $hint['rollback_h']    = $meta['h'];
+                $hint['rollback_mime'] = $meta['mime'];
+            }
+        } elseif ($fd !== null) {
+            $hint['rollback_src']          = null;
+            $hint['rollback_fetch_status'] = $fd['http_code'];
+            $hint['rollback_fetch_reason'] = $fd['reason'];
+        }
+    };
+
+    // --- 後方互換ラッパー（旧シグネチャで使われている箇所向け） ---
+    $processElements = static function (array &$elements) use ($applyToElement): void {
         foreach ($elements as &$el) {
-            if (isset($el['rollback_src'])) {
-                continue; // 既存ワークスペース対応：上書きしない
-            }
-            $src = (string) ($el['original_src'] ?? '');
-            if ($src === '') {
-                continue;
-            }
-            $rb = $resolve($src);
-            if ($rb !== null) {
-                $el['rollback_src'] = $rb;
-            }
+            $applyToElement($el);
         }
         unset($el);
     };
 
-    $processHints = static function (array &$hints) use ($resolve): void {
+    $processHints = static function (array &$hints) use ($applyToHint): void {
         foreach ($hints as &$hint) {
-            if (isset($hint['rollback_src'])) {
-                continue;
-            }
-            $url = (string) ($hint['url'] ?? '');
-            if ($url === '') {
-                continue;
-            }
-            $rb = $resolve($url);
-            if ($rb !== null) {
-                $hint['rollback_src'] = $rb;
-            }
+            $applyToHint($hint);
         }
         unset($hint);
     };
@@ -287,14 +348,16 @@ try {
     $anaLog('asset download start');
     $downloader = new LpAssetDownloader($outputDir);
     $assetMap = $downloader->downloadAll($html, $finalUrl);
-    $anaLog('asset download done count=' . count($assetMap));
+    $imageMeta = $downloader->getImageMetaMap();
+    $failedDetails = $downloader->getFailedFetchDetails();
+    $anaLog('asset download done count=' . count($assetMap) . ' meta=' . count($imageMeta) . ' failed=' . count($failedDetails));
     ana_storage_put(
         $dataDir . 'asset_map.json',
         (string) json_encode($assetMap, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
     );
     ana_storage_put(
         $dataDir . 'fetch_failures.json',
-        (string) json_encode($downloader->getFailedFetches(), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+        (string) json_encode($failedDetails, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
     );
 
     $task['phase'] = 'analyze_entry';
@@ -520,8 +583,14 @@ try {
         $dataDir . 'industry_suggest.json',
         (string) json_encode($industrySuggest, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
     );
-    // rollback_src を解決: asset_map の URL→ローカルパス を使い、assets/rollback/xxx に変換
-    $structure = lp_reverse_resolve_rollback_src($structure, $assetMap);
+    // rollback_src / rollback_w / rollback_h / rollback_mime / rollback_fetch_status を解決
+    $failedMapIndexed = [];
+    foreach ($failedDetails as $fd) {
+        if (isset($fd['url'])) {
+            $failedMapIndexed[$fd['url']] = $fd;
+        }
+    }
+    $structure = lp_reverse_resolve_rollback_src($structure, $assetMap, $imageMeta, $failedMapIndexed);
 
     ana_storage_put(
         $structurePath,

@@ -31,8 +31,17 @@ class LpAssetDownloader
     /** type/filename => absUrl — collision registry */
     private array $fileRegistry = [];
 
-    /** Absolute URLs that returned HTTP error or empty body */
+    /**
+     * Absolute URLs that could not be fetched.
+     * @var array<string, array{url:string, http_code:int, reason:string}>
+     */
     private array $failedFetches = [];
+
+    /**
+     * Image metadata collected at download time.
+     * @var array<string, array{w:int, h:int, mime:string}>
+     */
+    private array $imageMeta = [];
 
     private LpUrlContext $urlCtx;
     private int $maxNewDownloads = 0;
@@ -319,7 +328,7 @@ class LpAssetDownloader
             ? $fetchKey
             : $absUrl;
 
-        $content           = $this->curlGet($curlUrl);
+        [$content, $httpCode, $curlReason] = $this->curlGet($curlUrl);
         $effectiveFetchUrl = $curlUrl;
 
         if ($content === null) {
@@ -327,9 +336,9 @@ class LpAssetDownloader
             if ($stripApp !== null && $stripApp !== $curlUrl) {
                 $stripCanon = LpUrlContext::canonicalHttpUrlForFetch($stripApp);
                 if ($stripCanon !== $curlUrl) {
-                    $retry = $this->curlGet($stripCanon);
-                    if ($retry !== null) {
-                        $content           = $retry;
+                    [$retryBody, $httpCode, $curlReason] = $this->curlGet($stripCanon);
+                    if ($retryBody !== null) {
+                        $content           = $retryBody;
                         $effectiveFetchUrl = $stripCanon;
                     }
                 }
@@ -337,7 +346,8 @@ class LpAssetDownloader
         }
 
         if ($content === null) {
-            $this->failedFetches[$curlUrl] = $curlUrl;
+            $reason = $httpCode > 0 ? 'HTTP ' . $httpCode : $curlReason;
+            $this->failedFetches[$curlUrl] = ['url' => $curlUrl, 'http_code' => $httpCode, 'reason' => $reason];
             return null;
         }
 
@@ -355,6 +365,17 @@ class LpAssetDownloader
             $rbPath = $this->outputDir . '/assets/rollback/' . $filename;
             if (!file_exists($rbPath)) {
                 copy($savePath, $rbPath);
+            }
+            // 画像メタ情報をダウンロード時点で収集（w/h/mime）
+            if (!isset($this->imageMeta[$absUrl])) {
+                $info = @getimagesize($savePath);
+                if (is_array($info) && isset($info[0], $info[1], $info['mime'])) {
+                    $this->imageMeta[$absUrl] = [
+                        'w'    => (int) $info[0],
+                        'h'    => (int) $info[1],
+                        'mime' => (string) $info['mime'],
+                    ];
+                }
             }
         }
 
@@ -589,11 +610,30 @@ class LpAssetDownloader
     // -----------------------------------------------------------------------
 
     /**
+     * 後方互換: 失敗 URL の配列を返す（既存呼び出し元向け）
      * @return list<string>
      */
     public function getFailedFetches(): array
     {
+        return array_values(array_column($this->failedFetches, 'url'));
+    }
+
+    /**
+     * 失敗情報を詳細付きで返す。
+     * @return list<array{url:string, http_code:int, reason:string}>
+     */
+    public function getFailedFetchDetails(): array
+    {
         return array_values($this->failedFetches);
+    }
+
+    /**
+     * ダウンロード時に収集した画像メタ情報を返す。
+     * @return array<string, array{w:int, h:int, mime:string}>  key = 絶対 URL
+     */
+    public function getImageMetaMap(): array
+    {
+        return $this->imageMeta;
     }
 
     public function getNewDownloadCount(): int
@@ -692,7 +732,10 @@ class LpAssetDownloader
     // HTTP
     // -----------------------------------------------------------------------
 
-    private function curlGet(string $url): ?string
+    /**
+     * @return array{0: string|null, 1: int, 2: string}  [body|null, http_code, curl_error]
+     */
+    private function curlGet(string $url): array
     {
         $ch = curl_init();
         curl_setopt_array($ch, [
@@ -713,15 +756,16 @@ class LpAssetDownloader
             ],
         ]);
 
-        $body = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $body      = curl_exec($ch);
+        $code      = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
 
         if ($body === false || $code >= 400) {
-            return null;
+            return [null, $code, $curlError];
         }
 
-        return $body;
+        return [(string) $body, $code, ''];
     }
 
     private function isDownloadBudgetExceeded(): bool
