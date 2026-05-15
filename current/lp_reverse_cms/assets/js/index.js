@@ -1618,7 +1618,15 @@
     const phBlendInput = document.getElementById('phBlendOpacityInput');
     const phBlendStatus = document.getElementById('phBlendStatus');
 
-    const PH_BLEND_KEY = 'lp_ph_blend_opacity';
+    const PH_BLEND_KEY     = 'lp_ph_blend_opacity';
+    const PH_LAST_SIZE_KEY = 'lp_ph_last_size';
+
+    function saveLastPhSize(w, h) {
+      try { localStorage.setItem(PH_LAST_SIZE_KEY, JSON.stringify({ w, h })); } catch {}
+    }
+    function loadLastPhSize() {
+      try { return JSON.parse(localStorage.getItem(PH_LAST_SIZE_KEY) || '{}'); } catch { return {}; }
+    }
     const PH_PRESETS = [
       [100, 100], [150, 150], [200, 200], [300, 300],
       [200, 150], [300, 200], [400, 300], [600, 400],
@@ -1849,12 +1857,13 @@
     }
 
     async function selectPlaceholder(w, h) {
-      // 右ペインに実画像がある場合は確認
+      // 右ペインにユーザーがアップロードした実画像がある場合のみ確認
       if (selectedPath && !rightIsPlaceholder) {
         if (!confirm('現在選択中の画像をモックアップに置き換えますか？')) return;
       }
       lastPhW = w;
       lastPhH = h;
+      saveLastPhSize(w, h);
       if (phBlendStatus) phBlendStatus.classList.remove('d-none');
       try {
         const alpha = getPhBlendOpacity();
@@ -1989,6 +1998,16 @@
       lastPhW = 0;
       lastPhH = 0;
       rightIsPlaceholder = false;
+      // currentOverride が data: URL（プレースホルダー合成済み）の場合、フラグとサイズを復元
+      const overrideIsDataUrl = /^data:image\//i.test(currentOverride);
+      if (overrideIsDataUrl) {
+        rightIsPlaceholder = true;
+        const saved = loadLastPhSize();
+        if ((saved.w | 0) > 0 && (saved.h | 0) > 0) {
+          lastPhW = saved.w;
+          lastPhH = saved.h;
+        }
+      }
       renderPlaceholderSection(0, 0);
       if (leftImg) {
         if (leftSrc) {
@@ -2022,7 +2041,7 @@
       }
       // 右ペイン：既存の置き換え画像があれば初期表示（ユーザーが再確認できる）
       if (currentOverride) {
-        setRightSelection(currentOverride);
+        setRightSelection(currentOverride, overrideIsDataUrl);
       } else {
         resetRight();
       }
