@@ -2193,6 +2193,118 @@
   }
 
   // -----------------------------------------------------------------------
+  // エラーログモーダル
+  // -----------------------------------------------------------------------
+  (function () {
+    const modalEl = document.getElementById('errorLogModal');
+    if (!modalEl) return;
+
+    const tbody      = document.getElementById('errorLogTableBody');
+    const statusEl   = document.getElementById('errorLogStatus');
+    const copyBtn    = document.getElementById('errorLogCopyBtn');
+    const refreshBtn = document.getElementById('errorLogRefresh');
+    const modal      = new bootstrap.Modal(modalEl);
+
+    let allEvents = [];
+
+    function fmtTs(ts) {
+      if (!ts) return '—';
+      try { return new Date(ts).toLocaleString('ja-JP', { hour12: false }); } catch { return ts; }
+    }
+
+    function kindOf(ev) {
+      if ((ev.operation || '') === 'image_load_retry') return 'retry';
+      if (!ev.ok) return 'error';
+      return 'other';
+    }
+
+    function renderRows(events) {
+      if (!tbody) return;
+      if (!events.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">該当するログがありません</td></tr>';
+        return;
+      }
+      tbody.innerHTML = events.map(ev => {
+        const kind = kindOf(ev);
+        const rowCls = kind === 'retry'
+          ? (ev.ok || (ev.meta && ev.meta.recovered) ? 'table-warning' : 'table-danger')
+          : (!ev.ok ? 'table-danger' : '');
+        const badge = kind === 'retry'
+          ? `<span class="badge bg-warning text-dark">リトライ</span>`
+          : `<span class="badge bg-danger">エラー</span>`;
+        const meta = ev.meta || {};
+        let detail = ev.operation || '';
+        if (meta.src)          detail += `<br><span class="text-muted font-monospace" style="word-break:break-all">${escHtml(meta.src)}</span>`;
+        if (meta.error_message) detail += `<br><span class="text-danger">${escHtml(meta.error_message)}</span>`;
+        if (meta.retry != null) detail += `<br>試行: ${meta.retry}回`;
+        const result = kind === 'retry'
+          ? (meta.recovered ? '<span class="text-success">回復</span>' : '<span class="text-danger">失敗</span>')
+          : `<span class="text-danger">HTTP ${ev.http_code || '—'}</span>`;
+        return `<tr class="${rowCls}"><td style="white-space:nowrap">${escHtml(fmtTs(ev.ts))}</td><td>${badge}</td><td>${detail}</td><td>${result}</td></tr>`;
+      }).join('');
+    }
+
+    function escHtml(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function applyFilter() {
+      const v = document.querySelector('input[name="errFilter"]:checked')?.value || 'all';
+      const filtered = allEvents.filter(ev => {
+        if (v === 'all')   return true;
+        if (v === 'retry') return (ev.operation || '') === 'image_load_retry';
+        if (v === 'error') return !ev.ok;
+        return true;
+      });
+      renderRows(filtered);
+    }
+
+    async function loadLog() {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">読み込み中…</td></tr>';
+      if (statusEl) statusEl.textContent = '';
+      try {
+        const res  = await fetch('store/api_error_log.php');
+        const data = await res.json().catch(() => ({}));
+        allEvents  = Array.isArray(data.events) ? data.events : [];
+        if (statusEl) statusEl.textContent = `${allEvents.length} 件（新しい順）`;
+        applyFilter();
+      } catch (e) {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="4" class="text-danger py-3">${String(e)}</td></tr>`;
+      }
+    }
+
+    document.getElementById('openErrorLogModal')?.addEventListener('click', () => {
+      modal.show();
+      void loadLog();
+    });
+
+    refreshBtn?.addEventListener('click', () => void loadLog());
+
+    modalEl.querySelectorAll('input[name="errFilter"]').forEach(r => r.addEventListener('change', applyFilter));
+
+    copyBtn?.addEventListener('click', () => {
+      const lines = allEvents.map(ev => {
+        const meta = ev.meta || {};
+        return [
+          fmtTs(ev.ts),
+          ev.operation || '',
+          ev.ok ? 'OK' : 'NG',
+          `HTTP:${ev.http_code || 0}`,
+          meta.src || '',
+          meta.error_message || '',
+          meta.retry != null ? `retry:${meta.retry}` : '',
+          meta.recovered != null ? `recovered:${meta.recovered}` : '',
+        ].filter(Boolean).join('\t');
+      });
+      navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        showToast('ログをコピーしました', 'success');
+      }).catch(() => {
+        showToast('コピーに失敗しました', 'warning');
+      });
+    });
+  }());
+
+  // -----------------------------------------------------------------------
   // Reset client data
   // -----------------------------------------------------------------------
   function resetClientData() {
