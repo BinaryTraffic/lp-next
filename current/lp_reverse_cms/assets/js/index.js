@@ -1679,6 +1679,11 @@
      */
     function wireImgDimsReporting(imgEl, dimsEl, absUrl) {
       if (!dimsEl || !imgEl) return;
+      // 前回のリトライタイマーをキャンセル（サイズ変更を連続して行うと古いURLで上書きされるバグの修正）
+      if (imgEl._wireRetryTimer != null) {
+        clearTimeout(imgEl._wireRetryTimer);
+        imgEl._wireRetryTimer = null;
+      }
       const u = (absUrl || '').trim();
       imgEl.onload = null;
       imgEl.onerror = null;
@@ -1694,7 +1699,10 @@
         if (retries < 2) {
           retries++;
           const sep = u.includes('?') ? '&' : '?';
-          setTimeout(() => { imgEl.src = u + sep + '_r=' + retries; }, 1500);
+          imgEl._wireRetryTimer = setTimeout(() => {
+            imgEl._wireRetryTimer = null;
+            imgEl.src = u + sep + '_r=' + retries;
+          }, 1500);
         } else {
           dimsEl.textContent = 'サイズ：読み込みに失敗しました';
         }
@@ -2072,6 +2080,24 @@
       resetRight();
       wireImgDimsReporting(leftImg, dimsLeftEl, '');
       renderPlaceholderSection(0, 0);
+    });
+
+    // -----------------------------------------------------------------------
+    // 画像毎ロールバックボタン（.lp-rollback-image）
+    // -----------------------------------------------------------------------
+    document.getElementById('clientDataForm')?.addEventListener('click', ev => {
+      const btn = ev.target?.closest?.('.lp-rollback-image');
+      if (!btn) return;
+      const elemId = (btn.dataset.lpId || '').trim();
+      if (!elemId) return;
+      const form = document.getElementById('clientDataForm');
+      const srcInp = form?.querySelector(`[data-lp-id="${elemId}"][data-lp-field="src"]`);
+      if (!(srcInp instanceof HTMLInputElement)) return;
+      srcInp.value = '';
+      srcInp.dispatchEvent(new Event('input', { bubbles: true }));
+      srcInp.dispatchEvent(new Event('change', { bubbles: true }));
+      btn.closest('.lp-rollback-wrap')?.classList.add('d-none');
+      showToast('画像をロールバックしました', 'success');
     });
 
     // -----------------------------------------------------------------------

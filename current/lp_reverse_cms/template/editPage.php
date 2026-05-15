@@ -155,6 +155,14 @@ $rollbackPreviewUrl = static function (string $rollbackSrc) use ($outputWsPrefix
                         <i class="bi bi-images"></i>
                       </button>
                     </div>
+                    <div class="lp-rollback-wrap mt-1<?= $currentBgSrc !== '' ? '' : ' d-none' ?>">
+                      <button type="button"
+                              class="btn btn-sm btn-outline-warning lp-rollback-image"
+                              data-lp-id="<?= $bgElemIdAttr ?>"
+                              title="置き換えをロールバック（オリジナルに戻す）">
+                        <i class="bi bi-arrow-counterclockwise"></i> ロールバック
+                      </button>
+                    </div>
                     <p class="mb-0 text-muted" style="font-size:.72em">生成時に <code><?= htmlspecialchars($tok, ENT_QUOTES, 'UTF-8') ?></code> の background-image を上書きします</p>
                   </div>
                 </div>
@@ -241,6 +249,14 @@ $rollbackPreviewUrl = static function (string $rollbackSrc) use ($outputWsPrefix
                                 data-lp-original-src="<?= htmlspecialchars($leftPaneSrc, ENT_QUOTES) ?>"
                                 title="モーダルで差し替え">
                           <i class="bi bi-images"></i>
+                        </button>
+                      </div>
+                      <div class="lp-rollback-wrap mb-2<?= $currentSrc !== '' ? '' : ' d-none' ?>">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-warning lp-rollback-image"
+                                data-lp-id="<?= $elemId ?>"
+                                title="置き換えをロールバック（オリジナルに戻す）">
+                          <i class="bi bi-arrow-counterclockwise"></i> ロールバック
                         </button>
                       </div>
                       <?php if ($elemType === 'image'): ?>
