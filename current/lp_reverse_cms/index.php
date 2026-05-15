@@ -15,6 +15,7 @@ require_once __DIR__ . '/lib/UserRegistry.php';
 
 define('APP_VERSION', '1.5.006');
 define('APP_BUILD', lp_reverse_app_build_label(__DIR__));
+$appGitHash = lp_reverse_git_short_hash(__DIR__);
 
 $outputWsPrefix = LpWorkspace::outputWebAbsPrefix();
 $workspaceName  = '';
@@ -354,7 +355,7 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
       <i class="bi bi-arrow-repeat me-2"></i>Site Reverse CMS
       <span class="badge bg-white text-primary ms-2 fw-normal" style="font-size:.65rem;vertical-align:middle"
             title="バージョン / ビルド（Git 短ハッシュまたはソース更新日）">
-        v<?= htmlspecialchars(APP_VERSION, ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(APP_BUILD, ENT_QUOTES, 'UTF-8') ?>
+        v<?= htmlspecialchars(APP_VERSION, ENT_QUOTES, 'UTF-8') ?> · <?= htmlspecialchars(APP_BUILD, ENT_QUOTES, 'UTF-8') ?><?= $appGitHash !== null ? ' #' . htmlspecialchars($appGitHash, ENT_QUOTES, 'UTF-8') : '' ?>
       </span>
     </span>
     <div class="d-flex align-items-center gap-2">
@@ -402,6 +403,12 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
             <a class="dropdown-item" href="image_checklist.php" target="_blank" rel="noopener">
               <i class="bi bi-list-check me-2"></i>画像作業指示書
             </a>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <button type="button" class="dropdown-item" id="openErrorLogModal">
+              <i class="bi bi-exclamation-triangle me-2"></i>エラーログ
+            </button>
           </li>
           <li><hr class="dropdown-divider"></li>
           <?php if ($authManageUsers): ?>
@@ -590,6 +597,57 @@ $maxReachableStep = $hasOutput ? 3 : ($hasStructure ? 2 : 1);
                   style="white-space:pre;overflow-wrap:normal;overflow-x:auto"></textarea>
       </div>
       <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- エラーログモーダル -->
+<div class="modal fade" id="errorLogModal" tabindex="-1" aria-labelledby="errorLogModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title fs-6" id="errorLogModalLabel">
+          <i class="bi bi-exclamation-triangle me-1 text-warning"></i>エラー・リトライログ
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body py-2">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <div class="btn-group btn-group-sm" role="group" id="errorLogFilter">
+            <input type="radio" class="btn-check" name="errFilter" id="errFilterAll"    value="all"   autocomplete="off" checked>
+            <label class="btn btn-outline-secondary" for="errFilterAll">すべて</label>
+            <input type="radio" class="btn-check" name="errFilter" id="errFilterRetry"  value="retry" autocomplete="off">
+            <label class="btn btn-outline-warning"   for="errFilterRetry">リトライ</label>
+            <input type="radio" class="btn-check" name="errFilter" id="errFilterError"  value="error" autocomplete="off">
+            <label class="btn btn-outline-danger"    for="errFilterError">エラーのみ</label>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" id="errorLogRefresh">
+            <i class="bi bi-arrow-clockwise"></i> 更新
+          </button>
+        </div>
+        <div id="errorLogStatus" class="small text-muted mb-2"></div>
+        <div class="table-responsive" style="max-height:420px;overflow-y:auto;">
+          <table class="table table-sm table-hover align-middle mb-0" style="font-size:.8em;">
+            <thead class="table-light sticky-top">
+              <tr>
+                <th style="white-space:nowrap;width:130px">日時</th>
+                <th style="white-space:nowrap;width:90px">種別</th>
+                <th>詳細</th>
+                <th style="white-space:nowrap;width:70px">結果</th>
+              </tr>
+            </thead>
+            <tbody id="errorLogTableBody">
+              <tr><td colspan="4" class="text-center text-muted py-3">読み込み中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-outline-primary" id="errorLogCopyBtn">
+          <i class="bi bi-clipboard"></i> クリップボードにコピー
+        </button>
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">閉じる</button>
       </div>
     </div>

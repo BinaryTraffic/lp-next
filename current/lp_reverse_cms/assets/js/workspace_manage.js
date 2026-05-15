@@ -418,9 +418,12 @@ function lpInitWorkspaceManage(storeBase) {
         tbody.appendChild(tr);
         tbody.appendChild(detailTr);
       });
-    } catch {
+    } catch (err) {
       clearTimeout(timeoutId);
-      if (helpEl) helpEl.textContent = '一覧の取得に失敗しました。';
+      const isTimeout = err instanceof Error && err.name === 'AbortError';
+      if (helpEl) helpEl.textContent = isTimeout
+        ? '一覧の取得がタイムアウトしました（30秒）。再読込ボタンで再試行してください。'
+        : '一覧の取得に失敗しました。';
     } finally {
       listLoading = false;
     }
@@ -509,13 +512,14 @@ function lpInitWorkspaceManage(storeBase) {
   const detailsEl = document.getElementById('workspaceManageDetails');
   const modalEl = document.getElementById('workspaceModal');
   if (collapseEl && typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
-    collapseEl.addEventListener('shown.bs.collapse', () => { void loadList(); });
+    collapseEl.addEventListener('shown.bs.collapse', () => { listLoading = false; void loadList(); });
   }
   if (modalEl) {
-    modalEl.addEventListener('show.bs.modal', () => { void loadList(); });
+    // モーダルを開くたびに強制再取得（前回フェッチが中断・タイムアウトしていても確実に表示する）
+    modalEl.addEventListener('show.bs.modal', () => { listLoading = false; void loadList(); });
   }
   if (detailsEl) {
-    detailsEl.addEventListener('toggle', () => { if (detailsEl.open) void loadList(); });
+    detailsEl.addEventListener('toggle', () => { if (detailsEl.open) { listLoading = false; void loadList(); } });
   }
 
   if (btnRef) btnRef.addEventListener('click', () => { void loadList(); });

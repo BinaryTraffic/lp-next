@@ -1618,7 +1618,15 @@
     const phBlendInput = document.getElementById('phBlendOpacityInput');
     const phBlendStatus = document.getElementById('phBlendStatus');
 
-    const PH_BLEND_KEY = 'lp_ph_blend_opacity';
+    const PH_BLEND_KEY     = 'lp_ph_blend_opacity';
+    const PH_LAST_SIZE_KEY = 'lp_ph_last_size';
+
+    function saveLastPhSize(w, h) {
+      try { localStorage.setItem(PH_LAST_SIZE_KEY, JSON.stringify({ w, h })); } catch {}
+    }
+    function loadLastPhSize() {
+      try { return JSON.parse(localStorage.getItem(PH_LAST_SIZE_KEY) || '{}'); } catch { return {}; }
+    }
     const PH_PRESETS = [
       [100, 100], [150, 150], [200, 200], [300, 300],
       [200, 150], [300, 200], [400, 300], [600, 400],
@@ -1637,6 +1645,12 @@
     // 入力欄を localStorage の値で初期化し、変更時に保存
     if (phBlendInput) {
       phBlendInput.value = String(Math.round(getPhBlendOpacity() * 100));
+      // input: キー操作中も即座に localStorage を更新（↑↓キーやタイピング中に別操作しても正しい濃度が使われる）
+      phBlendInput.addEventListener('input', () => {
+        const v = Math.max(0, Math.min(100, parseInt(phBlendInput.value || '70', 10)));
+        savePhBlendOpacity(v / 100);
+      });
+      // change: フォーカスを離したタイミングで値を正規化し、プレースホルダーを再合成
       phBlendInput.addEventListener('change', () => {
         const v = Math.max(0, Math.min(100, parseInt(phBlendInput.value || '70', 10)));
         phBlendInput.value = String(v);
@@ -1679,6 +1693,11 @@
      */
     function wireImgDimsReporting(imgEl, dimsEl, absUrl) {
       if (!dimsEl || !imgEl) return;
+      // 前回のリトライタイマーをキャンセル（サイズ変更を連続して行うと古いURLで上書きされるバグの修正）
+      if (imgEl._wireRetryTimer != null) {
+        clearTimeout(imgEl._wireRetryTimer);
+        imgEl._wireRetryTimer = null;
+      }
       const u = (absUrl || '').trim();
       imgEl.onload = null;
       imgEl.onerror = null;
@@ -1694,7 +1713,10 @@
         if (retries < 2) {
           retries++;
           const sep = u.includes('?') ? '&' : '?';
-          setTimeout(() => { imgEl.src = u + sep + '_r=' + retries; }, 1500);
+          imgEl._wireRetryTimer = setTimeout(() => {
+            imgEl._wireRetryTimer = null;
+            imgEl.src = u + sep + '_r=' + retries;
+          }, 1500);
         } else {
           dimsEl.textContent = 'サイズ：読み込みに失敗しました';
         }
@@ -1841,12 +1863,13 @@
     }
 
     async function selectPlaceholder(w, h) {
-      // 右ペインに実画像がある場合は確認
+      // 右ペインにユーザーがアップロードした実画像がある場合のみ確認
       if (selectedPath && !rightIsPlaceholder) {
         if (!confirm('現在選択中の画像をモックアップに置き換えますか？')) return;
       }
       lastPhW = w;
       lastPhH = h;
+      saveLastPhSize(w, h);
       if (phBlendStatus) phBlendStatus.classList.remove('d-none');
       try {
         const alpha = getPhBlendOpacity();
@@ -1981,6 +2004,16 @@
       lastPhW = 0;
       lastPhH = 0;
       rightIsPlaceholder = false;
+      // currentOverride が data: URL（プレースホルダー合成済み）の場合、フラグとサイズを復元
+      const overrideIsDataUrl = /^data:image\//i.test(currentOverride);
+      if (overrideIsDataUrl) {
+        rightIsPlaceholder = true;
+        const saved = loadLastPhSize();
+        if ((saved.w | 0) > 0 && (saved.h | 0) > 0) {
+          lastPhW = saved.w;
+          lastPhH = saved.h;
+        }
+      }
       renderPlaceholderSection(0, 0);
       if (leftImg) {
         if (leftSrc) {
@@ -2014,7 +2047,7 @@
       }
       // 右ペイン：既存の置き換え画像があれば初期表示（ユーザーが再確認できる）
       if (currentOverride) {
-        setRightSelection(currentOverride);
+        setRightSelection(currentOverride, overrideIsDataUrl);
       } else {
         resetRight();
       }
@@ -2072,6 +2105,24 @@
       resetRight();
       wireImgDimsReporting(leftImg, dimsLeftEl, '');
       renderPlaceholderSection(0, 0);
+    });
+
+    // -----------------------------------------------------------------------
+    // 画像毎ロールバックボタン（.lp-rollback-image）
+    // -----------------------------------------------------------------------
+    document.getElementById('clientDataForm')?.addEventListener('click', ev => {
+      const btn = ev.target?.closest?.('.lp-rollback-image');
+      if (!btn) return;
+      const elemId = (btn.dataset.lpId || '').trim();
+      if (!elemId) return;
+      const form = document.getElementById('clientDataForm');
+      const srcInp = form?.querySelector(`[data-lp-id="${elemId}"][data-lp-field="src"]`);
+      if (!(srcInp instanceof HTMLInputElement)) return;
+      srcInp.value = '';
+      srcInp.dispatchEvent(new Event('input', { bubbles: true }));
+      srcInp.dispatchEvent(new Event('change', { bubbles: true }));
+      btn.closest('.lp-rollback-wrap')?.classList.add('d-none');
+      showToast('画像をロールバックしました', 'success');
     });
 
     // -----------------------------------------------------------------------
@@ -2165,6 +2216,118 @@
 
     document.getElementById('btnBatchBlend')?.addEventListener('click', () => void batchBlendAllImages());
   }
+
+  // -----------------------------------------------------------------------
+  // エラーログモーダル
+  // -----------------------------------------------------------------------
+  (function () {
+    const modalEl = document.getElementById('errorLogModal');
+    if (!modalEl) return;
+
+    const tbody      = document.getElementById('errorLogTableBody');
+    const statusEl   = document.getElementById('errorLogStatus');
+    const copyBtn    = document.getElementById('errorLogCopyBtn');
+    const refreshBtn = document.getElementById('errorLogRefresh');
+    const modal      = new bootstrap.Modal(modalEl);
+
+    let allEvents = [];
+
+    function fmtTs(ts) {
+      if (!ts) return '—';
+      try { return new Date(ts).toLocaleString('ja-JP', { hour12: false }); } catch { return ts; }
+    }
+
+    function kindOf(ev) {
+      if ((ev.operation || '') === 'image_load_retry') return 'retry';
+      if (!ev.ok) return 'error';
+      return 'other';
+    }
+
+    function renderRows(events) {
+      if (!tbody) return;
+      if (!events.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">該当するログがありません</td></tr>';
+        return;
+      }
+      tbody.innerHTML = events.map(ev => {
+        const kind = kindOf(ev);
+        const rowCls = kind === 'retry'
+          ? (ev.ok || (ev.meta && ev.meta.recovered) ? 'table-warning' : 'table-danger')
+          : (!ev.ok ? 'table-danger' : '');
+        const badge = kind === 'retry'
+          ? `<span class="badge bg-warning text-dark">リトライ</span>`
+          : `<span class="badge bg-danger">エラー</span>`;
+        const meta = ev.meta || {};
+        let detail = ev.operation || '';
+        if (meta.src)          detail += `<br><span class="text-muted font-monospace" style="word-break:break-all">${escHtml(meta.src)}</span>`;
+        if (meta.error_message) detail += `<br><span class="text-danger">${escHtml(meta.error_message)}</span>`;
+        if (meta.retry != null) detail += `<br>試行: ${meta.retry}回`;
+        const result = kind === 'retry'
+          ? (meta.recovered ? '<span class="text-success">回復</span>' : '<span class="text-danger">失敗</span>')
+          : `<span class="text-danger">HTTP ${ev.http_code || '—'}</span>`;
+        return `<tr class="${rowCls}"><td style="white-space:nowrap">${escHtml(fmtTs(ev.ts))}</td><td>${badge}</td><td>${detail}</td><td>${result}</td></tr>`;
+      }).join('');
+    }
+
+    function escHtml(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function applyFilter() {
+      const v = document.querySelector('input[name="errFilter"]:checked')?.value || 'all';
+      const filtered = allEvents.filter(ev => {
+        if (v === 'all')   return true;
+        if (v === 'retry') return (ev.operation || '') === 'image_load_retry';
+        if (v === 'error') return !ev.ok;
+        return true;
+      });
+      renderRows(filtered);
+    }
+
+    async function loadLog() {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">読み込み中…</td></tr>';
+      if (statusEl) statusEl.textContent = '';
+      try {
+        const res  = await fetch('store/api_error_log.php');
+        const data = await res.json().catch(() => ({}));
+        allEvents  = Array.isArray(data.events) ? data.events : [];
+        if (statusEl) statusEl.textContent = `${allEvents.length} 件（新しい順）`;
+        applyFilter();
+      } catch (e) {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="4" class="text-danger py-3">${String(e)}</td></tr>`;
+      }
+    }
+
+    document.getElementById('openErrorLogModal')?.addEventListener('click', () => {
+      modal.show();
+      void loadLog();
+    });
+
+    refreshBtn?.addEventListener('click', () => void loadLog());
+
+    modalEl.querySelectorAll('input[name="errFilter"]').forEach(r => r.addEventListener('change', applyFilter));
+
+    copyBtn?.addEventListener('click', () => {
+      const lines = allEvents.map(ev => {
+        const meta = ev.meta || {};
+        return [
+          fmtTs(ev.ts),
+          ev.operation || '',
+          ev.ok ? 'OK' : 'NG',
+          `HTTP:${ev.http_code || 0}`,
+          meta.src || '',
+          meta.error_message || '',
+          meta.retry != null ? `retry:${meta.retry}` : '',
+          meta.recovered != null ? `recovered:${meta.recovered}` : '',
+        ].filter(Boolean).join('\t');
+      });
+      navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        showToast('ログをコピーしました', 'success');
+      }).catch(() => {
+        showToast('コピーに失敗しました', 'warning');
+      });
+    });
+  }());
 
   // -----------------------------------------------------------------------
   // Reset client data

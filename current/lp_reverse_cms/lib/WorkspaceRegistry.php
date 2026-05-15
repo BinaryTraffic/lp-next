@@ -487,7 +487,9 @@ final class WorkspaceRegistry
         if (is_string($out) && preg_match('/^(\d+)/', trim($out), $m) === 1) {
             return (int) $m[1];
         }
+        // du が使えない環境（Windows/WSL 等）では再帰スキャン。256 MB 超で打ち切り（一覧表示用の概算で十分）
         $totalB = 0;
+        $limit  = 256 * 1024 * 1024;
         $it     = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)
         );
@@ -495,6 +497,9 @@ final class WorkspaceRegistry
             /** @var SplFileInfo $f */
             if ($f->isFile()) {
                 $totalB += $f->getSize();
+                if ($totalB >= $limit) {
+                    return $totalB;
+                }
             }
         }
 

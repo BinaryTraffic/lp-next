@@ -831,6 +831,12 @@ exit;
           +   'if(u.origin===location.origin&&op&&u.pathname.startsWith(op))return;'
           // 同一ページ（ハッシュのみ）→ 許可
           +   'if(u.origin===location.origin&&u.pathname===location.pathname)return;'
+          // ルートパス（/）→ output の index.html へリダイレクト（子ページから TOP へのリンクに対応）
+          +   'if(u.origin===location.origin&&(u.pathname==="/"||u.pathname==="")){'
+          +     'e.preventDefault();e.stopPropagation();'
+          +     'try{window.parent.postMessage({type:"lp-nav-start"},"*");}catch(_){}'
+          +     'location.href=op?op+"index.html":"index.html";return;'
+          +   '}'
           // {%代替URL%} 判定: ホストを小文字化して %7b または { を含む（ブラウザの大文字小文字混在に対応）
           +   'var hh=u.host.toLowerCase();'
           +   'var isph=hh.indexOf("%7b")!==-1||hh.indexOf("{")!==-1||hh.indexOf("%25")!==-1;'
@@ -847,6 +853,22 @@ exit;
           + '},true);'
           + '})();';
         doc.head.appendChild(s);
+        // position:fixed 要素を <body> 直下へ移動
+        // transform/filter 等で新しいスタッキングコンテキストが生じると fixed が機能しなくなる問題を回避
+        const sf = doc.createElement('script');
+        sf.textContent = '(function(){'
+          + 'function mvFixed(){'
+          +   'try{'
+          +     '[].forEach.call(document.querySelectorAll("*"),function(el){'
+          +       'if(!el.parentElement||el===document.body||el.parentElement===document.body)return;'
+          +       'if(getComputedStyle(el).position==="fixed")document.body.appendChild(el);'
+          +     '});'
+          +   '}catch(e){}'
+          + '}'
+          + 'if(document.readyState!=="loading")mvFixed();'
+          + 'else document.addEventListener("DOMContentLoaded",mvFixed);'
+          + '})();';
+        doc.head.appendChild(sf);
       } catch (e) { /* cross-origin or null doc — skip */ }
     }
 

@@ -93,7 +93,25 @@ function lp_reverse_enrich_structure_image_text_memos(
                 $memoProgressCb($memoProcessed, $denMemo);
             }
 
-            $resolved = lp_reverse_load_image_bin_for_memo($src, $outputDir, $assetMap, $maxBytes, $cmsRoot);
+            $retryCount = 0;
+            $resolved = lp_reverse_load_image_bin_for_memo($src, $outputDir, $assetMap, $maxBytes, $cmsRoot, $retryCount);
+            if ($retryCount > 0) {
+                lp_reverse_api_usage_record([
+                    'env_var'       => '',
+                    'provider'      => 'internal',
+                    'operation'     => 'image_load_retry',
+                    'ok'            => $resolved !== null,
+                    'http_code'     => $resolved !== null ? 200 : 0,
+                    'meta'          => [
+                        'src'        => $src,
+                        'retry'      => $retryCount,
+                        'recovered'  => $resolved !== null,
+                        'element_id' => (string) ($el['id'] ?? ''),
+                    ],
+                    'usage'         => [],
+                    'estimated_usd' => 0.0,
+                ]);
+            }
             if ($resolved === null) {
                 $bumpMemo();
                 continue;
@@ -211,6 +229,7 @@ function lp_reverse_backfill_image_memo_from_alt(array $structure): array
 
 /**
  * @param array<string, string> $assetMap
+ * @param int $retryCount リトライが発生した回数（呼び出し元でログ用途に使用）
  *
  * @return null|array{bin: string, mime: string, w: int, h: int}
  */
@@ -220,7 +239,9 @@ function lp_reverse_load_image_bin_for_memo(
     array $assetMap,
     int $maxBytes,
     string $cmsRoot,
+    int &$retryCount = 0,
 ): ?array {
+    $retryCount = 0;
     $localFs = lp_reverse_resolve_local_asset_path($originalSrc, $outputDir, $assetMap, $cmsRoot);
     if ($localFs !== null && is_file($localFs)) {
         $sz = filesize($localFs);
@@ -236,16 +257,27 @@ function lp_reverse_load_image_bin_for_memo(
         return null;
     }
 
-    $ch = curl_init($originalSrc);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT        => 18,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_USERAGENT      => 'LpReverseCMS/1.2 (image text memo)',
-    ]);
-    $bin = curl_exec($ch);
-    curl_close($ch);
+    $bin = false;
+    for ($attempt = 1; $attempt <= 3; $attempt++) {
+        $ch = curl_init($originalSrc);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT        => 18,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_USERAGENT      => 'LpReverseCMS/1.2 (image text memo)',
+        ]);
+        $bin = curl_exec($ch);
+        curl_close($ch);
+
+        if ($bin !== false && strlen($bin) >= 100) {
+            break;
+        }
+        if ($attempt < 3) {
+            $retryCount++;
+            sleep(2);
+        }
+    }
 
     if ($bin === false || strlen($bin) < 100 || strlen($bin) > $maxBytes) {
         return null;
