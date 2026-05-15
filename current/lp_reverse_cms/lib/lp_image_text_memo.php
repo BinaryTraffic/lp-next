@@ -236,16 +236,26 @@ function lp_reverse_load_image_bin_for_memo(
         return null;
     }
 
-    $ch = curl_init($originalSrc);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT        => 18,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_USERAGENT      => 'LpReverseCMS/1.2 (image text memo)',
-    ]);
-    $bin = curl_exec($ch);
-    curl_close($ch);
+    $bin = false;
+    for ($attempt = 1; $attempt <= 3; $attempt++) {
+        $ch = curl_init($originalSrc);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT        => 18,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_USERAGENT      => 'LpReverseCMS/1.2 (image text memo)',
+        ]);
+        $bin = curl_exec($ch);
+        curl_close($ch);
+
+        if ($bin !== false && strlen($bin) >= 100) {
+            break;
+        }
+        if ($attempt < 3) {
+            sleep(2);
+        }
+    }
 
     if ($bin === false || strlen($bin) < 100 || strlen($bin) > $maxBytes) {
         return null;
