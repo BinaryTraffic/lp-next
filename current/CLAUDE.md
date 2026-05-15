@@ -11,6 +11,7 @@
 - PC / Mac どちらの環境か（BOM・desktop.ini リスクが異なる）
 - GCP SSH 前に **OpenVPN Connect** で VPN 接続済みか
 - `lp-next-fresh` と `lp-next` のどちらで作業すべきか
+- **Apache VirtualHost の参照先**が正しいか（ローカル・GCP 両方。下記「VH 参照先の確認」参照）
 
 ---
 
