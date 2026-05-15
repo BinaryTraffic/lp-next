@@ -853,6 +853,22 @@ exit;
           + '},true);'
           + '})();';
         doc.head.appendChild(s);
+        // position:fixed 要素を <body> 直下へ移動
+        // transform/filter 等で新しいスタッキングコンテキストが生じると fixed が機能しなくなる問題を回避
+        const sf = doc.createElement('script');
+        sf.textContent = '(function(){'
+          + 'function mvFixed(){'
+          +   'try{'
+          +     '[].forEach.call(document.querySelectorAll("*"),function(el){'
+          +       'if(!el.parentElement||el===document.body||el.parentElement===document.body)return;'
+          +       'if(getComputedStyle(el).position==="fixed")document.body.appendChild(el);'
+          +     '});'
+          +   '}catch(e){}'
+          + '}'
+          + 'if(document.readyState!=="loading")mvFixed();'
+          + 'else document.addEventListener("DOMContentLoaded",mvFixed);'
+          + '})();';
+        doc.head.appendChild(sf);
       } catch (e) { /* cross-origin or null doc — skip */ }
     }
 
