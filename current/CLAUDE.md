@@ -1,5 +1,19 @@
 # LP-NEXT プロジェクト — Claude 用コンテキスト
 
+---
+
+## ⚠️ AI への必須指示
+
+**git commit / push / GCP デプロイ を行う前に、必ず [`DEV_WORKFLOW.md`](DEV_WORKFLOW.md) を読むこと。**
+
+確認すべき項目：
+- 作業ブランチが正しいか（`main` か `fix/*` か）
+- PC / Mac どちらの環境か（BOM・desktop.ini リスクが異なる）
+- GCP SSH 前に **OpenVPN Connect** で VPN 接続済みか
+- `lp-next-fresh` と `lp-next` のどちらで作業すべきか
+
+---
+
 ## プロジェクト概要
 
 「任意のWebサイトのLP（ランディングページ）をURLで指定するだけで、
@@ -231,9 +245,13 @@ HF_API_KEY=
 ## git 運用
 
 - **main ブランチ**が本番・安定版
-- **タグ**: v1.0.0 / v1.1.0 / v1.1.11-stable / v1.2.0 / **v1.5.0**（現行）
-- WSLからのpushはネットワーク制限のため **PowerShell経由**で実行
-- GCPデプロイは `git pull origin main` のみ
+- **QC 修正は `fix/*` ブランチ** → PR → main マージの流れ
+- **タグ**: v1.0.0 / v1.1.0 / v1.1.11-stable / v1.2.0 / **v1.5.006**（現行）
+- コミット・Push は `lp-next-fresh` クローンから行う（`lp-next` は desktop.ini 混入による git 破損のため）
+- GCP デプロイ手順は `DEV_WORKFLOW.md` の「GCP VM へのデプロイ手順」を参照
+
+> **ナビバーでデプロイ確認**: `v1.5.006 · YYYYMMDD+HHmm #コミットハッシュ` が表示される。
+> ハッシュが最新コミットと一致していれば反映済み。
 
 ---
 
@@ -257,8 +275,15 @@ HF_API_KEY=
 # GCP SSH
 ssh gcp-lp
 
-# GCP デプロイ
-ssh gcp-lp "cd /home/lp-next && git pull origin main"
+# GCP デプロイ（fix/* ブランチ反映 — PR マージ前）
+# ※ 事前に OpenVPN Connect で VPN 接続すること
+ssh gcp-lp "cd /home/lp-next && git fetch origin fix/image-load-retry && git reset --hard FETCH_HEAD"
+
+# GCP デプロイ（PR マージ後 main に戻す）
+ssh gcp-lp "cd /home/lp-next && git checkout main && git pull origin main"
+
+# デプロイ確認（コミットハッシュ）
+ssh gcp-lp "cd /home/lp-next && git rev-parse --short HEAD"
 
 # ローカルApache起動（WSL）
 sudo service apache2 start
