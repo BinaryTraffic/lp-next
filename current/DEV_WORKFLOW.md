@@ -7,15 +7,21 @@
 ## 環境の役割分担
 
 ```
-[PC ローカル (Windows)]        [GitHub]                   [GCP VM 本番]
+[PC (Windows)]                 [GitHub]                   [GCP VM 本番]
   C:\Users\hshim\Documents\     BinaryTraffic/lp-next      /home/lp-next
   IPI\lp-next\                  ↑ git push                 ↓ git fetch/checkout
   （Apache VH → WSL mount）     fix/* → PR → main          https://lp-next.jitan.app/
+
+[Mac OSX（ノマド）]
+  Google Drive 経由でリポジトリにアクセス
+  ↑↓ git push / pull
+  ※ PC と Mac は同時開発しない（排他利用）
 ```
 
 | 環境 | 目的 | URL / パス |
 |------|------|-----------|
 | **PC ローカル (Windows)** | 開発・修正・動作確認 | `http://localhost/current/lp_reverse_cms/` |
+| **Mac OSX（ノマド）** | Google Drive 経由で開発（PC と排他利用） | ローカル MAMP 等 |
 | **GitHub (BinaryTraffic/lp-next)** | コード管理・PR レビュー | `https://github.com/BinaryTraffic/lp-next` |
 | **GCP VM** | QC 確認・本番配信 | `https://lp-next.jitan.app/current/lp_reverse_cms/` |
 
@@ -187,3 +193,96 @@ ssh gcp-lp "cd /home/lp-next && git rev-parse --short HEAD"
 | GCP に反映されない | `git fetch + reset --hard FETCH_HEAD` を再実行。VPN 接続も確認 |
 | ナビバーのハッシュが古い | ブラウザのハードリロード（Ctrl+Shift+R）。または PHP の OPcache をリセット |
 | GCP の `git checkout` が `pathspec` エラー | `git checkout -b ブランチ名 FETCH_HEAD` で新規作成する |
+| PHP が BOM を出力して JSON が壊れる | 下記「BOM 問題」参照 |
+| `git fetch` が `fatal: bad object refs/desktop.ini` | 下記「desktop.ini 問題」参照 |
+
+---
+
+## Windows / Mac 混在環境の注意点
+
+PC（Windows）と Mac OSX（Google Drive ノマド）は**同時開発しない**が、  
+OS の違いによるファイル汚染が git を壊すことがある。
+
+### desktop.ini 問題（Windows 固有）
+
+Windows エクスプローラーがフォルダを開くと `.git/` 直下に `desktop.ini` を自動生成することがある。  
+これが git の refs と衝突し、以下のエラーが発生する：
+
+```
+fatal: bad object refs/desktop.ini
+```
+
+**確認・対処：**
+
+```powershell
+# .git/ 内の desktop.ini を確認
+Get-ChildItem -Path "C:\Users\hshim\Documents\IPI\lp-next\.git" -Filter "desktop.ini" -Recurse
+
+# 削除
+Remove-Item "C:\Users\hshim\Documents\IPI\lp-next\.git\desktop.ini" -Force
+```
+
+削除後も `packed-refs` にエントリが残っている場合は完全回復しないことがある。  
+**その場合は新規クローンで対処**（現在の `lp-next-fresh` はこの理由で作成）：
+
+```powershell
+git clone https://github.com/BinaryTraffic/lp-next.git C:\Users\hshim\Documents\IPI\lp-next-fresh
+```
+
+**再発防止：** `.git/` フォルダをエクスプローラーで直接開かない。
+
+---
+
+### BOM（Byte Order Mark）問題（Mac / Windows 混在）
+
+Mac の一部エディタや Google Drive 経由の編集で、PHP・JSON ファイル先頭に  
+**UTF-8 BOM（`\xEF\xBB\xBF`）** が付くことがある。  
+PHP は BOM を出力してしまい、`Content-Type: application/json` のレスポンスが壊れる。
+
+**症状：**
+- `store/*.php` の JSON レスポンス先頭に `???` や文字化けが混入
+- JavaScript 側で `JSON.parse()` がエラー
+- `json_decode()` が `null` を返す
+
+**確認方法（PowerShell）：**
+
+```powershell
+# BOM が付いているファイルを検出
+$files = Get-ChildItem -Path "C:\Users\hshim\Documents\IPI\lp-next\current" -Recurse -Include "*.php","*.json"
+foreach ($f in $files) {
+    $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+    if ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        Write-Host "BOM detected: $($f.FullName)"
+    }
+}
+```
+
+**確認方法（Mac / WSL）：**
+
+```bash
+# BOM 付きファイルを検出
+grep -rl $'\xef\xbb\xbf' current/lp_reverse_cms/
+```
+
+**除去方法（Mac / WSL）：**
+
+```bash
+# 1ファイル除去
+sed -i '1s/^\xef\xbb\xbf//' current/lp_reverse_cms/store/some_file.php
+
+# ディレクトリ一括除去
+find current/lp_reverse_cms -name "*.php" -o -name "*.json" | \
+  xargs sed -i '1s/^\xef\xbb\xbf//'
+```
+
+**予防策：**
+- VS Code では `files.encoding: utf8`（BOM なし）に設定する
+- Mac の場合、エディタの「エンコーディング」を **UTF-8（BOM なし）** に固定する
+- `.gitattributes` に以下を追記しておくと git 管理上の確認が容易：
+
+```gitattributes
+*.php text eol=lf
+*.json text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+```
