@@ -1,193 +1,178 @@
-# 開発ワークフロー — LP-NEXT v1.5
+# 開発ワークフロー — LP-NEXT / Site Reverse CMS
 
-最終更新: 2026-05-11
+最終更新: 2026-05-15
 
 ---
 
 ## 環境の役割分担
 
 ```
-[PC ローカル (WSL)]          [GitHub]            [GCP VM 本番]
-  開発・動作確認              lp-next/main         lp-next.jitan.app
-  http://localhost/           ↑push / tag          ↓git pull
-  current/lp_reverse_cms/                         デプロイ反映
+[PC ローカル (Windows)]        [GitHub]                   [GCP VM 本番]
+  C:\Users\hshim\Documents\     BinaryTraffic/lp-next      /home/lp-next
+  IPI\lp-next\                  ↑ git push                 ↓ git fetch/checkout
+  （Apache VH → WSL mount）     fix/* → PR → main          https://lp-next.jitan.app/
 ```
 
-| 環境 | 目的 | URL |
-|------|------|-----|
-| **PC ローカル (WSL)** | 開発・動作確認・QCフィードバック検証 | `http://localhost/current/lp_reverse_cms/` |
-| **GitHub (main)** | 正式コード管理・リリースタグ | `github.com/BinaryTraffic/lp-next` |
-| **GCP VM 本番** | 本番配信・QCテスト | `https://lp-next.jitan.app/current/lp_reverse_cms/` |
+| 環境 | 目的 | URL / パス |
+|------|------|-----------|
+| **PC ローカル (Windows)** | 開発・修正・動作確認 | `http://localhost/current/lp_reverse_cms/` |
+| **GitHub (BinaryTraffic/lp-next)** | コード管理・PR レビュー | `https://github.com/BinaryTraffic/lp-next` |
+| **GCP VM** | QC 確認・本番配信 | `https://lp-next.jitan.app/current/lp_reverse_cms/` |
 
 ---
 
-## 日常の開発フロー
+## PC ローカル環境の実態
 
-```
-1. ローカルで実装・修正
-        ↓
-2. http://localhost/current/lp_reverse_cms/ で動作確認
-        ↓
-3. OK → git commit（WSLまたはCursorから）
-        ↓
-4. git push origin main（Windows PowerShellから）
-        ↓
-5. GCP VMで git pull → 本番反映
-        ↓
-6. QCが lp-next.jitan.app で確認
-        ↓
-7. フィードバック → ローカルに戻って修正（Step 1へ）
-```
+| 項目 | パス |
+|------|------|
+| **メインリポジトリ** | `C:\Users\hshim\Documents\IPI\lp-next` |
+| **作業用クローン（git 破損回避）** | `C:\Users\hshim\Documents\IPI\lp-next-fresh` |
+| **Apache VH が指すディレクトリ** | WSL から `/mnt/c/Users/hshim/Documents/IPI/lp-next/current` |
+| **Apache 起動** | WSL で `sudo service apache2 start` |
+
+> **lp-next-fresh について**  
+> メインリポジトリの `.git/` 内に `desktop.ini` が混入して `git fetch` が壊れた経緯があり、
+> コミット・プッシュ作業は `lp-next-fresh` クローンで行っている。  
+> PR #1 が `main` にマージされたら `lp-next-fresh` は削除して良い。
 
 ---
 
-## ローカル環境
+## 日常の開発フロー（QC 修正時）
 
-### アクセス先
-- **CMS管理画面**: `http://localhost/current/lp_reverse_cms/`
-- **ソースコード**: `/home/shimizu/project/current/lp_reverse_cms/`（WSL）
-- **Windowsからの参照**: `\\wsl$\Ubuntu\home\shimizu\project\current\lp_reverse_cms\`
-
-### Apache起動
-WSLを開いて毎回起動:
-```bash
-sudo service apache2 start
 ```
-
-### ローカル .env
-`/home/shimizu/project/current/lp_reverse_cms/.env`
-
-```dotenv
-GOOGLE_CLIENT_ID=269176379460-xxx.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=（要設定）
-GOOGLE_REDIRECT_URI=http://localhost/current/lp_reverse_cms/store/auth_callback.php
-CMS_SUPER_ADMIN=shimizu@binarytraffic.jp
-ANTHROPIC_API_KEY=（必要に応じて設定）
-HF_API_KEY=（必要に応じて設定）
-```
-
-> **注意**: `.env` は `.gitignore` 対象。本番と別の値でOK。
-
-### data/ / output/ 権限
-```bash
-sudo chown -R www-data:www-data \
-    /home/shimizu/project/current/lp_reverse_cms/data \
-    /home/shimizu/project/current/lp_reverse_cms/output
-sudo chmod -R u+rwX,g+rX \
-    /home/shimizu/project/current/lp_reverse_cms/data \
-    /home/shimizu/project/current/lp_reverse_cms/output
+1. lp-next-fresh でコード修正
+        ↓
+2. ブラウザで http://localhost/... 動作確認
+        ↓
+3. git add / git commit（PowerShell or Claude Code から）
+        ↓
+4. git push origin fix/<ブランチ名>
+        ↓
+5. GCP VM へ fetch & checkout（後述手順）
+        ↓
+6. ナビバーのコミットハッシュで反映確認
+        ↓
+7. QC が lp-next.jitan.app で確認
+        ↓
+8. 全 SEQ 完了 → GitHub で PR をマージ → GCP を main に戻す
 ```
 
 ---
 
 ## コミット・Push 手順
 
-### WSL上でのgit操作
-```bash
-cd /home/shimizu/project
+### PowerShell から（基本）
+
+```powershell
+# 作業用クローンで操作
+cd C:\Users\hshim\Documents\IPI\lp-next-fresh
 
 # 状態確認
 git status
 git diff
 
-# ステージング（対象ファイルを指定）
-git add current/lp_reverse_cms/lib/LpGenerator.php
+# ステージング（ファイルを指定して追加）
+git add current/lp_reverse_cms/assets/js/index.js
 
 # コミット
-git commit -m "fix: 内部ページナビリンクの深さ補正"
+git commit -m "fix: 修正内容の説明"
 
-# Push（WSLからはGitHub接続できないのでPowerShellを使う）
+# Push
+git push origin fix/image-load-retry
 ```
 
-### PowerShellからのPush
-```powershell
-# Windowsターミナル（PowerShell）で実行
-git -C \\wsl$\Ubuntu\home\shimizu\project push origin main
-```
+### Claude Code から
 
-または Windows GitがWSLリポジトリを認識できない場合:
-```powershell
-# 一時クローン経由でpush（WSLパッチを当てる方式）
-$tmp = "$env:TEMP\lp-push-$(Get-Random)"
-git clone https://github.com/BinaryTraffic/lp-next.git $tmp
-# → WSLの変更をパッチで適用してpush
-```
+ツール経由で `git -C "C:\Users\hshim\Documents\IPI\lp-next-fresh" ...` で操作可能。
 
 ---
 
-## GCP本番デプロイ
+## GCP VM へのデプロイ手順
+
+### 前提：VPN 接続が必要
+
+**OpenVPN Connect** で `vpn-public45.glocalnet.jp` に接続してから SSH する。  
+VPN 未接続だと `Connection timed out` になる。
+
+### フィーチャーブランチを反映する（PR マージ前）
 
 ```bash
-# SSH接続
+# SSH 接続
 ssh gcp-lp
 
-# 本番ディレクトリで pull
+# GCP VM での操作
 cd /home/lp-next
-git pull origin main
 
-# タグでのデプロイ（リリース時）
-git pull origin main
-git fetch --tags
-git tag -l | sort -V | tail -5   # 最新タグ確認
+# ブランチを fetch（初回）
+git fetch origin fix/image-load-retry
+
+# ブランチを作成してチェックアウト
+git checkout -b fix/image-load-retry FETCH_HEAD
+# → すでにブランチが存在する場合:
+# git checkout fix/image-load-retry && git reset --hard FETCH_HEAD
 ```
 
----
-
-## リリースタグ運用
+### 同ブランチに新しいコミットを追加反映する
 
 ```bash
-# バージョンバンプ（index.phpのAPP_VERSIONを更新）
-# → commit & push
-
-# PowerShellからタグを打つ
-$tmp = "$env:TEMP\lp-tag-$(Get-Random)"
-git clone https://github.com/BinaryTraffic/lp-next.git $tmp
-git -C $tmp tag -a v1.6.0 -m "v1.6.0 — ..."
-git -C $tmp push origin v1.6.0
-Remove-Item -Recurse -Force $tmp
+ssh gcp-lp
+cd /home/lp-next
+git fetch origin fix/image-load-retry
+git reset --hard FETCH_HEAD
 ```
 
----
-
-## QCフィードバックの受け方
-
-### フィードバックの流れ
-```
-QC → lp-next.jitan.app で確認
-   → GitHubのIssueまたはSlackで報告
-   → ローカルで再現・修正
-   → commit → push → GCP pull で反映
-   → QCに「確認してください」と連絡
-```
-
-### 環境別の役割
-| 環境 | 担当 |
-|------|------|
-| ローカル (WSL) | shimizu（開発・修正・確認） |
-| GCP本番 | QCチーム（動作確認・フィードバック） |
-| GitHub | コードレビュー・バージョン管理 |
-
----
-
-## PHP拡張一覧（必須）
+### PR マージ後に main に戻す
 
 ```bash
-# 確認コマンド
-php -m | grep -E 'curl|dom|json|mbstring|gd|zip'
-
-# インストール（未入りの場合）
-sudo apt-get install -y php8.2-gd php8.2-zip
-sudo service apache2 restart
+ssh gcp-lp
+cd /home/lp-next
+git checkout main
+git pull origin main
 ```
 
-| 拡張 | 用途 | 状態 |
-|------|------|------|
-| curl | HTML取得 | ✅ |
-| dom | HTML解析 | ✅ |
-| json | データ管理 | ✅ |
-| mbstring | 日本語処理 | ✅ |
-| gd | 画像合成（S1機能） | 要インストール |
-| zip | エクスポート | 要インストール |
+---
+
+## デプロイ確認方法
+
+ナビバーに **Git 短ハッシュ** が表示される：
+
+```
+Site Reverse CMS  [v1.5.006 · 20260515+1423 #8268957]
+```
+
+`#8268957` の部分が最新コミットのハッシュと一致していれば反映済み。
+
+### ハッシュの確認コマンド
+
+```bash
+# GitHub 上の最新ハッシュ確認
+git -C "C:\Users\hshim\Documents\IPI\lp-next-fresh" log --oneline -1
+
+# GCP VM 上のハッシュ確認
+ssh gcp-lp "cd /home/lp-next && git rev-parse --short HEAD"
+```
+
+---
+
+## PR マージ後の手順まとめ
+
+1. GitHub で PR #1 をマージ
+2. GCP VM を `main` に戻す:
+   ```bash
+   ssh gcp-lp "cd /home/lp-next && git checkout main && git pull origin main"
+   ```
+3. ナビバーのハッシュが `main` の最新コミットと一致することを確認
+4. `lp-next-fresh` ディレクトリは削除して良い
+
+---
+
+## ブランチ運用ルール
+
+| ブランチ | 用途 |
+|----------|------|
+| `main` | 本番安定版。GCP VM の平時はここ |
+| `fix/<topic>` | QC 修正・バグ修正。PR 経由で main にマージ |
+| `feature/<topic>` | 新機能開発 |
 
 ---
 
@@ -195,8 +180,10 @@ sudo service apache2 restart
 
 | 現象 | 対処 |
 |------|------|
-| ローカルでCMSが開かない | `sudo service apache2 start` |
-| 解析でファイル書き込みエラー | `data/` `output/` の `chown www-data` |
-| pushできない | PowerShell経由でpush（WSLは直接push不可） |
-| 本番に反映されない | GCPで `git pull origin main` 実行 |
-| Google認証エラー | `.env` の `REDIRECT_URI` がlocalhostになっているか確認 |
+| `ssh gcp-lp` がタイムアウト | OpenVPN Connect で VPN 接続してから再試行 |
+| `git fetch` が `fatal: bad object` | `.git/` 内に `desktop.ini` 等が混入。`lp-next-fresh` から作業する |
+| ローカルで CMS が開かない | WSL で `sudo service apache2 start` |
+| 解析でファイル書き込みエラー | `data/` `output/` を `chown www-data` |
+| GCP に反映されない | `git fetch + reset --hard FETCH_HEAD` を再実行。VPN 接続も確認 |
+| ナビバーのハッシュが古い | ブラウザのハードリロード（Ctrl+Shift+R）。または PHP の OPcache をリセット |
+| GCP の `git checkout` が `pathspec` エラー | `git checkout -b ブランチ名 FETCH_HEAD` で新規作成する |
