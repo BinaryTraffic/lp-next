@@ -831,6 +831,12 @@ exit;
           +   'if(u.origin===location.origin&&op&&u.pathname.startsWith(op))return;'
           // 同一ページ（ハッシュのみ）→ 許可
           +   'if(u.origin===location.origin&&u.pathname===location.pathname)return;'
+          // ルートパス（/）→ output の index.html へリダイレクト（子ページから TOP へのリンクに対応）
+          +   'if(u.origin===location.origin&&(u.pathname==="/"||u.pathname==="")){'
+          +     'e.preventDefault();e.stopPropagation();'
+          +     'try{window.parent.postMessage({type:"lp-nav-start"},"*");}catch(_){}'
+          +     'location.href=op?op+"index.html":"index.html";return;'
+          +   '}'
           // {%代替URL%} 判定: ホストを小文字化して %7b または { を含む（ブラウザの大文字小文字混在に対応）
           +   'var hh=u.host.toLowerCase();'
           +   'var isph=hh.indexOf("%7b")!==-1||hh.indexOf("{")!==-1||hh.indexOf("%25")!==-1;'
