@@ -1645,6 +1645,12 @@
     // 入力欄を localStorage の値で初期化し、変更時に保存
     if (phBlendInput) {
       phBlendInput.value = String(Math.round(getPhBlendOpacity() * 100));
+      // input: キー操作中も即座に localStorage を更新（↑↓キーやタイピング中に別操作しても正しい濃度が使われる）
+      phBlendInput.addEventListener('input', () => {
+        const v = Math.max(0, Math.min(100, parseInt(phBlendInput.value || '70', 10)));
+        savePhBlendOpacity(v / 100);
+      });
+      // change: フォーカスを離したタイミングで値を正規化し、プレースホルダーを再合成
       phBlendInput.addEventListener('change', () => {
         const v = Math.max(0, Math.min(100, parseInt(phBlendInput.value || '70', 10)));
         phBlendInput.value = String(v);
